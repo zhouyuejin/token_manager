@@ -14,7 +14,7 @@ from app.core.security import get_password_hash
 from app.models.user import User, UserRole, UserStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
     AdminUserCreate, AdminUserUpdate, AdminUserResponse,
     UserListResponse, QuotaAdjustRequest,
@@ -25,19 +25,6 @@ from app.services.operation_log_service import record_operation
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
-
-
-# ========== 权限检查 ==========
-
-def require_admin(current_user: User = Depends(get_current_user)):
-    """检查是否是管理员"""
-    if current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要管理员权限"
-        )
-    return current_user
-
 
 # ========== 用户管理 ==========
 
