@@ -1,13 +1,90 @@
 """
 用户接口
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.security import verify_password, get_password_hash
+from app.models.user import User
+from app.dependencies import get_current_user
+from app.schemas.user import UserInfo, PasswordChange
 
 router = APIRouter()
 
 
-@router.get("/me")
-async def get_user_info():
-    """获取当前用户信息"""
-    # TODO: 实现
-    return {"message": "用户信息"}
+@router.get("/me", response_model=UserInfo)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """
+    获取当前用户信息
+    """
+    return UserInfo(
+        user_id=current_user.user_id,
+        username=current_user.username,
+        email=current_user.email,
+        role=current_user.role.value,
+        status=current_user.status.value,
+        quota=current_user.quota,
+        quota_used=current_user.quota_used,
+        quota_remain=current_user.quota - current_user.quota_used,
+        created_at=current_user.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+
+@router.put("/me/password")
+async def change_password(
+    password_data: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    修改密码
+    """
+    # 验证旧密码
+    if not verify_password(password_data.old_password, current_user.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="原密码错误"
+        )
+    
+    # 更新密码
+    current_user.password = get_password_hash(password_data.new_password)
+    db.commit()
+    
+    return {"message": "密码修改成功"}
+
+
+@router.get("/{user_id}", response_model=UserInfo)
+async def get_user_by_id(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    根据ID获取用户信息（仅管理员）
+    """
+    # 检查是否是管理员
+    if current_user.role.value != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足"
+        )
+    
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    
+    return UserInfo(
+        user_id=user.user_id,
+        username=user.username,
+        email=user.email,
+        role=user.role.value,
+        status=user.status.value,
+        quota=user.quota,
+        quota_used=user.quota_used,
+        quota_remain=user.quota - user.quota_used,
+        created_at=user.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    )

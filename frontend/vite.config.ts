@@ -8,6 +8,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    conditions: ['module', 'browser'],
+  },
+  optimizeDeps: {
+    include: ['dayjs'],
   },
   server: {
     port: 3000,

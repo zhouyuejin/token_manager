@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Dropdown, theme } from 'antd'
+import { Layout, Menu, Avatar, Dropdown, theme, MenuProps } from 'antd'
 import {
   DashboardOutlined,
   KeyOutlined,
@@ -31,7 +31,7 @@ const MainLayout = () => {
 
   const isAdmin = user?.role === 'admin'
 
-  const menuItems = [
+  const menuItems: MenuProps['items'] = [
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
@@ -66,7 +66,7 @@ const MainLayout = () => {
     },
   ]
 
-  const userMenuItems = [
+  const userMenuItems: MenuProps['items'] = [
     {
       key: 'profile',
       icon: <UserOutlined />,

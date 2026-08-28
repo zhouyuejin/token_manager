@@ -8,6 +8,7 @@ from loguru import logger
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.database import engine, Base
+from app.middleware import ProxyAuthMiddleware
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -38,6 +39,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 添加代理认证中间件
+app.add_middleware(ProxyAuthMiddleware)
+
 # 注册API路由
 app.include_router(api_router, prefix="/api/v1")
 
@@ -52,12 +56,26 @@ async def health_check():
 async def startup_event():
     """启动事件"""
     logger.info("Token中转平台启动")
+    
+    # 启动定时任务
+    try:
+        from app.services.scheduler_service import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logger.warning(f"定时任务启动失败: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """关闭事件"""
     logger.info("Token中转平台关闭")
+    
+    # 停止定时任务
+    try:
+        from app.services.scheduler_service import stop_scheduler
+        stop_scheduler()
+    except Exception as e:
+        logger.warning(f"定时任务停止失败: {e}")
 
 
 if __name__ == "__main__":

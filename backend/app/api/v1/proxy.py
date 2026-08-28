@@ -1,75 +1,203 @@
 """
 代理接口 - 核心中转功能
 """
-from fastapi import APIRouter, Depends, HTTPException, Request
+import json
+from typing import Optional, List, Union
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional, List
+
+from app.core.database import get_db
+from app.models.user import User
+from app.models.api_key import ApiKey
+from app.models.model_mapping import ModelMapping
+from app.services.proxy_service import ProxyService, create_proxy_service
 
 router = APIRouter()
 
 
+# ========== Request Models ==========
+
 class ChatMessage(BaseModel):
+    """聊天消息"""
     role: str
     content: str
 
 
 class ChatCompletionRequest(BaseModel):
+    """ChatCompletion请求"""
     model: str
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 1000
     stream: Optional[bool] = False
+    top_p: Optional[float] = 1.0
+    frequency_penalty: Optional[float] = 0.0
+    presence_penalty: Optional[float] = 0.0
+
+
+# ========== API Endpoints ==========
+
+@router.get("/models")
+async def list_models(db: Session = Depends(get_db)):
+    """
+    获取可用模型列表
+    """
+    proxy_service = create_proxy_service(db)
+    
+    # 从数据库获取启用的模型映射
+    mappings = db.query(ModelMapping).filter(
+        ModelMapping.status == "active"
+    ).all()
+    
+    models = [
+        {
+            "id": mapping.model_id,
+            "object": "model",
+            "owned_by": mapping.provider_id
+        }
+        for mapping in mappings
+    ]
+    
+    # 如果没有映射，返回默认模型
+    if not models:
+        models = [
+            {"id": "gpt-4", "object": "model", "owned_by": "openai"},
+            {"id": "gpt-3.5-turbo", "object": "model", "owned_by": "openai"},
+        ]
+    
+    return {"object": "list", "data": models}
+
+
+@router.get("/balance")
+async def get_balance(request: Request, db: Session = Depends(get_db)):
+    """
+    获取当前额度
+    """
+    user: User = getattr(request.state, "user", None)
+    api_key: ApiKey = getattr(request.state, "api_key", None)
+    
+    if not user or not api_key:
+        raise HTTPException(status_code=401, detail="无效的API Key")
+    
+    # 计算剩余额度
+    quota_remain = user.quota - user.quota_used
+    
+    return {
+        "balance": quota_remain,
+        "daily_used": api_key.daily_used,
+        "daily_limit": api_key.daily_limit,
+        "monthly_used": api_key.monthly_used,
+        "monthly_limit": api_key.monthly_limit
+    }
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: ChatCompletionRequest, req: Request):
+async def chat_completions(
+    request: Request,
+    chat_request: ChatCompletionRequest,
+    db: Session = Depends(get_db)
+):
     """
     大模型API中转接口
     兼容OpenAI格式
     """
-    # TODO: 实现
-    # 1. 验证API Key
-    # 2. 检查额度
-    # 3. 路由到对应供应商
-    # 4. 转发请求
-    # 5. 记录用量
+    user: User = getattr(request.state, "user", None)
+    api_key: ApiKey = getattr(request.state, "api_key", None)
     
-    return {
-        "id": "chatcmpl-xxx",
-        "object": "chat.completion",
-        "created": 1699000000,
-        "model": request.model,
-        "choices": [{
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": "你好，这是中转平台的响应"
-            },
-            "finish_reason": "stop"
-        }]
-    }
+    if not user or not api_key:
+        raise HTTPException(status_code=401, detail="无效的API Key")
+    
+    proxy_service = create_proxy_service(db)
+    
+    # 1. 获取模型映射
+    model_mapping = proxy_service.get_model_mapping(chat_request.model)
+    if not model_mapping:
+        raise HTTPException(status_code=400, detail=f"不支持的模型: {chat_request.model}")
+    
+    # 2. 获取供应商
+    provider = proxy_service.get_provider(model_mapping.provider_id)
+    if not provider:
+        raise HTTPException(status_code=500, detail="供应商不可用")
+    
+    # 3. 检查额度
+    # 估算token数量（简化处理）
+    estimated_tokens = 1000
+    quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
+    if not quota_check["allowed"]:
+        raise HTTPException(status_code=403, detail=quota_check["message"])
+    
+    # 4. 构建请求数据
+    request_data = chat_request.model_dump(exclude={"stream"})
+    # 移除None值
+    request_data = {k: v for k, v in request_data.items() if v is not None}
+    
+    # 5. 转发请求
+    if chat_request.stream:
+        # 流式响应
+        return StreamingResponse(
+            proxy_service.forward_stream_request(provider, model_mapping, request_data),
+            media_type="text/event-stream"
+        )
+    else:
+        # 普通响应
+        result = proxy_service.forward_request(provider, model_mapping, request_data)
+        
+        # 6. 计算token数量
+        tokens = proxy_service.calculate_tokens(
+            request_data,
+            result["data"] if result["success"] else None
+        )
+        
+        # 7. 记录用量
+        proxy_service.record_usage(
+            user_id=user.user_id,
+            key_id=api_key.key_id,
+            provider_id=provider.provider_id,
+            model=chat_request.model,
+            tokens=tokens,
+            latency_ms=result["latency_ms"],
+            status_code=result["status_code"],
+            error_message=result["error"]
+        )
+        
+        # 8. 如果成功，扣减额度
+        if result["success"] and result["status_code"] == 200:
+            proxy_service.deduct_quota(user, api_key, tokens)
+        
+        # 9. 返回响应
+        if not result["success"]:
+            raise HTTPException(
+                status_code=result["status_code"],
+                detail=result["error"]
+            )
+        
+        return result["data"]
 
 
-@router.get("/models")
-async def list_models():
-    """获取模型列表"""
-    # TODO: 实现
-    return {
-        "object": "list",
-        "data": [
-            {"id": "gpt-4", "object": "model"},
-            {"id": "gpt-3.5-turbo", "object": "model"}
-        ]
-    }
+# ========== 兼容OpenAI的v1前缀路由 ==========
+
+v1_router = APIRouter()
 
 
-@router.get("/balance")
-async def get_balance():
-    """获取余额"""
-    # TODO: 实现
-    return {
-        "balance": 750000,
-        "daily_used": 25000,
-        "daily_limit": 100000
-    }
+@v1_router.get("/models")
+async def v1_list_models(db: Session = Depends(get_db)):
+    """v1模型列表"""
+    return await list_models(db)
+
+
+@v1_router.get("/balance")
+async def v1_get_balance(request: Request, db: Session = Depends(get_db)):
+    """v1额度查询"""
+    return await get_balance(request, db)
+
+
+@v1_router.post("/chat/completions")
+async def v1_chat_completions(
+    request: Request,
+    chat_request: ChatCompletionRequest,
+    db: Session = Depends(get_db)
+):
+    """v1聊天完成"""
+    return await chat_completions(request, chat_request, db)
