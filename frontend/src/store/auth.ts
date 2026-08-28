@@ -27,9 +27,12 @@ export const useAuthStore = create<AuthState>()(
           
           const response = await loginApi(formData as any)
           
+          // 从 /auth/login 获取的用户信息较少，需要调用 /users/me 获取完整信息
+          const userInfo = await getCurrentUser()
+          
           set({
             token: response.access_token,
-            user: response.user,
+            user: userInfo,
             isLoading: false
           })
         } catch (error) {

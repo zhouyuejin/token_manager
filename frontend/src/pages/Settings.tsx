@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Form, Input, Button, message, Divider, Switch, Space } from 'antd'
+import { Card, Form, Input, Button, message, Divider, Switch } from 'antd'
 import { useAuthStore } from '../store/auth'
 
 const SettingsPage = () => {

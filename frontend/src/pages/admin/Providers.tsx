@@ -6,7 +6,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined } from '@ant-design/icons'
 import { 
   getProviders, createProvider, updateProvider, deleteProvider,
-  getAllProviderQuotas, syncProviderQuota, Provider, ProviderQuota 
+  getAllProviderQuotas, syncProviderQuota, Provider, 
 } from '../../api/providers'
 
 const ProvidersPage = () => {

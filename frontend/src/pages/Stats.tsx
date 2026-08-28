@@ -9,7 +9,7 @@ const { RangePicker } = DatePicker
 const StatsPage = () => {
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<any>(null)
-  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
+  const [dateRange, setDateRange] = useState<any>([
     dayjs().subtract(7, 'day'),
     dayjs()
   ])
@@ -34,7 +34,6 @@ const StatsPage = () => {
   }
 
   const handleExport = () => {
-    // TODO: 实现导出功能
     const csvContent = [
       ['日期', 'Token数', '请求数'].join(','),
       ...(stats?.by_day || []).map((item: any) => 
@@ -69,7 +68,7 @@ const StatsPage = () => {
         <Space>
           <RangePicker 
             value={dateRange}
-            onChange={(dates) => {
+            onChange={(dates: any) => {
               if (dates && dates[0] && dates[1]) {
                 setDateRange([dates[0], dates[1]])
               }

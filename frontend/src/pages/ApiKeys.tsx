@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
-  InputNumber, message, Popconfirm, Switch 
+  InputNumber, message, Popconfirm 
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
 import { getApiKeys, createApiKey, deleteApiKey, ApiKey } from '../api/apiKeys'
 import dayjs from 'dayjs'
 

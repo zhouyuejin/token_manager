@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, Table, Tag } from 'antd'
-import { ArrowUpOutlined, ArrowDownOutlined, KeyOutlined, ApiOutlined } from '@ant-design/icons'
+import { ArrowUpOutlined, KeyOutlined, ApiOutlined } from '@ant-design/icons'
 import { getUsageStats } from '../api/stats'
 import { getApiKeys } from '../api/apiKeys'
 import dayjs from 'dayjs'
