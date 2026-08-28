@@ -233,32 +233,34 @@ class TestChineseCharacterDetail:
 
 
 class TestRecordOperationDBFailure:
-    """record_operation when DB commit fails → does NOT raise"""
+    """record_operation when DB commit fails → does NOT raise and calls logger.exception"""
 
-    def test_record_operation_db_failure_no_raise(self):
+    def test_record_operation_db_failure_no_raise_calls_logger(self):
+        from unittest.mock import MagicMock
         from app.services.operation_log_service import record_operation
 
-        db = TestingSessionLocal()
-        try:
-            admin = _create_admin(db, "admin3", "admin3@example.com")
+        mock_db = MagicMock()
+        mock_db.commit.side_effect = Exception("DB write error")
+        mock_operator = MagicMock()
+        mock_operator.user_id = "usr_admin"
+        mock_operator.username = "admin"
 
-            # Simulate a DB failure by patching _create_login_log style
-            # We patch db.commit to raise
-            with patch.object(db, "commit", side_effect=Exception("DB write error")):
-                # Should not raise — fire-and-forget
-                record_operation(
-                    db=db,
-                    operator=admin,
-                    action="create",
-                    target_type="user",
-                    target_id="usr_fail",
-                    detail={"test": "data"},
-                    ip_address="1.2.3.4",
-                )
-            # If we get here without exception, the test passes
+        with patch("app.services.operation_log_service.logger.exception") as mock_log:
+            # Should NOT raise — fire-and-forget
+            record_operation(
+                db=mock_db,
+                operator=mock_operator,
+                action="create",
+                target_type="user",
+                target_id="usr_fail",
+                detail={"test": "data"},
+                ip_address="1.2.3.4",
+            )
+            # Verify logger.exception was called exactly once (log-and-continue)
+            mock_log.assert_called_once()
+            # Also verify the call didn't raise
             assert True
-        finally:
-            db.close()
+
 
 
 class TestMultipleActionsAndTargetTypes:
