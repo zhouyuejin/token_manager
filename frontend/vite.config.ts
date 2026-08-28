@@ -14,12 +14,16 @@ export default defineConfig({
     include: ['dayjs'],
   },
   server: {
-    port: 3000,
+    port: 3002,
     proxy: {
-      '/api': {
+      '/api/v1': {
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+    },
+    fs: {
+      // 允许访问上级目录的文件
+      allow: ['..'],
     },
   },
 })
