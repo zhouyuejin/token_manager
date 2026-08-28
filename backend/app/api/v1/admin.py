@@ -388,6 +388,7 @@ async def update_provider(
         changed["endpoint"] = provider_data.endpoint
         provider.endpoint = provider_data.endpoint
     if provider_data.api_key is not None and provider_data.api_key:
+        changed["api_key_rotated"] = True
         provider.api_key = provider_data.api_key
     if provider_data.priority is not None:
         changed["priority"] = provider_data.priority
