@@ -6,7 +6,7 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy import func, and_
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -21,6 +21,8 @@ from app.schemas.admin import (
     ProviderCreate, ProviderUpdate, ProviderResponse, ProviderListResponse,
     ModelMappingCreate, ModelMappingUpdate, ModelMappingResponse, ModelMappingListResponse
 )
+from app.services.operation_log_service import record_operation
+from app.utils.request import extract_client_ip
 
 router = APIRouter()
 
@@ -87,6 +89,7 @@ async def list_users(
 
 @router.post("/users", response_model=AdminUserResponse)
 async def create_user(
+    request: Request,
     user_data: AdminUserCreate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -117,6 +120,22 @@ async def create_user(
     db.commit()
     db.refresh(user)
     
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="create",
+        target_type="user",
+        target_id=user.user_id,
+        detail={
+            "username": user.username,
+            "email": user.email,
+            "role": user.role.value,
+            "quota": user.quota,
+        },
+        ip_address=ip_address,
+    )
+    
     return AdminUserResponse(
         user_id=user.user_id,
         username=user.username,
@@ -131,6 +150,7 @@ async def create_user(
 
 @router.put("/users/{user_id}")
 async def update_user(
+    request: Request,
     user_id: str,
     user_data: AdminUserUpdate,
     db: Session = Depends(get_db),
@@ -147,20 +167,36 @@ async def update_user(
     if user.role == UserRole.admin:
         raise HTTPException(status_code=400, detail="不能编辑管理员用户")
     
+    changed = {}
     if user_data.role is not None:
+        changed["role"] = user_data.role
         user.role = UserRole(user_data.role)
     if user_data.status is not None:
+        changed["status"] = user_data.status
         user.status = UserStatus(user_data.status)
     if user_data.quota is not None:
+        changed["quota"] = user_data.quota
         user.quota = user_data.quota
     
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="update",
+        target_type="user",
+        target_id=user_id,
+        detail=changed,
+        ip_address=ip_address,
+    )
     
     return {"message": "更新成功"}
 
 
 @router.delete("/users/{user_id}")
 async def delete_user(
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -180,14 +216,28 @@ async def delete_user(
     if user.user_id == admin.user_id:
         raise HTTPException(status_code=400, detail="不能删除自己的账户")
     
+    deleted_username = user.username
+    
     db.delete(user)
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="delete",
+        target_type="user",
+        target_id=user_id,
+        detail={"username": deleted_username},
+        ip_address=ip_address,
+    )
     
     return {"message": "删除成功"}
 
 
 @router.post("/users/{user_id}/quota")
 async def adjust_user_quota(
+    request: Request,
     user_id: str,
     quota_data: QuotaAdjustRequest,
     db: Session = Depends(get_db),
@@ -200,12 +250,30 @@ async def adjust_user_quota(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
+    before = user.quota
     # 调整额度
     user.quota += quota_data.amount
     if user.quota < 0:
         user.quota = 0
+    after = user.quota
     
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="quota_adjust",
+        target_type="user",
+        target_id=user_id,
+        detail={
+            "amount": quota_data.amount,
+            "reason": quota_data.reason,
+            "before": before,
+            "after": after,
+        },
+        ip_address=ip_address,
+    )
     
     return {
         "message": "额度调整成功",
@@ -248,6 +316,7 @@ async def list_providers(
 
 @router.post("/providers", response_model=ProviderResponse)
 async def create_provider(
+    request: Request,
     provider_data: ProviderCreate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -272,6 +341,25 @@ async def create_provider(
     db.commit()
     db.refresh(provider)
     
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="create",
+        target_type="provider",
+        target_id=provider.provider_id,
+        detail={
+            "name": provider.name,
+            "type": provider.type.value,
+            "endpoint": provider.endpoint,
+            "priority": provider.priority,
+            "timeout": provider.timeout,
+            "quota_hourly": provider.quota_hourly,
+            "quota_weekly": provider.quota_weekly,
+        },
+        ip_address=ip_address,
+    )
+    
     return ProviderResponse(
         provider_id=provider.provider_id,
         name=provider.name,
@@ -289,6 +377,7 @@ async def create_provider(
 
 @router.put("/providers/{provider_id}")
 async def update_provider(
+    request: Request,
     provider_id: str,
     provider_data: ProviderUpdate,
     db: Session = Depends(get_db),
@@ -301,32 +390,53 @@ async def update_provider(
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     
+    changed = {}
     if provider_data.name is not None:
+        changed["name"] = provider_data.name
         provider.name = provider_data.name
     if provider_data.type is not None:
+        changed["type"] = provider_data.type
         provider.type = ProviderType(provider_data.type)
     if provider_data.endpoint is not None:
+        changed["endpoint"] = provider_data.endpoint
         provider.endpoint = provider_data.endpoint
     if provider_data.api_key is not None and provider_data.api_key:
         provider.api_key = provider_data.api_key
     if provider_data.priority is not None:
+        changed["priority"] = provider_data.priority
         provider.priority = provider_data.priority
     if provider_data.timeout is not None:
+        changed["timeout"] = provider_data.timeout
         provider.timeout = provider_data.timeout
     if provider_data.status is not None:
+        changed["status"] = provider_data.status
         provider.status = ProviderStatus(provider_data.status)
     if provider_data.quota_hourly is not None:
+        changed["quota_hourly"] = provider_data.quota_hourly
         provider.quota_hourly = provider_data.quota_hourly
     if provider_data.quota_weekly is not None:
+        changed["quota_weekly"] = provider_data.quota_weekly
         provider.quota_weekly = provider_data.quota_weekly
     
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="update",
+        target_type="provider",
+        target_id=provider_id,
+        detail=changed,
+        ip_address=ip_address,
+    )
     
     return {"message": "更新成功"}
 
 
 @router.delete("/providers/{provider_id}")
 async def delete_provider(
+    request: Request,
     provider_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -340,6 +450,16 @@ async def delete_provider(
     
     db.delete(provider)
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="delete",
+        target_type="provider",
+        target_id=provider_id,
+        ip_address=ip_address,
+    )
     
     return {"message": "删除成功"}
 
@@ -382,6 +502,7 @@ async def get_all_provider_quotas(
 
 @router.post("/providers/{provider_id}/quota/sync")
 async def sync_provider_quota(
+    request: Request,
     provider_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -395,6 +516,16 @@ async def sync_provider_quota(
     
     # TODO: 实现实际的同步逻辑
     # 这里只是占位
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="sync",
+        target_type="provider_quota",
+        target_id=provider_id,
+        ip_address=ip_address,
+    )
     
     return {"message": "同步成功", "provider_id": provider_id}
 
@@ -429,6 +560,7 @@ async def list_models(
 
 @router.post("/models", response_model=ModelMappingResponse)
 async def create_model_mapping(
+    request: Request,
     model_data: ModelMappingCreate,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -456,6 +588,22 @@ async def create_model_mapping(
     db.commit()
     db.refresh(mapping)
     
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="create",
+        target_type="model_mapping",
+        target_id=mapping.model_id,
+        detail={
+            "display_name": mapping.display_name,
+            "provider_id": mapping.provider_id,
+            "provider_model": mapping.provider_model,
+            "aliases": mapping.aliases,
+        },
+        ip_address=ip_address,
+    )
+    
     return ModelMappingResponse(
         model_id=mapping.model_id,
         display_name=mapping.display_name,
@@ -468,6 +616,7 @@ async def create_model_mapping(
 
 @router.put("/models/{model_id}")
 async def update_model_mapping(
+    request: Request,
     model_id: str,
     model_data: ModelMappingUpdate,
     db: Session = Depends(get_db),
@@ -482,24 +631,42 @@ async def update_model_mapping(
     if not mapping:
         raise HTTPException(status_code=404, detail="模型映射不存在")
     
+    changed = {}
     if model_data.display_name is not None:
+        changed["display_name"] = model_data.display_name
         mapping.display_name = model_data.display_name
     if model_data.provider_id is not None:
+        changed["provider_id"] = model_data.provider_id
         mapping.provider_id = model_data.provider_id
     if model_data.provider_model is not None:
+        changed["provider_model"] = model_data.provider_model
         mapping.provider_model = model_data.provider_model
     if model_data.aliases is not None:
+        changed["aliases"] = model_data.aliases
         mapping.aliases = model_data.aliases
     if model_data.status is not None:
+        changed["status"] = model_data.status
         mapping.status = ModelMappingStatus(model_data.status)
     
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="update",
+        target_type="model_mapping",
+        target_id=model_id,
+        detail=changed,
+        ip_address=ip_address,
+    )
     
     return {"message": "更新成功"}
 
 
 @router.delete("/models/{model_id}")
 async def delete_model_mapping(
+    request: Request,
     model_id: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
@@ -515,5 +682,15 @@ async def delete_model_mapping(
     
     db.delete(mapping)
     db.commit()
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="delete",
+        target_type="model_mapping",
+        target_id=model_id,
+        ip_address=ip_address,
+    )
     
     return {"message": "删除成功"}
