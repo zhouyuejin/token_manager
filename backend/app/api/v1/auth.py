@@ -1,14 +1,19 @@
 """
 认证接口
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from loguru import logger
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, generate_user_id
 from app.models.user import User, UserRole, UserStatus
+from app.models.login_log import LoginLog
+from app.utils.request import extract_client_ip, extract_user_agent
 
 router = APIRouter()
 
@@ -71,24 +76,74 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """用户登录"""
-    user = db.query(User).filter(User.username == form_data.username).first()
-    
-    if not user or not verify_password(form_data.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误"
+def _create_login_log(db: Session, username: str, user_id: str | None,
+                      ip: str | None, ua: str | None,
+                      login_status: str, failure_reason: str | None = None) -> None:
+    """写入登录日志，失败不抛出异常。"""
+    try:
+        log = LoginLog(
+            log_id=secrets.token_hex(16),
+            username=username,
+            user_id=user_id,
+            ip_address=ip,
+            user_agent=ua,
+            status=login_status,
+            failure_reason=failure_reason,
         )
-    
-    if user.status == UserStatus.disabled:
-        raise HTTPException(status_code=403, detail="账户已被禁用")
-    
-    # 生成Token
-    access_token = create_access_token(data={"sub": user.user_id, "username": user.username})
-    
-    return Token(access_token=access_token, token_type="bearer")
+        db.add(log)
+        db.commit()
+    except Exception:
+        logger.exception("写入登录日志失败")
+
+
+@router.post("/login", response_model=Token)
+async def login(request: Request,
+                form_data: OAuth2PasswordRequestForm = Depends(),
+                db: Session = Depends(get_db)):
+    """用户登录"""
+    username = form_data.username
+    ip_address = extract_client_ip(request)
+    user_agent = extract_user_agent(request)
+
+    try:
+        user = db.query(User).filter(User.username == username).first()
+
+        if not user:
+            _create_login_log(db, username, None, ip_address, user_agent,
+                              "failed", "user_not_found")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+
+        if not verify_password(form_data.password, user.password):
+            _create_login_log(db, username, user.user_id, ip_address, user_agent,
+                              "failed", "invalid_password")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误"
+            )
+
+        if user.status == UserStatus.disabled:
+            _create_login_log(db, username, user.user_id, ip_address, user_agent,
+                              "blocked", "account_disabled")
+            raise HTTPException(status_code=403, detail="账户已被禁用")
+
+        # 生成Token
+        access_token = create_access_token(data={"sub": user.user_id, "username": user.username})
+
+        _create_login_log(db, username, user.user_id, ip_address, user_agent, "success")
+
+        return Token(access_token=access_token, token_type="bearer")
+
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("登录过程异常")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="服务器内部错误"
+        )
 
 
 @router.get("/me", response_model=UserInfo)
