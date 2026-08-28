@@ -61,20 +61,18 @@ class TestLoginLogSuccess:
             user = _create_user(db, "alice", "alice@example.com", password="secret123")
             db.commit()
 
-            with patch("app.api.v1.auth._create_login_log") as mock_log:
-                # 直接测试 _create_login_log 不走 mock
-                from app.api.v1.auth import _create_login_log
-                _create_login_log(db, "alice", user.user_id, "1.2.3.4", "TestBrowser/1.0", "success")
+            from app.api.v1.auth import _create_login_log
+            _create_login_log(db, "alice", user.user_id, "1.2.3.4", "TestBrowser/1.0", "success")
 
-                log = db.query(LoginLog).filter(LoginLog.username == "alice").first()
-                assert log is not None
-                assert log.status == "success"
-                assert log.user_id == user.user_id
-                assert log.username == "alice"
-                assert log.ip_address == "1.2.3.4"
-                assert log.user_agent == "TestBrowser/1.0"
-                assert log.log_id is not None
-                assert len(log.log_id) == 32
+            log = db.query(LoginLog).filter(LoginLog.username == "alice").first()
+            assert log is not None
+            assert log.status == "success"
+            assert log.user_id == user.user_id
+            assert log.username == "alice"
+            assert log.ip_address == "1.2.3.4"
+            assert log.user_agent == "TestBrowser/1.0"
+            assert log.log_id is not None
+            assert len(log.log_id) == 32
         finally:
             db.close()
 
@@ -231,8 +229,9 @@ class TestLoginLogWriteFailure:
         finally:
             db.close()
 
-        # mock _create_login_log 抛异常，验证登录仍返回 200
-        with patch("app.api.v1.auth._create_login_log", side_effect=Exception("DB write error")):
+        # 在 inner 边界 mock（构造 LoginLog 时抛异常），让真实的 _create_login_log 内部 try/except 捕获
+        from app.models.login_log import LoginLog
+        with patch.object(LoginLog, "__init__", side_effect=Exception("DB write error")):
             response = client.post(
                 "/api/v1/auth/login",
                 data={"username": "dave", "password": "pwd123"},
