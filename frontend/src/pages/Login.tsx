@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Button, App } from 'antd'
+import { Form, Button } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
+import { useMessage } from '../utils/message'
 import gsap from 'gsap'
 
 // 判断是否为开发环境
@@ -59,7 +60,7 @@ const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: an
 const Login = () => {
   const navigate = useNavigate()
   const { login, isLoading } = useAuthStore()
-  const { message } = App.useApp()
+  const message = useMessage()
   
   // 开发环境默认填充账号密码
   const [username, setUsername] = useState(isDev ? 'admin' : '')
@@ -223,7 +224,7 @@ const Login = () => {
           </p>
         </div>
         
-        <form onSubmit={onFinish}>
+        <Form onFinish={onFinish} layout="vertical">
           <div className="login-input-wrap" style={{ marginBottom: 16 }}>
             <CustomInput
               prefix={<UserOutlined />}
@@ -243,7 +244,7 @@ const Login = () => {
             />
           </div>
 
-          <div style={{ marginBottom: 16 }}>
+          <Form.Item style={{ marginBottom: 16 }}>
             <Button 
               type="primary" 
               htmlType="submit" 
@@ -275,7 +276,7 @@ const Login = () => {
             >
               登 录
             </Button>
-          </div>
+          </Form.Item>
 
           <div style={{ textAlign: 'center', color: '#64748B', fontSize: 13 }} id="login-btn">
             还没有账号？{' '}
@@ -290,7 +291,7 @@ const Login = () => {
               立即注册
             </Link>
           </div>
-        </form>
+        </Form>
       </div>
     </div>
   )
