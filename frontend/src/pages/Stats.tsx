@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, DatePicker, Table, Button, Space } from 'antd'
-import { DownloadOutlined } from '@ant-design/icons'
+import { DownloadOutlined, ApiOutlined, ThunderboltOutlined, ClockCircleOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { getUsageStats } from '../api/stats'
 import dayjs from 'dayjs'
 
@@ -49,22 +49,93 @@ const StatsPage = () => {
   }
 
   const modelColumns = [
-    { title: '模型', dataIndex: 'model', key: 'model' },
-    { title: 'Token数', dataIndex: 'tokens', key: 'tokens', render: (v: number) => v?.toLocaleString() },
-    { title: '请求数', dataIndex: 'requests', key: 'requests', render: (v: number) => v?.toLocaleString() },
-    { title: '预估费用', dataIndex: 'cost', key: 'cost', render: (v: number) => v ? `$${v.toFixed(2)}` : '-' },
+    { 
+      title: '模型', 
+      dataIndex: 'model', 
+      key: 'model',
+      render: (text: string) => <span style={{ color: '#F8FAFC' }}>{text}</span>
+    },
+    { 
+      title: 'Token数', 
+      dataIndex: 'tokens', 
+      key: 'tokens', 
+      render: (v: number) => (
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+          {v?.toLocaleString()}
+        </span>
+      )
+    },
+    { 
+      title: '请求数', 
+      dataIndex: 'requests', 
+      key: 'requests', 
+      render: (v: number) => (
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+          {v?.toLocaleString()}
+        </span>
+      )
+    },
+    { 
+      title: '预估费用', 
+      dataIndex: 'cost', 
+      key: 'cost', 
+      render: (v: number) => (
+        <span style={{ 
+          fontFamily: "'Space Grotesk', sans-serif", 
+          color: v ? '#22C55E' : '#64748B' 
+        }}>
+          {v ? `$${v.toFixed(2)}` : '-'}
+        </span>
+      )
+    },
   ]
 
   const dayColumns = [
-    { title: '日期', dataIndex: 'date', key: 'date' },
-    { title: 'Token数', dataIndex: 'tokens', key: 'tokens', render: (v: number) => v?.toLocaleString() },
-    { title: '请求数', dataIndex: 'requests', key: 'requests', render: (v: number) => v?.toLocaleString() },
+    { 
+      title: '日期', 
+      dataIndex: 'date', 
+      key: 'date',
+      render: (text: string) => <span style={{ color: '#CBD5E1' }}>{text}</span>
+    },
+    { 
+      title: 'Token数', 
+      dataIndex: 'tokens', 
+      key: 'tokens', 
+      render: (v: number) => (
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+          {v?.toLocaleString()}
+        </span>
+      )
+    },
+    { 
+      title: '请求数', 
+      dataIndex: 'requests', 
+      key: 'requests', 
+      render: (v: number) => (
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+          {v?.toLocaleString()}
+        </span>
+      )
+    },
   ]
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2>用量统计</h2>
+    <div className="stagger-children">
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        marginBottom: 24,
+        alignItems: 'center',
+      }}>
+        <h2 style={{ 
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontSize: 24,
+          fontWeight: 600,
+          color: '#F8FAFC',
+          margin: 0,
+        }}>
+          用量统计
+        </h2>
         <Space>
           <RangePicker 
             value={dateRange}
@@ -72,38 +143,137 @@ const StatsPage = () => {
               if (dates && dates[0] && dates[1]) {
                 setDateRange([dates[0], dates[1]])
               }
-            }} 
+            }}
+            style={{
+              background: 'rgba(30, 41, 59, 0.8)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 10,
+            }}
           />
-          <Button icon={<DownloadOutlined />} onClick={handleExport}>导出</Button>
+          <Button 
+            icon={<DownloadOutlined />} 
+            onClick={handleExport}
+            style={{
+              background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+              border: 'none',
+              borderRadius: 10,
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}
+          >
+            导出
+          </Button>
         </Space>
       </div>
 
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic title="总调用次数" value={stats?.total_requests || 0} />
+      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card 
+            style={{ 
+              background: 'rgba(17, 24, 39, 0.6)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 16,
+            }}
+          >
+            <Statistic 
+              title={<span style={{ color: '#94A3B8' }}>总调用次数</span>} 
+              value={stats?.total_requests || 0}
+              valueStyle={{ 
+                color: '#F8FAFC', 
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 600,
+              }}
+              prefix={<ApiOutlined style={{ color: '#3B82F6' }} />}
+            />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic title="总Token数" value={stats?.total_tokens || 0} />
+        <Col xs={24} sm={12} lg={6}>
+          <Card 
+            style={{ 
+              background: 'rgba(17, 24, 39, 0.6)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 16,
+            }}
+          >
+            <Statistic 
+              title={<span style={{ color: '#94A3B8' }}>总Token数</span>} 
+              value={stats?.total_tokens || 0}
+              valueStyle={{ 
+                color: '#F8FAFC', 
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 600,
+              }}
+              prefix={<ThunderboltOutlined style={{ color: '#22C55E' }} />}
+            />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic title="平均延迟" value={stats?.avg_latency_ms || 0} suffix="ms" />
+        <Col xs={24} sm={12} lg={6}>
+          <Card 
+            style={{ 
+              background: 'rgba(17, 24, 39, 0.6)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 16,
+            }}
+          >
+            <Statistic 
+              title={<span style={{ color: '#94A3B8' }}>平均延迟</span>} 
+              value={stats?.avg_latency_ms || 0}
+              suffix="ms"
+              valueStyle={{ 
+                color: '#F8FAFC', 
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 600,
+              }}
+              prefix={<ClockCircleOutlined style={{ color: '#EA580C' }} />}
+            />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic title="成功率" value={stats?.success_rate || 100} suffix="%" />
+        <Col xs={24} sm={12} lg={6}>
+          <Card 
+            style={{ 
+              background: 'rgba(17, 24, 39, 0.6)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 16,
+            }}
+          >
+            <Statistic 
+              title={<span style={{ color: '#94A3B8' }}>成功率</span>} 
+              value={stats?.success_rate || 100}
+              suffix="%"
+              valueStyle={{ 
+                color: '#F8FAFC', 
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 600,
+              }}
+              prefix={<CheckCircleOutlined style={{ color: '#22C55E' }} />}
+            />
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title="按模型统计" loading={loading}>
+      <Row gutter={[20, 20]}>
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span style={{ 
+                color: '#F8FAFC', 
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 600,
+              }}>
+                按模型统计
+              </span>
+            }
+            loading={loading}
+            style={{ 
+              background: 'rgba(17, 24, 39, 0.6)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 16,
+            }}
+          >
             <Table
               dataSource={stats?.by_model || []}
               columns={modelColumns}
@@ -113,8 +283,25 @@ const StatsPage = () => {
             />
           </Card>
         </Col>
-        <Col span={12}>
-          <Card title="每日趋势" loading={loading}>
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span style={{ 
+                color: '#F8FAFC', 
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 600,
+              }}>
+                每日趋势
+              </span>
+            }
+            loading={loading}
+            style={{ 
+              background: 'rgba(17, 24, 39, 0.6)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 16,
+            }}
+          >
             <Table
               dataSource={stats?.by_day || []}
               columns={dayColumns}
