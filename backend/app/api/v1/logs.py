@@ -5,15 +5,15 @@ import json
 from typing import Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.models.operation_log import OperationLog
 from app.models.login_log import LoginLog
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.schemas.log import (
     OperationLogResponse,
     OperationLogListResponse,
@@ -22,17 +22,6 @@ from app.schemas.log import (
 )
 
 router = APIRouter()
-
-
-def require_admin(current_user: User = Depends(get_current_user)):
-    """检查是否是管理员"""
-    if current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要管理员权限"
-        )
-    return current_user
-
 
 @router.get("/operations", response_model=OperationLogListResponse)
 async def list_operation_logs(
