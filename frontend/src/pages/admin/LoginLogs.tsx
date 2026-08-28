@@ -69,11 +69,18 @@ const LoginLogsPage = () => {
   }
 
   const handleReset = () => {
+    const resetParams = {
+      keyword: '',
+      status: '',
+      start_date: undefined,
+      end_date: undefined,
+      page: 1,
+    }
     setKeyword('')
     setStatus('')
     setDateRange(null)
     setPage(1)
-    fetchData({ page: 1 })
+    fetchData(resetParams)
   }
 
   const handlePageChange = (newPage: number, newPageSize: number) => {
