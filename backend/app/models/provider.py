@@ -18,6 +18,13 @@ class ProviderType(enum.Enum):
     moonshot = "moonshot"
     baidu = "baidu"
     custom = "custom"
+    # 常用大模型供应商
+    minimax = "minimax"
+    deepseek = "deepseek"
+    zhipu = "zhipu"
+    cohere = "cohere"
+    mistral = "mistral"
+    bedrock = "bedrock"
 
 
 class ProviderStatus(enum.Enum):

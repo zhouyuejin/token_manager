@@ -299,6 +299,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .ant-input,
 .ant-input-affix-wrapper,
+.ant-input-number,
 .ant-select-selector,
 .ant-picker {
   background: var(--color-muted) !important;
@@ -307,22 +308,89 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-md) !important;
 }
 
+/* Input.Password 特殊处理 - 覆盖 ant-input-affix-wrapper */
+/* 使用更高优先级的选择器 */
+.ant-input-password.ant-input-password,
+.ant-input-password-wrapper.ant-input-password-wrapper,
+.ant-input-affix-wrapper.ant-input-password,
+.ant-input-affix-wrapper.ant-input-password-wrapper {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+  padding: 0 11px !important;
+}
+
+.ant-input-password input.ant-input-password-input,
+.ant-input-password-wrapper input,
+.ant-input-affix-wrapper input {
+  background: transparent !important;
+  color: var(--color-foreground) !important;
+  height: 36px !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.ant-input-password-icon,
+.ant-input-password-icon-active {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--color-foreground) !important;
+  border-radius: var(--radius-md) !important;
+  width: 100% !important;
+}
+
+.ant-input-number-input {
+  color: var(--color-foreground) !important;
+  background: transparent !important;
+}
+
 .ant-input::placeholder {
   color: var(--color-muted-foreground) !important;
 }
 
 .ant-input:hover,
 .ant-input-affix-wrapper:hover,
+.ant-input-number:hover,
 .ant-select-selector:hover,
 .ant-picker:hover {
+  border-color: var(--color-primary) !important;
+}
+
+.ant-input-password:hover,
+.ant-input-password-wrapper:hover {
+  border-color: var(--color-primary) !important;
+}
+
+.ant-input-number:hover {
   border-color: var(--color-primary) !important;
 }
 
 .ant-input:focus,
 .ant-input-affix-wrapper:focus,
 .ant-input-affix-wrapper-focused,
+.ant-input-number:focus,
+.ant-input-number-focused,
 .ant-select-focused .ant-select-selector,
 .ant-picker-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+.ant-input-password:focus,
+.ant-input-password-focused,
+.ant-input-password-wrapper:focus,
+.ant-input-password-wrapper-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+.ant-input-number-focused {
   border-color: var(--color-primary) !important;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
 }
@@ -832,4 +900,151 @@ body::before {
 .ant-dropdown-menu-item[aria-disabled="true"]:hover {
   background: transparent !important;
   cursor: default !important;
+}
+
+/* ========================================
+   Modal Form Fixes - Remove extra borders
+   ======================================== */
+
+/* Modal form items - remove extra borders */
+.ant-modal .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.ant-modal .ant-form-item-label {
+  padding-bottom: 8px;
+}
+
+.ant-modal .ant-form-item-label > label {
+  color: #94A3B8 !important;
+  font-size: 14px;
+}
+
+/* Fix input number wrapper in forms */
+.ant-modal .ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.ant-modal .ant-input-number:hover,
+.ant-modal .ant-input-number:focus,
+.ant-modal .ant-input-number-focused {
+  border-color: var(--color-primary) !important;
+}
+
+/* Fix Select in modal */
+.ant-modal .ant-select-selector {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+}
+
+.ant-modal .ant-select-selection-item,
+.ant-modal .ant-select-selection-placeholder {
+  line-height: 38px !important;
+}
+
+/* Fix Input in modal */
+.ant-modal .ant-input {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px;
+}
+
+.ant-modal .ant-input:hover,
+.ant-modal .ant-input:focus {
+  border-color: var(--color-primary) !important;
+}
+
+/* Fix Input.Password in modal - 使用最高优先级选择器 */
+.ant-modal .ant-input-password.ant-input-password,
+.ant-modal .ant-input-password-wrapper.ant-input-password-wrapper,
+.ant-modal .ant-input-affix-wrapper.ant-input-password,
+.ant-modal .ant-input-affix-wrapper.ant-input-password-wrapper {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+  padding: 0 11px !important;
+  display: flex !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+
+/* 移除内层 input 的所有边框 */
+.ant-modal .ant-input-password input,
+.ant-modal .ant-input-password-wrapper input,
+.ant-modal .ant-input-affix-wrapper input {
+  background: transparent !important;
+  color: var(--color-foreground) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 36px !important;
+  width: 100% !important;
+}
+
+/* 密码显示切换按钮 */
+.ant-modal .ant-input-password-icon,
+.ant-modal .ant-input-password-icon-active {
+  color: var(--color-muted-foreground) !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Remove potential extra borders from form elements */
+.ant-modal .ant-form-item-explain-error {
+  color: #F87171 !important;
+}
+
+/* Clean up any extra outlines */
+.ant-modal *:focus {
+  outline: none !important;
+}
+
+.ant-modal *:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+
+
+/* ========================================
+   ULTIMATE Input.Password Fix
+   使用所有可能的选择器确保覆盖
+   ======================================== */
+
+/* 使用 :where() 降低优先级阻力，同时用 !important */
+:where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+:where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Modal 内 */
+.ant-modal :where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+}
+
+.ant-modal :where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: var(--color-foreground) !important;
 }

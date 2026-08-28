@@ -342,24 +342,31 @@ const ProvidersPage = () => {
       >
         <Form form={form} onFinish={handleCreate} layout="vertical">
           <Form.Item name="name" label={<span style={{ color: '#94A3B8' }}>供应商名称</span>} rules={[{ required: true }]}>
-            <Input placeholder="如：火山方舟" style={{ height: 40, borderRadius: 10 }} />
+            <Input placeholder="如：火山方舟" />
           </Form.Item>
           <Form.Item name="type" label={<span style={{ color: '#94A3B8' }}>类型</span>} rules={[{ required: true }]}>
             <Select style={{ borderRadius: 10 }}>
               <Select.Option value="openai">OpenAI</Select.Option>
               <Select.Option value="anthropic">Anthropic</Select.Option>
+              <Select.Option value="google">Google</Select.Option>
+              <Select.Option value="azure">Azure OpenAI</Select.Option>
               <Select.Option value="volcengine">火山方舟</Select.Option>
               <Select.Option value="moonshot">Moonshot</Select.Option>
               <Select.Option value="baidu">百度千帆</Select.Option>
-              <Select.Option value="azure">Azure OpenAI</Select.Option>
+              <Select.Option value="minimax">MiniMax 稀宇</Select.Option>
+              <Select.Option value="deepseek">DeepSeek 深度求索</Select.Option>
+              <Select.Option value="zhipu">智谱清言</Select.Option>
+              <Select.Option value="cohere">Cohere</Select.Option>
+              <Select.Option value="mistral">Mistral</Select.Option>
+              <Select.Option value="bedrock">AWS Bedrock</Select.Option>
               <Select.Option value="custom">自定义</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item name="endpoint" label={<span style={{ color: '#94A3B8' }}>API端点</span>} rules={[{ required: true }]}>
-            <Input placeholder="https://api.openai.com/v1" style={{ height: 40, borderRadius: 10 }} />
+            <Input placeholder="https://api.openai.com/v1" />
           </Form.Item>
           <Form.Item name="api_key" label={<span style={{ color: '#94A3B8' }}>API Key</span>} rules={[{ required: true }]}>
-            <Input.Password placeholder="请输入API Key" style={{ height: 40, borderRadius: 10 }} />
+            <Input.Password placeholder="请输入API Key" />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
@@ -426,24 +433,31 @@ const ProvidersPage = () => {
       >
         <Form form={form} onFinish={handleUpdate} layout="vertical">
           <Form.Item name="name" label={<span style={{ color: '#94A3B8' }}>供应商名称</span>} rules={[{ required: true }]}>
-            <Input placeholder="如：火山方舟" style={{ height: 40, borderRadius: 10 }} />
+            <Input placeholder="如：火山方舟" />
           </Form.Item>
           <Form.Item name="type" label={<span style={{ color: '#94A3B8' }}>类型</span>} rules={[{ required: true }]}>
             <Select style={{ borderRadius: 10 }}>
               <Select.Option value="openai">OpenAI</Select.Option>
               <Select.Option value="anthropic">Anthropic</Select.Option>
+              <Select.Option value="google">Google</Select.Option>
+              <Select.Option value="azure">Azure OpenAI</Select.Option>
               <Select.Option value="volcengine">火山方舟</Select.Option>
               <Select.Option value="moonshot">Moonshot</Select.Option>
               <Select.Option value="baidu">百度千帆</Select.Option>
-              <Select.Option value="azure">Azure OpenAI</Select.Option>
+              <Select.Option value="minimax">MiniMax 稀宇</Select.Option>
+              <Select.Option value="deepseek">DeepSeek 深度求索</Select.Option>
+              <Select.Option value="zhipu">智谱清言</Select.Option>
+              <Select.Option value="cohere">Cohere</Select.Option>
+              <Select.Option value="mistral">Mistral</Select.Option>
+              <Select.Option value="bedrock">AWS Bedrock</Select.Option>
               <Select.Option value="custom">自定义</Select.Option>
             </Select>
           </Form.Item>
           <Form.Item name="endpoint" label={<span style={{ color: '#94A3B8' }}>API端点</span>} rules={[{ required: true }]}>
-            <Input placeholder="https://api.openai.com/v1" style={{ height: 40, borderRadius: 10 }} />
+            <Input placeholder="https://api.openai.com/v1" />
           </Form.Item>
           <Form.Item name="api_key" label={<span style={{ color: '#94A3B8' }}>API Key（留空则不修改）</span>}>
-            <Input.Password placeholder="请输入API Key" style={{ height: 40, borderRadius: 10 }} />
+            <Input.Password placeholder="请输入API Key" />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
