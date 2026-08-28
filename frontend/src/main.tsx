@@ -21,7 +21,6 @@ const darkTheme = {
     colorTextQuaternary: '#64748B',
     borderRadius: 10,
     fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    controlHeight: 40,
     colorSuccess: '#22C55E',
     colorWarning: '#F59E0B',
     colorError: '#DC2626',
