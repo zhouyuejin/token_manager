@@ -11,6 +11,8 @@ import {
   AppstoreOutlined,
   LogoutOutlined,
   BellOutlined,
+  FileSearchOutlined,
+  LoginOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons'
@@ -33,6 +35,8 @@ const getPageTitle = (pathname: string): string => {
     '/admin/users': '用户管理',
     '/admin/providers': '供应商管理',
     '/admin/models': '模型映射',
+    '/admin/logs/operations': '操作日志',
+    '/admin/logs/logins': '登录日志',
     '/settings': '个人设置',
   }
   return map[pathname] ?? 'Token Manager'
@@ -89,6 +93,8 @@ const MainLayout = () => {
               { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
               { key: '/admin/providers', icon: <CloudOutlined />, label: '供应商管理' },
               { key: '/admin/models', icon: <AppstoreOutlined />, label: '模型映射' },
+              { key: '/admin/logs/operations', icon: <FileSearchOutlined />, label: '操作日志' },
+              { key: '/admin/logs/logins', icon: <LoginOutlined />, label: '登录日志' },
             ],
           },
         ]
