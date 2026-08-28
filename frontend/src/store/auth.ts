@@ -27,11 +27,14 @@ export const useAuthStore = create<AuthState>()(
           
           const response = await loginApi(formData as any)
           
+          // 先存储 token，确保后续请求携带 Authorization header
+          set({ token: response.access_token })
+          
           // 从 /auth/login 获取的用户信息较少，需要调用 /users/me 获取完整信息
+          // 现在 token 已经在 store 中了，request 拦截器可以正确获取
           const userInfo = await getCurrentUser()
           
           set({
-            token: response.access_token,
             user: userInfo,
             isLoading: false
           })

@@ -25,6 +25,11 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => {
     const res = response.data
+    // 登录接口 (/auth/login) 返回的是 OAuth2 Token 格式，没有 code 字段
+    // 需要特殊处理，直接返回原始响应
+    if (response.config.url === '/auth/login') {
+      return res
+    }
     if (res.code !== 0) {
       message.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message || '请求失败'))
