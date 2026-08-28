@@ -68,12 +68,20 @@ const OperationLogsPage = () => {
   }
 
   const handleReset = () => {
+    const resetParams = {
+      keyword: '',
+      action: '',
+      target_type: '',
+      start_date: undefined,
+      end_date: undefined,
+      page: 1,
+    }
     setKeyword('')
     setAction('')
     setTargetType('')
     setDateRange(null)
     setPage(1)
-    fetchData({ page: 1 })
+    fetchData(resetParams)
   }
 
   const handlePageChange = (newPage: number, newPageSize: number) => {
