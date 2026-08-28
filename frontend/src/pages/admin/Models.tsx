@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
-  Select, message, Popconfirm 
+  Select, Popconfirm 
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { getModels, createModel, updateModel, deleteModel, ModelMapping } from '../../api/models'
@@ -14,6 +15,7 @@ const ModelsPage = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [editModel, setEditModel] = useState<ModelMapping | null>(null)
   const [form] = Form.useForm()
+  const message = useMessage()
 
   useEffect(() => {
     fetchData()

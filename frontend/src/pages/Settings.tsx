@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Card, Form, Input, Button, message, Switch } from 'antd'
+import { Card, Form, Input, Button, Switch } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, BellOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
+import { useMessage } from '../utils/message'
 
 const SettingsPage = () => {
   const { user } = useAuthStore()
   const [loading, setLoading] = useState(false)
+  const message = useMessage()
   const [notifySettings, setNotifySettings] = useState({
     quota_low_alert: true,
     quota_change_alert: true,

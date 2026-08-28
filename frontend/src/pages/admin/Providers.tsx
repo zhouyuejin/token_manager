@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
-  Select, message, Popconfirm, Card, Row, Col, Progress 
+  Select, Popconfirm, Card, Row, Col, Progress 
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined } from '@ant-design/icons'
 import { 
@@ -16,6 +17,7 @@ const ProvidersPage = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [editProvider, setEditProvider] = useState<Provider | null>(null)
   const [form] = Form.useForm()
+  const message = useMessage()
 
   useEffect(() => {
     fetchData()

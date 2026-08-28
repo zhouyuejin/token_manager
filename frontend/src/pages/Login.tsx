@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Form, Button, message } from 'antd'
+import { Button, App } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
@@ -59,6 +59,7 @@ const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: an
 const Login = () => {
   const navigate = useNavigate()
   const { login, isLoading } = useAuthStore()
+  const { message } = App.useApp()
   
   // 开发环境默认填充账号密码
   const [username, setUsername] = useState(isDev ? 'admin' : '')
@@ -222,7 +223,7 @@ const Login = () => {
           </p>
         </div>
         
-        <Form onFinish={onFinish} layout="vertical">
+        <form onSubmit={onFinish}>
           <div className="login-input-wrap" style={{ marginBottom: 16 }}>
             <CustomInput
               prefix={<UserOutlined />}
@@ -242,7 +243,7 @@ const Login = () => {
             />
           </div>
 
-          <Form.Item style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 16 }}>
             <Button 
               type="primary" 
               htmlType="submit" 
@@ -274,7 +275,7 @@ const Login = () => {
             >
               登 录
             </Button>
-          </Form.Item>
+          </div>
 
           <div style={{ textAlign: 'center', color: '#64748B', fontSize: 13 }} id="login-btn">
             还没有账号？{' '}
@@ -289,7 +290,7 @@ const Login = () => {
               立即注册
             </Link>
           </div>
-        </Form>
+        </form>
       </div>
     </div>
   )

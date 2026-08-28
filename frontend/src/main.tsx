@@ -1,9 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { ConfigProvider, theme } from 'antd'
+import { ConfigProvider, theme, App as AntApp } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import App from './App'
+import { MessageProvider } from './components/MessageProvider'
 import './index.css'
 
 const darkTheme = {
@@ -61,9 +62,13 @@ const darkTheme = {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ConfigProvider theme={darkTheme} locale={zhCN}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <AntApp>
+        <MessageProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </MessageProvider>
+      </AntApp>
     </ConfigProvider>
   </React.StrictMode>,
 )

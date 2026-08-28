@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { Form, Input, Button, message } from 'antd'
+import { Form, Input, Button } from 'antd'
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { register } from '../api/auth'
+import { useMessage } from '../utils/message'
 
 const Register = () => {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const message = useMessage()
 
   const onFinish = async (values: { username: string; email: string; password: string }) => {
     setLoading(true)

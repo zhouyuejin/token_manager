@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useMessage } from '../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
-  InputNumber, message, Popconfirm 
+  InputNumber, Popconfirm 
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
 import { getApiKeys, createApiKey, deleteApiKey, ApiKey } from '../api/apiKeys'
@@ -13,6 +14,7 @@ const ApiKeysPage = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [form] = Form.useForm()
+  const message = useMessage()
 
   useEffect(() => {
     fetchKeys()
