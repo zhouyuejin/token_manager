@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Input, Select, Button, Space, Typography, DatePicker } from 'antd'
+import { Card, Table, Input, Select, Button, Space, DatePicker } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { getOperationLogs, OperationLog, OperationLogParams } from '../../api/logs'
 
-const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const ACTION_OPTIONS = [
@@ -88,60 +87,54 @@ const OperationLogsPage = () => {
       title: '时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 160,
       render: (val: string) => (
-        <Text style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {dayjs(val).format('YYYY-MM-DD HH:mm:ss')}
-        </Text>
+        </span>
       ),
     },
     {
       title: '操作人',
       dataIndex: 'operator_name',
       key: 'operator_name',
-      width: 120,
       render: (val: string) => (
-        <Text style={{ color: '#F8FAFC', fontWeight: 500 }}>{val}</Text>
+        <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{val}</span>
       ),
     },
     {
       title: '动作',
       dataIndex: 'action',
       key: 'action',
-      width: 80,
       render: (val: string) => (
-        <Text style={{ color: '#F8FAFC' }}>{val}</Text>
+        <span style={{ color: '#F8FAFC' }}>{val}</span>
       ),
     },
     {
       title: '目标类型',
       dataIndex: 'target_type',
       key: 'target_type',
-      width: 100,
       render: (val: string) => (
-        <Text style={{ color: '#CBD5E1' }}>{val}</Text>
+        <span style={{ color: '#CBD5E1' }}>{val}</span>
       ),
     },
     {
       title: '目标ID',
       dataIndex: 'target_id',
       key: 'target_id',
-      width: 120,
       render: (val: string) => (
-        <Text style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {val}
-        </Text>
+        </span>
       ),
     },
     {
       title: 'IP',
       dataIndex: 'ip_address',
       key: 'ip_address',
-      width: 130,
       render: (val: string) => (
-        <Text style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {val}
-        </Text>
+        </span>
       ),
     },
     {
@@ -161,8 +154,7 @@ const OperationLogsPage = () => {
               border: '1px solid rgba(255,255,255,0.06)',
             }}
           >
-            <Text
-              copyable
+            <span
               style={{
                 color: '#94A3B8',
                 fontFamily: "'Space Grotesk', monospace",
@@ -172,7 +164,7 @@ const OperationLogsPage = () => {
               }}
             >
               {json}
-            </Text>
+            </span>
           </div>
         )
       },
@@ -190,14 +182,13 @@ const OperationLogsPage = () => {
         }}
         styles={{ body: { padding: '16px 20px' } }}
       >
-        <Space wrap align="center" size={12}>
+        <Space wrap size={12}>
           <Input
             placeholder="关键字搜索"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onPressEnter={handleSearch}
             style={{ width: 180, borderRadius: 8 }}
-            allowClear
           />
           <Select
             value={action}
@@ -246,7 +237,6 @@ const OperationLogsPage = () => {
             showSizeChanger: true,
             showTotal: (t) => `共 ${t} 条`,
           }}
-          scroll={{ x: 900 }}
         />
       </Card>
     </div>

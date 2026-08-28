@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Card, Table, Input, Select, Button, Space, Typography, Tag, DatePicker } from 'antd'
+import { Card, Table, Input, Select, Button, Space, Tag, DatePicker } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { getLoginLogs, LoginLog, LoginLogParams } from '../../api/logs'
 
-const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const STATUS_OPTIONS = [
@@ -88,32 +87,29 @@ const LoginLogsPage = () => {
       title: '时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 160,
       render: (val: string) => (
-        <Text style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {dayjs(val).format('YYYY-MM-DD HH:mm:ss')}
-        </Text>
+        </span>
       ),
     },
     {
       title: '用户名',
       dataIndex: 'username',
       key: 'username',
-      width: 140,
       render: (val: string) => (
-        <Text style={{ color: '#F8FAFC', fontWeight: 500 }}>{val}</Text>
+        <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{val}</span>
       ),
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 90,
       render: (val: string) => (
         <Tag
           color={STATUS_COLOR[val] || 'default'}
           style={{
-            borderRadius: 6,
+            borderRadius: '6px',
             background: STATUS_COLOR[val]
               ? `rgba(${val === 'success' ? '34,197,94' : val === 'failed' ? '220,38,38' : '249,115,22'}, 0.15)`
               : 'rgba(100,116,139,0.15)',
@@ -128,11 +124,10 @@ const LoginLogsPage = () => {
       title: 'IP',
       dataIndex: 'ip_address',
       key: 'ip_address',
-      width: 130,
       render: (val: string) => (
-        <Text style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {val}
-        </Text>
+        </span>
       ),
     },
     {
@@ -140,25 +135,23 @@ const LoginLogsPage = () => {
       dataIndex: 'user_agent',
       key: 'user_agent',
       render: (val: string) => (
-        <Text
+        <span
           style={{
             color: '#94A3B8',
             fontFamily: "'Space Grotesk', monospace",
             fontSize: 11,
           }}
-          ellipsis={{ tooltip: val }}
         >
           {val}
-        </Text>
+        </span>
       ),
     },
     {
       title: '失败原因',
       dataIndex: 'failure_reason',
       key: 'failure_reason',
-      width: 160,
       render: (val: string) => (
-        <Text style={{ color: '#F87171', fontSize: 12 }}>{val || '-'}</Text>
+        <span style={{ color: '#F87171', fontSize: 12 }}>{val || '-'}</span>
       ),
     },
   ]
@@ -174,30 +167,37 @@ const LoginLogsPage = () => {
         }}
         styles={{ body: { padding: '16px 20px' } }}
       >
-        <Space wrap align="center" size={12}>
+        <Space wrap size={12}>
           <Input
             placeholder="用户名搜索"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onPressEnter={handleSearch}
-            style={{ width: 180, borderRadius: 8 }}
-            allowClear
+            style={{ width: 180, borderRadius: 10, height: 40 }}
           />
           <Select
             value={status}
             onChange={(val) => { setStatus(val); setPage(1) }}
             options={STATUS_OPTIONS}
-            style={{ width: 120 }}
+            style={{ width: 120, height: 40 }}
           />
           <RangePicker
             value={dateRange}
             onChange={(vals) => setDateRange(vals as [dayjs.Dayjs, dayjs.Dayjs] | null)}
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 10, height: 40 }}
           />
-          <Button icon={<SearchOutlined />} onClick={handleSearch} style={{ borderRadius: 8 }}>
+          <Button 
+            icon={<SearchOutlined />} 
+            onClick={handleSearch} 
+            style={{ borderRadius: 10, height: 40 }}
+          >
             查询
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={handleReset} style={{ borderRadius: 8 }}>
+          <Button 
+            icon={<ReloadOutlined />} 
+            onClick={handleReset} 
+            style={{ borderRadius: 10, height: 40 }}
+          >
             重置
           </Button>
         </Space>
@@ -224,7 +224,6 @@ const LoginLogsPage = () => {
             showSizeChanger: true,
             showTotal: (t) => `共 ${t} 条`,
           }}
-          scroll={{ x: 900 }}
         />
       </Card>
     </div>
