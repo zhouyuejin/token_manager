@@ -10,3 +10,4 @@ from app.models.usage_log import UsageLog
 from app.models.provider_quota import ProviderQuota, QuotaType, SyncStatus
 from app.models.operation_log import OperationLog
 from app.models.system_config import SystemConfig
+from app.models.login_log import LoginLog
