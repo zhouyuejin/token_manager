@@ -467,3 +467,38 @@ class TestLoginLogsAdmin:
         data = response.json()
         assert data["total"] == 1
         assert data["items"][0]["status"] == "failed"
+
+
+class TestOperationLogsMalformedDetail:
+    """detail 字段为非 JSON 字符串时，接口应降级返回原字符串，不影响响应整体性"""
+
+    def test_malformed_detail_returns_raw_string(self):
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db)
+            db.add(OperationLog(
+                log_id="log_op_malformed",
+                operator_id=admin.user_id,
+                operator_name=admin.username,
+                action="create",
+                target_type="user",
+                detail="not valid json",  # 故意写入非 JSON 字符串
+                ip_address="1.2.3.4",
+            ))
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
+        assert token is not None, "Failed to get admin token"
+        response = client.get(
+            "/api/v1/admin/logs/operations",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        item = data["items"][0]
+        assert item["log_id"] == "log_op_malformed"
+        # 降级：json.loads 失败时,服务器返回原始字符串
+        assert item["detail"] == "not valid json"
