@@ -175,18 +175,26 @@ const UsersPage = () => {
             type="text" 
             icon={<EditOutlined />} 
             onClick={() => {
+              if (record.role === 'admin') return
               setEditUser(record)
               form.setFieldsValue(record)
             }}
-            style={{ color: '#3B82F6' }}
+            disabled={record.role === 'admin'}
+            style={{ color: record.role === 'admin' ? '#64748B' : '#3B82F6' }}
           >
             编辑
           </Button>
           <Popconfirm
-            title="确认删除此用户？"
+            title={record.role === 'admin' ? "不能删除管理员用户" : "确认删除此用户？"}
             onConfirm={() => handleDelete(record.user_id)}
+            disabled={record.role === 'admin'}
           >
-            <Button type="text" danger icon={<DeleteOutlined />}>
+            <Button 
+              type="text" 
+              danger 
+              icon={<DeleteOutlined />}
+              disabled={record.role === 'admin'}
+            >
               删除
             </Button>
           </Popconfirm>

@@ -143,6 +143,10 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
+    # 不能编辑管理员用户
+    if user.role == UserRole.admin:
+        raise HTTPException(status_code=400, detail="不能编辑管理员用户")
+    
     if user_data.role is not None:
         user.role = UserRole(user_data.role)
     if user_data.status is not None:
@@ -167,6 +171,10 @@ async def delete_user(
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 不能删除管理员用户
+    if user.role == UserRole.admin:
+        raise HTTPException(status_code=400, detail="不能删除管理员用户")
     
     # 不能删除自己
     if user.user_id == admin.user_id:
