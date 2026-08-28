@@ -3,7 +3,7 @@ import {
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
   Select, message, Popconfirm 
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from '../../api/users'
 import dayjs from 'dayjs'
 
@@ -88,14 +88,31 @@ const UsersPage = () => {
   }
 
   const columns = [
-    { title: '用户名', dataIndex: 'username', key: 'username' },
-    { title: '邮箱', dataIndex: 'email', key: 'email' },
+    { 
+      title: '用户名', 
+      dataIndex: 'username', 
+      key: 'username',
+      render: (text: string) => <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{text}</span>
+    },
+    { 
+      title: '邮箱', 
+      dataIndex: 'email', 
+      key: 'email',
+      render: (text: string) => <span style={{ color: '#94A3B8' }}>{text}</span>
+    },
     { 
       title: '角色', 
       dataIndex: 'role', 
       key: 'role',
       render: (role: string) => (
-        <Tag color={role === 'admin' ? 'blue' : 'default'}>
+        <Tag 
+          color={role === 'admin' ? 'blue' : 'default'}
+          style={{ 
+            borderRadius: '6px',
+            background: role === 'admin' ? 'rgba(37, 99, 235, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+            border: 'none',
+          }}
+        >
           {role === 'admin' ? '管理员' : '用户'}
         </Tag>
       )
@@ -105,7 +122,14 @@ const UsersPage = () => {
       dataIndex: 'status', 
       key: 'status',
       render: (status: string) => (
-        <Tag color={status === 'active' ? 'green' : 'red'}>
+        <Tag 
+          color={status === 'active' ? 'success' : 'error'}
+          style={{ 
+            borderRadius: '6px',
+            background: status === 'active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(220, 38, 38, 0.15)',
+            border: 'none',
+          }}
+        >
           {status === 'active' ? '启用' : '禁用'}
         </Tag>
       )
@@ -116,14 +140,18 @@ const UsersPage = () => {
       key: 'quota',
       render: (quota: number, record: User) => (
         <Space>
-          <span>
+          <span style={{ 
+            fontFamily: "'Space Grotesk', sans-serif", 
+            color: '#CBD5E1' 
+          }}>
             {record.quota_used?.toLocaleString()} / {quota?.toLocaleString()}
           </span>
           <Button 
-            type="link" 
+            type="text" 
             size="small" 
             icon={<DollarOutlined />}
             onClick={() => openQuotaModal(record)}
+            style={{ color: '#3B82F6' }}
           >
             调整
           </Button>
@@ -134,7 +162,7 @@ const UsersPage = () => {
       title: '创建时间', 
       dataIndex: 'created_at', 
       key: 'created_at',
-      render: (val: string) => dayjs(val).format('YYYY-MM-DD')
+      render: (val: string) => <span style={{ color: '#94A3B8' }}>{dayjs(val).format('YYYY-MM-DD')}</span>
     },
     {
       title: '操作',
@@ -142,12 +170,13 @@ const UsersPage = () => {
       render: (_: any, record: User) => (
         <Space>
           <Button 
-            type="link" 
+            type="text" 
             icon={<EditOutlined />} 
             onClick={() => {
               setEditUser(record)
               form.setFieldsValue(record)
             }}
+            style={{ color: '#3B82F6' }}
           >
             编辑
           </Button>
@@ -155,7 +184,7 @@ const UsersPage = () => {
             title="确认删除此用户？"
             onConfirm={() => handleDelete(record.user_id)}
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
+            <Button type="text" danger icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>
@@ -165,24 +194,63 @@ const UsersPage = () => {
   ]
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h2>用户管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
+    <div className="stagger-children">
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        marginBottom: 24,
+        alignItems: 'center',
+      }}>
+        <h2 style={{ 
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontSize: 24,
+          fontWeight: 600,
+          color: '#F8FAFC',
+          margin: 0,
+        }}>
+          <TeamOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
+          用户管理
+        </h2>
+        <Button 
+          type="primary" 
+          icon={<PlusOutlined />} 
+          onClick={() => setModalVisible(true)}
+          style={{
+            background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+            border: 'none',
+            borderRadius: 10,
+            fontFamily: "'Space Grotesk', sans-serif",
+          }}
+        >
           新建用户
         </Button>
       </div>
 
-      <Table
-        dataSource={users}
-        columns={columns}
-        rowKey="user_id"
-        loading={loading}
-      />
+      <div style={{
+        background: 'rgba(17, 24, 39, 0.6)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: 16,
+        overflow: 'hidden',
+      }}>
+        <Table
+          dataSource={users}
+          columns={columns}
+          rowKey="user_id"
+          loading={loading}
+        />
+      </div>
 
       {/* 创建用户弹窗 */}
       <Modal
-        title="新建用户"
+        title={
+          <span style={{ 
+            fontFamily: "'Space Grotesk', sans-serif",
+            color: '#F8FAFC',
+          }}>
+            新建用户
+          </span>
+        }
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false)
@@ -191,28 +259,75 @@ const UsersPage = () => {
         footer={null}
       >
         <Form form={form} onFinish={handleCreate} layout="vertical">
-          <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-            <Input />
+          <Form.Item 
+            name="username" 
+            label={<span style={{ color: '#94A3B8' }}>用户名</span>} 
+            rules={[{ required: true }]}
+          >
+            <Input 
+              placeholder="请输入用户名"
+              style={{ height: 40, borderRadius: 10 }}
+            />
           </Form.Item>
-          <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}>
-            <Input />
+          <Form.Item 
+            name="email" 
+            label={<span style={{ color: '#94A3B8' }}>邮箱</span>} 
+            rules={[{ required: true, type: 'email' }]}
+          >
+            <Input 
+              placeholder="请输入邮箱"
+              style={{ height: 40, borderRadius: 10 }}
+            />
           </Form.Item>
-          <Form.Item name="password" label="密码" rules={[{ required: true, min: 8 }]}>
-            <Input.Password />
+          <Form.Item 
+            name="password" 
+            label={<span style={{ color: '#94A3B8' }}>密码</span>} 
+            rules={[{ required: true, min: 8 }]}
+          >
+            <Input.Password 
+              placeholder="请输入密码"
+              style={{ height: 40, borderRadius: 10 }}
+            />
           </Form.Item>
-          <Form.Item name="role" label="角色" initialValue="user">
-            <Select>
+          <Form.Item 
+            name="role" 
+            label={<span style={{ color: '#94A3B8' }}>角色</span>} 
+            initialValue="user"
+          >
+            <Select style={{ borderRadius: 10 }}>
               <Select.Option value="user">用户</Select.Option>
               <Select.Option value="admin">管理员</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="quota" label="初始额度">
-            <InputNumber min={0} style={{ width: '100%' }} />
+          <Form.Item 
+            name="quota" 
+            label={<span style={{ color: '#94A3B8' }}>初始额度</span>}
+          >
+            <InputNumber 
+              min={0} 
+              style={{ width: '100%', height: 40 }} 
+              placeholder="请输入初始额度"
+            />
           </Form.Item>
-          <Form.Item>
+          <Form.Item style={{ marginTop: 24 }}>
             <Space>
-              <Button onClick={() => setModalVisible(false)}>取消</Button>
-              <Button type="primary" htmlType="submit">创建</Button>
+              <Button 
+                onClick={() => setModalVisible(false)}
+                style={{ borderRadius: 10 }}
+              >
+                取消
+              </Button>
+              <Button 
+                type="primary" 
+                htmlType="submit"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  border: 'none',
+                  borderRadius: 10,
+                }}
+              >
+                创建
+              </Button>
             </Space>
           </Form.Item>
         </Form>
@@ -220,7 +335,14 @@ const UsersPage = () => {
 
       {/* 编辑用户弹窗 */}
       <Modal
-        title="编辑用户"
+        title={
+          <span style={{ 
+            fontFamily: "'Space Grotesk', sans-serif",
+            color: '#F8FAFC',
+          }}>
+            编辑用户
+          </span>
+        }
         open={!!editUser}
         onCancel={() => {
           setEditUser(null)
@@ -229,22 +351,43 @@ const UsersPage = () => {
         footer={null}
       >
         <Form form={form} onFinish={handleUpdate} layout="vertical">
-          <Form.Item name="role" label="角色">
+          <Form.Item 
+            name="role" 
+            label={<span style={{ color: '#94A3B8' }}>角色</span>}
+          >
             <Select>
               <Select.Option value="user">用户</Select.Option>
               <Select.Option value="admin">管理员</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="status" label="状态">
+          <Form.Item 
+            name="status" 
+            label={<span style={{ color: '#94A3B8' }}>状态</span>}
+          >
             <Select>
               <Select.Option value="active">启用</Select.Option>
               <Select.Option value="disabled">禁用</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item>
+          <Form.Item style={{ marginTop: 24 }}>
             <Space>
-              <Button onClick={() => setEditUser(null)}>取消</Button>
-              <Button type="primary" htmlType="submit">保存</Button>
+              <Button 
+                onClick={() => setEditUser(null)}
+                style={{ borderRadius: 10 }}
+              >
+                取消
+              </Button>
+              <Button 
+                type="primary" 
+                htmlType="submit"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  border: 'none',
+                  borderRadius: 10,
+                }}
+              >
+                保存
+              </Button>
             </Space>
           </Form.Item>
         </Form>
@@ -252,7 +395,14 @@ const UsersPage = () => {
 
       {/* 调整额度弹窗 */}
       <Modal
-        title={`调整用户额度 - ${quotaUser?.username}`}
+        title={
+          <span style={{ 
+            fontFamily: "'Space Grotesk', sans-serif",
+            color: '#F8FAFC',
+          }}>
+            调整用户额度 - {quotaUser?.username}
+          </span>
+        }
         open={quotaModalVisible}
         onCancel={() => {
           setQuotaModalVisible(false)
@@ -263,34 +413,64 @@ const UsersPage = () => {
         <Form form={quotaForm} onFinish={handleQuotaAdjust} layout="vertical">
           <Form.Item 
             name="amount" 
-            label="调整额度（正数增加，负数减少）"
+            label={<span style={{ color: '#94A3B8' }}>调整额度（正数增加，负数减少）</span>}
             rules={[{ required: true, message: '请输入调整额度' }]}
           >
             <InputNumber 
-              style={{ width: '100%' }} 
+              style={{ width: '100%', height: 40 }} 
               placeholder="如：10000 或 -5000"
             />
           </Form.Item>
           <Form.Item 
             name="reason" 
-            label="调整原因"
+            label={<span style={{ color: '#94A3B8' }}>调整原因</span>}
             rules={[{ required: true, message: '请输入调整原因' }]}
           >
             <Input.TextArea 
               rows={3} 
-              placeholder="请输入调整原因，便于审计追溯" 
+              placeholder="请输入调整原因，便于审计追溯"
+              style={{ borderRadius: 10 }}
             />
           </Form.Item>
           {quotaUser && (
-            <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-              <div>当前额度：{quotaUser.quota?.toLocaleString()}</div>
-              <div>已使用：{quotaUser.quota_used?.toLocaleString()}</div>
+            <div style={{ 
+              marginBottom: 16, 
+              padding: 16, 
+              background: 'rgba(30, 41, 59, 0.8)', 
+              borderRadius: 10,
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}>
+              <div style={{ color: '#94A3B8', marginBottom: 8 }}>
+                当前额度：<span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif" }}>
+                  {quotaUser.quota?.toLocaleString()}
+                </span>
+              </div>
+              <div style={{ color: '#94A3B8' }}>
+                已使用：<span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif" }}>
+                  {quotaUser.quota_used?.toLocaleString()}
+                </span>
+              </div>
             </div>
           )}
-          <Form.Item>
+          <Form.Item style={{ marginTop: 24 }}>
             <Space>
-              <Button onClick={() => setQuotaModalVisible(false)}>取消</Button>
-              <Button type="primary" htmlType="submit">确认调整</Button>
+              <Button 
+                onClick={() => setQuotaModalVisible(false)}
+                style={{ borderRadius: 10 }}
+              >
+                取消
+              </Button>
+              <Button 
+                type="primary" 
+                htmlType="submit"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  border: 'none',
+                  borderRadius: 10,
+                }}
+              >
+                确认调整
+              </Button>
             </Space>
           </Form.Item>
         </Form>
