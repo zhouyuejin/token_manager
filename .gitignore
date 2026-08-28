@@ -54,3 +54,6 @@ nginx/logs/
 frontend/dist/
 backend/app/__pycache__/
 nginx/html/
+
+# 文档
+docs/
