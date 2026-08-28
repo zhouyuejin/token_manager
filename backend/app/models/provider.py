@@ -1,0 +1,61 @@
+"""
+供应商模型
+"""
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer
+from sqlalchemy.sql import func
+
+from app.core.database import Base
+import enum
+
+
+class ProviderType(enum.Enum):
+    """供应商类型"""
+    openai = "openai"
+    anthropic = "anthropic"
+    google = "google"
+    azure = "azure"
+    volcengine = "volcengine"
+    moonshot = "moonshot"
+    baidu = "baidu"
+    custom = "custom"
+
+
+class ProviderStatus(enum.Enum):
+    """供应商状态"""
+    active = "active"
+    disabled = "disabled"
+
+
+class ProviderHealthStatus(enum.Enum):
+    """供应商健康状态"""
+    healthy = "healthy"
+    degraded = "degraded"
+    unhealthy = "unhealthy"
+
+
+class Provider(Base):
+    """供应商表"""
+    __tablename__ = "providers"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    provider_id = Column(String(32), unique=True, nullable=False, index=True)
+    name = Column(String(50), nullable=False)
+    type = Column(Enum(ProviderType), nullable=False)
+    endpoint = Column(String(255), nullable=False)
+    api_key = Column(String(255), nullable=False)
+    priority = Column(Integer, default=100)
+    timeout = Column(Integer, default=60)
+    status = Column(Enum(ProviderStatus), default=ProviderStatus.active)
+    health_status = Column(Enum(ProviderHealthStatus), default=ProviderHealthStatus.healthy)
+    last_check_at = Column(DateTime, nullable=True)
+    
+    # 配额配置
+    quota_type = Column(String(20), default="unlimited")
+    quota_hourly = Column(BigInteger, default=0)
+    quota_weekly = Column(BigInteger, default=0)
+    sync_enabled = Column(Integer, default=0)
+    sync_interval = Column(Integer, default=300)
+    last_sync_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
