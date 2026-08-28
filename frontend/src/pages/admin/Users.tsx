@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
-  Select, message, Popconfirm 
+  Select, Popconfirm 
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from '../../api/users'
@@ -16,6 +17,7 @@ const UsersPage = () => {
   const [quotaUser, setQuotaUser] = useState<User | null>(null)
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
+  const message = useMessage()
 
   useEffect(() => {
     fetchUsers()
