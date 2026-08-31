@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useMessage } from '../../utils/message'
 import { 
-  Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
+  Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
   Select, Popconfirm, Row, Col, Progress, Descriptions 
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, BarChartOutlined } from '@ant-design/icons'
@@ -523,6 +523,18 @@ const ProvidersPage = () => {
               </Form.Item>
             </Col>
           </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="sync_enabled" label={<span style={{ color: '#94A3B8' }}>自动同步用量</span>} valuePropName="checked" initialValue={false}>
+                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="sync_interval" label={<span style={{ color: '#94A3B8' }}>同步间隔(分钟)</span>} initialValue={5}>
+                <InputNumber min={1} max={60} style={{ width: '100%', height: 40 }} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
               <Button onClick={() => setModalVisible(false)} style={{ borderRadius: 10 }}>
@@ -611,6 +623,18 @@ const ProvidersPage = () => {
             <Col span={12}>
               <Form.Item name="quota_weekly" label={<span style={{ color: '#94A3B8' }}>周额度</span>}>
                 <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="sync_enabled" label={<span style={{ color: '#94A3B8' }}>自动同步用量</span>} valuePropName="checked">
+                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="sync_interval" label={<span style={{ color: '#94A3B8' }}>同步间隔(分钟)</span>}>
+                <InputNumber min={1} max={60} style={{ width: '100%', height: 40 }} />
               </Form.Item>
             </Col>
           </Row>

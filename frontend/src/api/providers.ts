@@ -15,6 +15,10 @@ export interface Provider {
   quota_hourly: number
   quota_weekly: number
   models: string[]
+  // 同步配置
+  sync_enabled: boolean
+  sync_interval: number  // 单位：秒
+  last_sync_at: string
 }
 
 export interface ProviderQuota {
@@ -42,7 +46,7 @@ export interface ProviderQuota {
 
 export const getProviders = () => get<{ items: Provider[] }>('/admin/providers')
 
-export const createProvider = (data: Omit<Provider, 'provider_id' | 'health_status' | 'last_check_at'>) =>
+export const createProvider = (data: Omit<Provider, 'provider_id' | 'health_status' | 'last_check_at' | 'last_sync_at'>) =>
   post('/admin/providers', data)
 
 export const updateProvider = (providerId: string, data: Partial<Provider>) =>
