@@ -723,7 +723,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Menu item spacing */
-.ant-menu-item {
+.ant-menu-item,
+.ant-menu-submenu-title {
   height: 40px !important;
   line-height: 40px !important;
   margin: 2px 0 !important;
