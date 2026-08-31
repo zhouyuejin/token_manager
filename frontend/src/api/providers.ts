@@ -80,3 +80,37 @@ export const updateProviderQuota = (providerId: string, data: {
   sync_interval?: number
   quota_config?: Provider['quota_config']
 }) => put(`/admin/providers/${providerId}/quota`, data)
+
+// 模型同步
+export const getProviderModels = (providerId: string) =>
+  get<{ provider_id: string; provider_name: string; models: any[]; last_sync_at: string }>(
+    `/admin/providers/${providerId}/models`
+  )
+
+export const syncProviderModels = (providerId: string) =>
+  post<{ success: boolean; count: number; models: any[]; message: string }>(
+    `/admin/providers/${providerId}/models/sync`
+  )
+
+export const syncAllProviderModels = () =>
+  post<{ total: number; success: number; failed: number; results: any[] }>(
+    '/admin/providers/models/sync-all'
+  )
+
+// 自动创建模型映射
+export const autoCreateModelMappings = (providerId: string) =>
+  post<{ 
+    sync_success: boolean; 
+    sync_count: number; 
+    mapping_created: number; 
+    mapping_skipped: number; 
+    message: string 
+  }>(`/admin/providers/${providerId}/models/auto-create-mappings`)
+
+export const syncAllWithMappings = () =>
+  post<{ 
+    total_providers: number; 
+    total_models: number; 
+    total_mappings: number; 
+    results: any[] 
+  }>('/admin/providers/models/sync-all-with-mappings')

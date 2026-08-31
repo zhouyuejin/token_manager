@@ -123,10 +123,12 @@ class ProviderListResponse(BaseModel):
 
 class ModelMappingCreate(BaseModel):
     """创建模型映射请求"""
+    model_id: Optional[str] = None
     provider_id: str
     provider_model: str
     display_name: str
     model_type: str = "chat"
+    aliases: Optional[List[str]] = None
     status: str = "active"
 
 
@@ -141,13 +143,13 @@ class ModelMappingUpdate(BaseModel):
 
 class ModelMappingResponse(BaseModel):
     """模型映射响应"""
-    mapping_id: str
+    model_id: str
     provider_id: str
     provider_model: str
     display_name: str
-    model_type: str
+    aliases: Optional[str] = None
     status: str
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

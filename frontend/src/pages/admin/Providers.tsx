@@ -8,6 +8,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined
 import { 
   getProviders, createProvider, updateProvider, deleteProvider,
   getAllProviderQuotas, syncProviderQuota, updateProviderQuota, Provider, 
+  getProviderModels, syncProviderModels, syncAllProviderModels
 } from '../../api/providers'
 
 
@@ -51,6 +52,9 @@ const ProvidersPage = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [configModalVisible, setConfigModalVisible] = useState(false)
+  const [syncLoading, setSyncLoading] = useState<string | null>(null)
+  const [modelModalVisible, setModelModalVisible] = useState(false)
+  const [selectedProviderModels, setSelectedProviderModels] = useState<any[]>([])
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [form] = Form.useForm()
   const [configForm] = Form.useForm()
@@ -81,7 +85,7 @@ const ProvidersPage = () => {
     }
   }
 
-  // 手动同步
+  // 手动同步用量
   const handleSync = async (providerId: string) => {
     try {
       await syncProviderQuota(providerId)
@@ -89,6 +93,50 @@ const ProvidersPage = () => {
       fetchData()
     } catch (error) {
       message.error('同步失败')
+    }
+  }
+
+  // 同步供应商模型
+  const handleSyncModels = async (providerId: string) => {
+    setSyncLoading(providerId)
+    try {
+      const result = await syncProviderModels(providerId)
+      if (result.success) {
+        message.success(`成功同步 ${result.count} 个模型`)
+        fetchData()
+      } else {
+        message.error(result.message || '同步失败')
+      }
+    } catch (error) {
+      message.error('同步失败')
+    } finally {
+      setSyncLoading(null)
+    }
+  }
+
+  // 批量同步所有供应商模型
+  const handleSyncAllModels = async () => {
+    setSyncLoading('all')
+    try {
+      const result = await syncAllProviderModels()
+      message.success(`成功同步 ${result.success} 个供应商，失败 ${result.failed} 个`)
+      fetchData()
+    } catch (error) {
+      message.error('批量同步失败')
+    } finally {
+      setSyncLoading(null)
+    }
+  }
+
+  // 查看供应商模型列表
+  const handleViewModels = async (provider: Provider) => {
+    try {
+      const result = await getProviderModels(provider.provider_id)
+      setSelectedProviderModels(result.models || [])
+      setSelectedProvider(provider)
+      setModelModalVisible(true)
+    } catch (error) {
+      message.error('获取模型列表失败')
     }
   }
 
@@ -208,14 +256,24 @@ const ProvidersPage = () => {
           <CloudOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
           供应商管理
         </h2>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
-          onClick={() => setCreateModalVisible(true)}
-          style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none', borderRadius: 10 }}
-        >
-          添加供应商
-        </Button>
+        <Space>
+          <Button 
+            icon={<SyncOutlined />} 
+            onClick={handleSyncAllModels}
+            loading={syncLoading === 'all'}
+            style={{ borderRadius: 10 }}
+          >
+            批量拉取模型
+          </Button>
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={() => setCreateModalVisible(true)}
+            style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none', borderRadius: 10 }}
+          >
+            添加供应商
+          </Button>
+        </Space>
       </div>
 
       {/* 供应商列表 */}
@@ -260,6 +318,8 @@ const ProvidersPage = () => {
               render: (_: any, record: Provider) => (
                 <Space>
                   <Button type="text" icon={<SettingOutlined />} onClick={() => openConfigModal(record)} style={{ color: '#10B981' }}>用量配置</Button>
+                  <Button type="text" icon={<CloudOutlined />} onClick={() => handleViewModels(record)} style={{ color: '#8B5CF6' }}>模型</Button>
+                  <Button type="text" icon={<SyncOutlined />} onClick={() => handleSyncModels(record.provider_id)} style={{ color: '#F59E0B' }}>拉取</Button>
                   <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
                   <Popconfirm title="确认删除此供应商？" onConfirm={() => handleDelete(record.provider_id)}>
                     <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
@@ -498,6 +558,39 @@ const ProvidersPage = () => {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 模型列表弹窗 */}
+      <Modal
+        title={<span style={{ color: '#F8FAFC' }}>{selectedProvider?.name} - 模型列表</span>}
+        open={modelModalVisible}
+        onCancel={() => { setModelModalVisible(false); setSelectedProvider(null); setSelectedProviderModels([]); }}
+        footer={null}
+        width={600}
+      >
+        {selectedProviderModels.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>
+            暂无可用模型，请先拉取模型列表
+          </div>
+        ) : (
+          <div style={{ maxHeight: 400, overflow: 'auto' }}>
+            {selectedProviderModels.map((model: any, index: number) => (
+              <div 
+                key={index}
+                style={{
+                  padding: '12px 16px',
+                  marginBottom: 8,
+                  background: 'rgba(30, 41, 59, 0.5)',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                }}
+              >
+                <div style={{ color: '#F8FAFC', fontWeight: 500 }}>{model.name || model.model_id}</div>
+                <div style={{ color: '#64748B', fontSize: 12, marginTop: 4 }}>ID: {model.model_id}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
     </div>
   )

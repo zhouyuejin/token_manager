@@ -40,22 +40,61 @@ class ChatCompletionRequest(BaseModel):
 # ========== API Endpoints ==========
 
 @router.get("/models")
-async def list_models(db: Session = Depends(get_db)):
+async def list_models(request: Request, db: Session = Depends(get_db)):
     """
     获取可用模型列表
+    根据API Key关联的模型分组过滤模型
     """
-    proxy_service = create_proxy_service(db)
+    # 获取当前请求的用户和API Key
+    user: User = getattr(request.state, "user", None)
+    api_key: ApiKey = getattr(request.state, "api_key", None)
     
-    # 从数据库获取启用的模型映射
-    mappings = db.query(ModelMapping).filter(
-        ModelMapping.status == "active"
-    ).all()
+    # 如果没有API Key，返回所有启用的模型
+    if not api_key:
+        mappings = db.query(ModelMapping).filter(
+            ModelMapping.status == "active"
+        ).all()
+    else:
+        # 获取API Key关联的模型分组
+        key_groups = api_key.model_groups
+        
+        if not key_groups:
+            # 没有关联分组，返回所有启用的模型（兼容旧Key）
+            mappings = db.query(ModelMapping).filter(
+                ModelMapping.status == "active"
+            ).all()
+        else:
+            # 获取分组关联的供应商
+            from app.models.model_group import ModelGroup
+            from app.models.provider import Provider
+            
+            group_ids = [g.group_id for g in key_groups]
+            groups = db.query(ModelGroup).filter(
+                ModelGroup.group_id.in_(group_ids)
+            ).all()
+            
+            # 获取分组关联的供应商ID
+            provider_ids = set()
+            for group in groups:
+                for provider in group.providers:
+                    provider_ids.add(provider.provider_id)
+            
+            # 只返回这些供应商的模型映射
+            if provider_ids:
+                mappings = db.query(ModelMapping).filter(
+                    ModelMapping.status == "active",
+                    ModelMapping.provider_id.in_(list(provider_ids))
+                ).all()
+            else:
+                mappings = []
     
     models = [
         {
             "id": mapping.model_id,
             "object": "model",
-            "owned_by": mapping.provider_id
+            "owned_by": mapping.provider_id,
+            "display_name": mapping.display_name,
+            "provider_model": mapping.provider_model
         }
         for mapping in mappings
     ]

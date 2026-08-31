@@ -2,6 +2,7 @@
 API Key模型
 """
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Integer
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -35,3 +36,6 @@ class ApiKey(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     last_used_at = Column(DateTime, nullable=True)
+    
+    # 关联模型分组
+    model_groups = relationship("ModelGroup", secondary="api_key_model_groups", back_populates="api_keys")

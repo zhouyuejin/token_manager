@@ -1,0 +1,263 @@
+import { useState, useEffect } from 'react'
+import { useMessage } from '../../utils/message'
+import { 
+  Table, Button, Tag, Space, Modal, Form, Input, Select, 
+  Popconfirm, Card, Switch 
+} from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { 
+  getModelGroups, createModelGroup, updateModelGroup, 
+  deleteModelGroup, ModelGroup 
+} from '../../api/modelGroups'
+import { getProviders, Provider } from '../../api/providers'
+
+const { TextArea } = Input
+
+const ModelGroups: React.FC = () => {
+  const [loading, setLoading] = useState(false)
+  const [groups, setGroups] = useState<ModelGroup[]>([])
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [modalVisible, setModalVisible] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<ModelGroup | null>(null)
+  const [form] = Form.useForm()
+  const message = useMessage()
+
+  useEffect(() => {
+    fetchGroups()
+    fetchProviders()
+  }, [])
+
+  const fetchGroups = async () => {
+    setLoading(true)
+    try {
+      const res = await getModelGroups()
+      setGroups(res.items || [])
+    } catch (error) {
+      message.error('获取分组失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchProviders = async () => {
+    try {
+      const res = await getProviders()
+      setProviders(res.items || [])
+    } catch (error) {
+      console.error('获取供应商失败', error)
+    }
+  }
+
+  const handleCreate = () => {
+    setEditingGroup(null)
+    form.resetFields()
+    setModalVisible(true)
+  }
+
+  const handleEdit = (record: ModelGroup) => {
+    setEditingGroup(record)
+    form.setFieldsValue({
+      name: record.name,
+      description: record.description,
+      is_default: record.is_default === 1,
+      provider_ids: record.provider_ids
+    })
+    setModalVisible(true)
+  }
+
+  const handleDelete = async (groupId: string) => {
+    try {
+      await deleteModelGroup(groupId)
+      message.success('删除成功')
+      fetchGroups()
+    } catch (error) {
+      message.error('删除失败')
+    }
+  }
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields()
+      const data = {
+        name: values.name,
+        description: values.description,
+        is_default: values.is_default ? 1 : 0,
+        provider_ids: values.provider_ids || []
+      }
+
+      if (editingGroup) {
+        await updateModelGroup(editingGroup.group_id, data)
+        message.success('更新成功')
+      } else {
+        await createModelGroup(data)
+        message.success('创建成功')
+      }
+      
+      setModalVisible(false)
+      fetchGroups()
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const getProviderNames = (providerIds: string[]) => {
+    return providerIds.map(id => {
+      const provider = providers.find(p => p.provider_id === id)
+      return provider?.name || id
+    }).join(', ')
+  }
+
+  const columns = [
+    {
+      title: '分组ID',
+      dataIndex: 'group_id',
+      key: 'group_id',
+      width: 180
+    },
+    {
+      title: '分组名称',
+      dataIndex: 'name',
+      key: 'name'
+    },
+    {
+      title: '描述',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true
+    },
+    {
+      title: '关联供应商',
+      dataIndex: 'provider_ids',
+      key: 'provider_ids',
+      render: (ids: string[]) => (
+        <Tag color="blue">{getProviderNames(ids) || '未关联'}</Tag>
+      )
+    },
+    {
+      title: '默认分组',
+      dataIndex: 'is_default',
+      key: 'is_default',
+      width: 100,
+      render: (isDefault: number) => (
+        isDefault === 1 ? <Tag color="green">是</Tag> : <Tag>否</Tag>
+      )
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 80,
+      render: (status: string) => (
+        <Tag color={status === 'active' ? 'green' : 'red'}>
+          {status === 'active' ? '启用' : '禁用'}
+        </Tag>
+      )
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 150,
+      render: (_: any, record: ModelGroup) => (
+        <Space>
+          <Button 
+            type="text" 
+            icon={<EditOutlined />} 
+            onClick={() => handleEdit(record)}
+            style={{ color: '#3B82F6' }}
+          >
+            编辑
+          </Button>
+          <Popconfirm 
+            title="确认删除此分组？" 
+            onConfirm={() => handleDelete(record.group_id)}
+          >
+            <Button type="text" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      )
+    }
+  ]
+
+  return (
+    <div style={{ padding: '24px' }}>
+      <Card 
+        title="模型分组管理" 
+        extra={
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={handleCreate}
+          >
+            新建分组
+          </Button>
+        }
+      >
+        <Table
+          columns={columns}
+          dataSource={groups}
+          rowKey="group_id"
+          loading={loading}
+          pagination={false}
+        />
+      </Card>
+
+      <Modal
+        title={editingGroup ? '编辑分组' : '新建分组'}
+        open={modalVisible}
+        onCancel={() => setModalVisible(false)}
+        onOk={handleSubmit}
+        width={600}
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="name"
+            label="分组名称"
+            rules={[{ required: true, message: '请输入分组名称' }]}
+          >
+            <Input placeholder="如：VIP-高级模型" />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label="描述"
+          >
+            <TextArea rows={3} placeholder="分组描述" />
+          </Form.Item>
+
+          <Form.Item
+            name="is_default"
+            label="设为默认分组"
+            valuePropName="checked"
+          >
+            <Switch checkedChildren="是" unCheckedChildren="否" />
+          </Form.Item>
+
+          <Form.Item
+            name="provider_ids"
+            label="关联供应商"
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择供应商"
+              optionLabelProp="label"
+            >
+              {providers.map(p => (
+                <Select.Option 
+                  key={p.provider_id} 
+                  value={p.provider_id}
+                  label={p.name}
+                >
+                  {p.name} ({p.type})
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}
+
+export default ModelGroups

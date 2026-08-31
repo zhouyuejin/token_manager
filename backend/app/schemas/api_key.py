@@ -26,6 +26,7 @@ class ApiKeyUpdate(BaseModel):
     monthly_limit: Optional[int] = None
     qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
+    model_group_ids: Optional[List[str]] = None  # 关联的模型分组
 
 
 class ApiKeyResponse(ApiKeyBase):
@@ -38,6 +39,7 @@ class ApiKeyResponse(ApiKeyBase):
     status: str
     created_at: datetime
     last_used_at: Optional[datetime] = None
+    model_groups: List[str] = []  # 关联的模型分组ID列表
 
     class Config:
         from_attributes = True

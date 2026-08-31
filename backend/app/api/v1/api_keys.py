@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey, ApiKeyStatus
+from app.models.model_group import ModelGroup
 from app.dependencies import get_current_user
 from app.schemas.api_key import (
     ApiKeyCreate, ApiKeyUpdate, ApiKeyResponse,
@@ -47,6 +48,11 @@ def check_and_reset_monthly(api_key: ApiKey, db: Session):
         api_key.monthly_reset_at = today
 
 
+def get_key_model_groups(api_key: ApiKey) -> List[str]:
+    """获取API Key关联的模型分组ID列表"""
+    return [g.group_id for g in api_key.model_groups]
+
+
 @router.get("", response_model=ApiKeyListResponse)
 async def list_api_keys(
     current_user: User = Depends(get_current_user),
@@ -78,7 +84,8 @@ async def list_api_keys(
             qps_limit=key.qps_limit,
             status=key.status.value,
             created_at=key.created_at,
-            last_used_at=key.last_used_at
+            last_used_at=key.last_used_at,
+            model_groups=get_key_model_groups(key)
         )
         for key in api_keys
     ]
@@ -161,7 +168,8 @@ async def get_api_key(
         qps_limit=api_key.qps_limit,
         status=api_key.status.value,
         created_at=api_key.created_at,
-        last_used_at=api_key.last_used_at
+        last_used_at=api_key.last_used_at,
+        model_groups=get_key_model_groups(api_key)
     )
 
 
@@ -197,6 +205,13 @@ async def update_api_key(
         api_key.qps_limit = api_key_data.qps_limit
     if api_key_data.ip_whitelist is not None:
         api_key.ip_whitelist = json.dumps(api_key_data.ip_whitelist)
+    
+    # 更新模型分组关联
+    if api_key_data.model_group_ids is not None:
+        groups = db.query(ModelGroup).filter(
+            ModelGroup.group_id.in_(api_key_data.model_group_ids)
+        ).all()
+        api_key.model_groups = groups
     
     db.commit()
     
@@ -263,3 +278,43 @@ async def delete_api_key(
     db.commit()
     
     return {"message": "删除成功"}
+
+
+# ========== 管理员接口 ==========
+
+@router.get("/admin/all", response_model=ApiKeyListResponse)
+async def list_all_api_keys(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取所有API Key列表（管理员）
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足"
+        )
+    
+    api_keys = db.query(ApiKey).all()
+    
+    items = [
+        ApiKeyResponse(
+            key_id=key.key_id,
+            user_id=key.user_id,
+            api_key=key.api_key,
+            key_name=key.key_name,
+            daily_limit=key.daily_limit,
+            daily_used=key.daily_used,
+            monthly_limit=key.monthly_limit,
+            monthly_used=key.monthly_used,
+            qps_limit=key.qps_limit,
+            status=key.status.value,
+            created_at=key.created_at,
+            last_used_at=key.last_used_at,
+            model_groups=get_key_model_groups(key)
+        )
+        for key in api_keys
+    ]
+    
+    return ApiKeyListResponse(total=len(items), items=items)

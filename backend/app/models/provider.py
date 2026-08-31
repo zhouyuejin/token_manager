@@ -2,6 +2,7 @@
 供应商模型
 """
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -50,6 +51,7 @@ class Provider(Base):
     type = Column(Enum(ProviderType), nullable=False)
     endpoint = Column(String(255), nullable=False)
     api_key = Column(String(255), nullable=False)
+    group_id = Column(String(64), nullable=True, comment="供应商Group ID，用于MiniMax等需要分组ID的API")
     priority = Column(Integer, default=100)
     timeout = Column(Integer, default=60)
     status = Column(Enum(ProviderStatus), default=ProviderStatus.active)
@@ -69,5 +71,12 @@ class Provider(Base):
     # 结构: {"model_name": "xxx", "custom_api_path": "xxx", "extra_params": {...}}
     quota_config = Column(Text, nullable=True)
     
+    # 同步到的模型列表(JSON格式)
+    models = Column(Text, nullable=True, comment="同步到的模型列表(JSON数组)")
+    last_models_sync_at = Column(DateTime, nullable=True, comment="最后模型同步时间")
+    
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # 关联模型分组
+    model_groups = relationship("ModelGroup", secondary="provider_model_groups", back_populates="providers")

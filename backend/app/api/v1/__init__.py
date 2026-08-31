@@ -3,7 +3,7 @@ API路由
 """
 from fastapi import APIRouter
 
-from app.api.v1 import auth, users, api_keys, proxy, stats, admin, logs
+from app.api.v1 import auth, users, api_keys, proxy, stats, admin, logs, model_groups
 
 api_router = APIRouter()
 
@@ -24,6 +24,9 @@ api_router.include_router(stats.router, prefix="/stats", tags=["用量统计"])
 
 # 管理后台
 api_router.include_router(admin.router, prefix="/admin", tags=["管理后台"])
+
+# 模型分组
+api_router.include_router(model_groups.router, prefix="/admin/model-groups", tags=["模型分组"])
 
 # 日志
 api_router.include_router(logs.router, prefix="/admin/logs", tags=["日志"])
