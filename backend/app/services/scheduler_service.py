@@ -20,19 +20,30 @@ _provider_jobs = {}
 
 async def sync_single_provider(provider_id: str):
     """同步单个供应商的配额"""
+    logger.info(f"[Scheduler] 开始同步供应商 {provider_id} 的配额")
     db = SessionLocal()
     try:
         from app.models.provider import Provider
         
+        from app.models.provider import ProviderStatus
+        
         provider = db.query(Provider).filter(
-            Provider.provider_id == provider_id,
-            Provider.status == "active",
-            Provider.sync_enabled == 1
+            Provider.provider_id == provider_id
         ).first()
         
         if not provider:
-            logger.warning(f"供应商 {provider_id} 不存在或未启用自动同步")
+            logger.warning(f"供应商 {provider_id} 不存在")
             return
+        
+        if provider.status != ProviderStatus.active:
+            logger.warning(f"供应商 {provider.name} 状态不是 active，当前状态: {provider.status}")
+            return
+        
+        if provider.sync_enabled != 1:
+            logger.warning(f"供应商 {provider.name} 未启用自动同步 (sync_enabled={provider.sync_enabled})")
+            return
+        
+        logger.info(f"[Scheduler] 供应商 {provider.name} 检查通过，开始同步")
         
         sync_service = create_sync_service(db)
         success = await sync_service.sync_provider_quota(provider)
@@ -119,6 +130,8 @@ def update_provider_sync_job(provider_id: str, provider_name: str, sync_enabled:
     job_id = f"sync_provider_{provider_id}"
     interval_minutes = max(1, sync_interval // 60)  # 至少1分钟
     
+    logger.info(f"[Scheduler] 更新供应商 {provider_name} 同步任务: enabled={sync_enabled}, interval={sync_interval}秒 ({interval_minutes}分钟)")
+    
     if sync_enabled:
         # 添加或更新任务
         scheduler.add_job(
@@ -130,7 +143,7 @@ def update_provider_sync_job(provider_id: str, provider_name: str, sync_enabled:
             kwargs={"provider_id": provider_id}
         )
         _provider_jobs[job_id] = provider_id
-        logger.info(f"已更新供应商 {provider_name} 的同步任务，间隔 {interval_minutes} 分钟")
+        logger.info(f"[Scheduler] 已添加供应商 {provider_name} 的同步任务，间隔 {interval_minutes} 分钟")
     else:
         # 移除任务
         try:

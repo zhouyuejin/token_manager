@@ -1,7 +1,7 @@
 """
 供应商模型
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer, Text
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -63,6 +63,11 @@ class Provider(Base):
     sync_enabled = Column(Integer, default=0)
     sync_interval = Column(Integer, default=300)
     last_sync_at = Column(DateTime, nullable=True)
+    
+    # 自定义用量查询配置（JSON格式存储）
+    # 用于不同供应商不同查询方式时传递自定义参数
+    # 结构: {"model_name": "xxx", "custom_api_path": "xxx", "extra_params": {...}}
+    quota_config = Column(Text, nullable=True)
     
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

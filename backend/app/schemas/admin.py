@@ -2,7 +2,7 @@
 管理后台相关Schema
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -53,6 +53,13 @@ class QuotaAdjustRequest(BaseModel):
 
 # ========== 供应商管理 ==========
 
+class QuotaConfig(BaseModel):
+    """用量查询自定义配置"""
+    model_name: Optional[str] = None  # 查询的模型名称
+    custom_api_path: Optional[str] = None  # 自定义API路径
+    extra_params: Optional[Dict[str, str]] = None  # 其他自定义参数
+
+
 class ProviderCreate(BaseModel):
     """创建供应商请求"""
     name: str
@@ -65,6 +72,7 @@ class ProviderCreate(BaseModel):
     quota_weekly: int = 0
     sync_enabled: bool = False
     sync_interval: int = 300  # 默认5分钟
+    quota_config: Optional[QuotaConfig] = None
 
 
 class ProviderUpdate(BaseModel):
@@ -80,6 +88,7 @@ class ProviderUpdate(BaseModel):
     quota_weekly: Optional[int] = None
     sync_enabled: Optional[bool] = None
     sync_interval: Optional[int] = None
+    quota_config: Optional[QuotaConfig] = None
 
 
 class ProviderResponse(BaseModel):
@@ -98,6 +107,7 @@ class ProviderResponse(BaseModel):
     sync_enabled: bool = False
     sync_interval: int = 300
     last_sync_at: Optional[datetime] = None
+    quota_config: Optional[QuotaConfig] = None
 
     class Config:
         from_attributes = True
@@ -113,31 +123,31 @@ class ProviderListResponse(BaseModel):
 
 class ModelMappingCreate(BaseModel):
     """创建模型映射请求"""
-    model_id: str
-    display_name: Optional[str] = None
     provider_id: str
     provider_model: str
-    aliases: Optional[str] = None
+    display_name: str
+    model_type: str = "chat"
     status: str = "active"
 
 
 class ModelMappingUpdate(BaseModel):
     """更新模型映射请求"""
-    display_name: Optional[str] = None
     provider_id: Optional[str] = None
     provider_model: Optional[str] = None
-    aliases: Optional[str] = None
+    display_name: Optional[str] = None
+    model_type: Optional[str] = None
     status: Optional[str] = None
 
 
 class ModelMappingResponse(BaseModel):
     """模型映射响应"""
-    model_id: str
-    display_name: Optional[str]
+    mapping_id: str
     provider_id: str
     provider_model: str
-    aliases: Optional[str]
+    display_name: str
+    model_type: str
     status: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

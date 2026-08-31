@@ -2,24 +2,16 @@ import { useState, useEffect } from 'react'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
-  Select, Popconfirm, Row, Col, Progress, Descriptions 
+  Select, Popconfirm, Row, Col, Progress, Collapse, Tooltip
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, BarChartOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, SettingOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { 
   getProviders, createProvider, updateProvider, deleteProvider,
-  getAllProviderQuotas, syncProviderQuota, Provider, 
+  getAllProviderQuotas, syncProviderQuota, updateProviderQuota, Provider, 
 } from '../../api/providers'
 
-// ISO 时间格式化为 YYYY-MM-DD HH:MM:SS
-const formatDateTime = (iso: string): string => {
-  if (!iso) return '-'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
 
-// 时间格式化函数
+// 时间格式化
 const formatRemainTime = (ms: number): string => {
   if (!ms || ms <= 0) return '0秒'
   const seconds = Math.floor(ms / 1000)
@@ -33,47 +25,35 @@ const formatRemainTime = (ms: number): string => {
   return `${seconds}秒`
 }
 
-// 计算用量数据 - 展示第一个模型的数据（与详情保持一致）
+// 计算用量统计
 const calcQuotaStats = (quota: any) => {
   if (!quota) return null
   const modelRemains = quota.hourly?.raw_data?.model_remains || []
   if (modelRemains.length === 0) return null
   
-  // 取第一个模型的数据
   const m = modelRemains[0]
-  
-  const hourlyTotal = m.current_interval_total_count || 0
-  const hourlyRemainPercent = m.current_interval_remaining_percent || 0
-  const hourlyUsedPercent = 100 - hourlyRemainPercent
-  
-  const weeklyTotal = m.current_weekly_total_count || 0
-  const weeklyRemainPercent = m.current_weekly_remaining_percent || 0
-  const weeklyUsedPercent = 100 - weeklyRemainPercent
-  
-  const hourlyRemainTime = m.remains_time || 0
-  const weeklyRemainTime = m.weekly_remains_time || 0
-  
   return {
-    modelRemains,
-    hourlyTotal,
-    hourlyRemainPercent,
-    hourlyUsedPercent,
-    weeklyTotal,
-    weeklyRemainPercent,
-    weeklyUsedPercent,
-    hourlyRemainTime,
-    weeklyRemainTime
+    hourlyUsedPercent: 100 - (m.current_interval_remaining_percent || 0),
+    hourlyTotal: m.current_interval_total_count || 0,
+    hourlyRemainPercent: m.current_interval_remaining_percent || 0,
+    hourlyRemainTime: m.remains_time || 0,
+    weeklyUsedPercent: 100 - (m.current_weekly_remaining_percent || 0),
+    weeklyTotal: m.current_weekly_total_count || 0,
+    weeklyRemainPercent: m.current_weekly_remaining_percent || 0,
+    weeklyRemainTime: m.weekly_remains_time || 0,
   }
 }
 
 const ProvidersPage = () => {
   const [loading, setLoading] = useState(false)
   const [providers, setProviders] = useState<Provider[]>([])
-  const [quotas, setQuotas] = useState<any>({})
-  const [modalVisible, setModalVisible] = useState(false)
-  const [editProvider, setEditProvider] = useState<Provider | null>(null)
-  const [statsProvider, setStatsProvider] = useState<Provider | null>(null)
+  const [quotas, setQuotas] = useState<Record<string, any>>({})
+  const [createModalVisible, setCreateModalVisible] = useState(false)
+  const [editModalVisible, setEditModalVisible] = useState(false)
+  const [configModalVisible, setConfigModalVisible] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [form] = Form.useForm()
+  const [configForm] = Form.useForm()
   const message = useMessage()
 
   useEffect(() => {
@@ -83,14 +63,14 @@ const ProvidersPage = () => {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [providersData, quotasData] = await Promise.all([
+      const [providersRes, quotasRes] = await Promise.all([
         getProviders(),
         getAllProviderQuotas()
       ])
-      setProviders(providersData.items || [])
+      setProviders(providersRes.items || [])
       
-      const quotaMap: any = {}
-      quotasData.items?.forEach((item: any) => {
+      const quotaMap: Record<string, any> = {}
+      quotasRes.items?.forEach((item: any) => {
         quotaMap[item.provider_id] = item
       })
       setQuotas(quotaMap)
@@ -101,22 +81,23 @@ const ProvidersPage = () => {
     }
   }
 
+  // 手动同步
   const handleSync = async (providerId: string) => {
     try {
       await syncProviderQuota(providerId)
       message.success('同步成功')
       fetchData()
     } catch (error) {
-      console.error(error)
       message.error('同步失败')
     }
   }
 
+  // 创建供应商
   const handleCreate = async (values: any) => {
     try {
       await createProvider(values)
       message.success('创建成功')
-      setModalVisible(false)
+      setCreateModalVisible(false)
       form.resetFields()
       fetchData()
     } catch (error) {
@@ -124,12 +105,14 @@ const ProvidersPage = () => {
     }
   }
 
+  // 更新供应商
   const handleUpdate = async (values: any) => {
-    if (!editProvider) return
+    if (!selectedProvider) return
     try {
-      await updateProvider(editProvider.provider_id, values)
+      await updateProvider(selectedProvider.provider_id, values)
       message.success('更新成功')
-      setEditProvider(null)
+      setEditModalVisible(false)
+      setSelectedProvider(null)
       form.resetFields()
       fetchData()
     } catch (error) {
@@ -137,6 +120,31 @@ const ProvidersPage = () => {
     }
   }
 
+  // 更新用量配置
+  const handleQuotaUpdate = async (values: any) => {
+    if (!selectedProvider) return
+    try {
+      await updateProviderQuota(selectedProvider.provider_id, {
+        quota_hourly: values.quota_hourly,
+        quota_weekly: values.quota_weekly,
+        sync_enabled: values.sync_enabled,
+        sync_interval: values.sync_interval ? values.sync_interval * 60 : 300,  // 分钟转秒
+        quota_config: values.enable_custom_config ? {
+          model_name: values.model_name || undefined,
+          custom_api_path: values.custom_api_path || undefined,
+        } : undefined,
+      })
+      message.success('配置更新成功')
+      // 更新本地数据并关闭弹窗
+      setSelectedProvider({ ...selectedProvider, ...values })
+      setConfigModalVisible(false)
+      fetchData()
+    } catch (error) {
+      message.error('更新失败')
+    }
+  }
+
+  // 删除供应商
   const handleDelete = async (providerId: string) => {
     try {
       await deleteProvider(providerId)
@@ -147,70 +155,64 @@ const ProvidersPage = () => {
     }
   }
 
+  // 打开编辑弹窗
   const openEditModal = (provider: Provider) => {
-    setEditProvider(provider)
-    form.setFieldsValue({
+    setSelectedProvider(provider)
+    form.setFieldsValue(provider)
+    setEditModalVisible(true)
+  }
+
+  // 打开用量配置弹窗
+  const openConfigModal = (provider: Provider) => {
+    setSelectedProvider(provider)
+    configForm.setFieldsValue({
       ...provider,
       quota_hourly: provider.quota_hourly,
       quota_weekly: provider.quota_weekly,
+      sync_enabled: provider.sync_enabled,
+      sync_interval: provider.sync_interval ? provider.sync_interval / 60 : 5,
+      enable_custom_config: !!provider.quota_config,
+      model_name: provider.quota_config?.model_name || '',
+      custom_api_path: provider.quota_config?.custom_api_path || '',
     })
+    setConfigModalVisible(true)
   }
 
-  // 渲染用量进度条 - 显示剩余百分比
+  // 渲染用量进度条
   const renderQuotaProgress = (usedPercent: number, remainPercent: number, total: number, remainTime: number) => {
     if (usedPercent === 0 && remainPercent === 0 && total === 0) {
       return <span style={{ color: '#64748B', fontSize: 12 }}>暂无数据</span>
     }
     return (
-      <div style={{ minWidth: 200 }}>
+      <div style={{ minWidth: 180 }}>
         <Progress 
           percent={Math.round(remainPercent)} 
           size="small"
           status={remainPercent < 10 ? 'exception' : 'normal'}
-          strokeColor={{
-            '0%': '#10B981',
-            '100%': '#3B82F6',
-          }}
+          strokeColor={{ '0%': '#10B981', '100%': '#3B82F6' }}
           trailColor="rgba(30, 41, 59, 0.8)"
         />
-        <div style={{ fontSize: 11, color: '#10B981', marginTop: 4, fontWeight: 600 }}>
-          当前剩余 {Math.round(remainPercent)}%
-        </div>
-        <div style={{ fontSize: 11, color: '#94A3B8' }}>
-          剩余时间 {formatRemainTime(remainTime)}
+        <div style={{ fontSize: 11, color: '#10B981', marginTop: 4 }}>
+          剩余 {Math.round(remainPercent)}% · {formatRemainTime(remainTime)}
         </div>
       </div>
     )
   }
 
+  // ========== 渲染页面 ==========
   return (
     <div className="stagger-children">
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        marginBottom: 24,
-        alignItems: 'center',
-      }}>
-        <h2 style={{ 
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontSize: 24,
-          fontWeight: 600,
-          color: '#F8FAFC',
-          margin: 0,
-        }}>
+      {/* 标题栏 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24, alignItems: 'center' }}>
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: '#F8FAFC', margin: 0 }}>
           <CloudOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
           供应商管理
         </h2>
         <Button 
           type="primary" 
           icon={<PlusOutlined />} 
-          onClick={() => setModalVisible(true)}
-          style={{
-            background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-            border: 'none',
-            borderRadius: 10,
-            fontFamily: "'Space Grotesk', sans-serif",
-          }}
+          onClick={() => setCreateModalVisible(true)}
+          style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none', borderRadius: 10 }}
         >
           添加供应商
         </Button>
@@ -227,21 +229,10 @@ const ProvidersPage = () => {
         <Table
           dataSource={providers}
           columns={[
+            { title: '供应商', dataIndex: 'name', key: 'name', render: (t: string) => <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{t}</span> },
+            { title: '类型', dataIndex: 'type', key: 'type', render: (t: string) => <span style={{ color: '#94A3B8' }}>{t}</span> },
             { 
-              title: '供应商', 
-              dataIndex: 'name', 
-              key: 'name',
-              render: (text: string) => <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{text}</span>
-            },
-            { 
-              title: '类型', 
-              dataIndex: 'type', 
-              key: 'type',
-              render: (text: string) => <span style={{ color: '#94A3B8' }}>{text}</span>
-            },
-            { 
-              title: '5小时用量', 
-              key: 'hourly',
+              title: '5小时用量', key: 'hourly',
               render: (_: any, record: Provider) => {
                 const stats = calcQuotaStats(quotas[record.provider_id])
                 if (!stats) return <span style={{ color: '#64748B' }}>-</span>
@@ -249,8 +240,7 @@ const ProvidersPage = () => {
               }
             },
             { 
-              title: '周用量', 
-              key: 'weekly',
+              title: '周用量', key: 'weekly',
               render: (_: any, record: Provider) => {
                 const stats = calcQuotaStats(quotas[record.provider_id])
                 if (!stats) return <span style={{ color: '#64748B' }}>-</span>
@@ -258,58 +248,22 @@ const ProvidersPage = () => {
               }
             },
             { 
-              title: '状态', 
-              dataIndex: 'status', 
-              key: 'status',
+              title: '状态', dataIndex: 'status', key: 'status',
               render: (status: string) => (
-                <Tag 
-                  color={status === 'active' ? 'success' : 'error'}
-                  style={{ 
-                    borderRadius: '6px',
-                    background: status === 'active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(220, 38, 38, 0.15)',
-                    border: 'none',
-                  }}
-                >
+                <Tag color={status === 'active' ? 'success' : 'error'} style={{ borderRadius: 6, background: status === 'active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(220, 38, 38, 0.15)', border: 'none' }}>
                   {status === 'active' ? '启用' : '禁用'}
                 </Tag>
               )
             },
             {
-              title: '操作',
-              key: 'action',
+              title: '操作', key: 'action',
               render: (_: any, record: Provider) => (
                 <Space>
-                  <Button 
-                    type="text" 
-                    icon={<BarChartOutlined />} 
-                    onClick={() => setStatsProvider(record)}
-                    style={{ color: '#10B981' }}
-                  >
-                    用量统计
-                  </Button>
-                  <Button 
-                    type="text" 
-                    icon={<SyncOutlined />} 
-                    onClick={() => handleSync(record.provider_id)}
-                    style={{ color: '#3B82F6' }}
-                  >
-                    同步
-                  </Button>
-                  <Button 
-                    type="text" 
-                    icon={<EditOutlined />} 
-                    onClick={() => openEditModal(record)}
-                    style={{ color: '#3B82F6' }}
-                  >
-                    编辑
-                  </Button>
-                  <Popconfirm
-                    title="确认删除此供应商？"
-                    onConfirm={() => handleDelete(record.provider_id)}
-                  >
-                    <Button type="text" danger icon={<DeleteOutlined />}>
-                      删除
-                    </Button>
+                  <Button type="text" icon={<SettingOutlined />} onClick={() => openConfigModal(record)} style={{ color: '#10B981' }}>用量配置</Button>
+                  <Button type="text" icon={<SyncOutlined />} onClick={() => handleSync(record.provider_id)} style={{ color: '#3B82F6' }}>同步</Button>
+                  <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
+                  <Popconfirm title="确认删除此供应商？" onConfirm={() => handleDelete(record.provider_id)}>
+                    <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
                   </Popconfirm>
                 </Space>
               )
@@ -321,162 +275,122 @@ const ProvidersPage = () => {
         />
       </div>
 
-      {/* 用量统计详情弹窗 */}
+      {/* 用量配置弹窗 */}
       <Modal
-        title={
-          <Space>
-            <BarChartOutlined style={{ color: '#10B981' }} />
-            <span style={{ color: '#F8FAFC' }}>
-              {statsProvider?.name} - 用量详情
-            </span>
-          </Space>
-        }
-        open={!!statsProvider}
-        onCancel={() => setStatsProvider(null)}
-        footer={
-          <Space>
-            <Button 
-              icon={<SyncOutlined />}
-              onClick={() => statsProvider && handleSync(statsProvider.provider_id)}
-            >
-              同步数据
-            </Button>
-            <Button onClick={() => setStatsProvider(null)}>关闭</Button>
-          </Space>
-        }
-        width={800}
+        title={<span style={{ color: '#F8FAFC' }}><SettingOutlined style={{ marginRight: 8 }} />{selectedProvider?.name} - 用量配置</span>}
+        open={configModalVisible}
+        onCancel={() => { setConfigModalVisible(false); setSelectedProvider(null); }}
+        footer={null}
+        width={560}
       >
-        {statsProvider && (() => {
-          const quota = quotas[statsProvider.provider_id]
-          const stats = calcQuotaStats(quota)
-          
-          if (!stats) {
+        <Form form={configForm} onFinish={handleQuotaUpdate} layout="vertical">
+          {/* 额度配置 */}
+          <div style={{ marginBottom: 20, padding: 16, background: 'rgba(15, 23, 42, 0.5)', borderRadius: 8 }}>
+            <h4 style={{ color: '#F8FAFC', marginBottom: 16 }}>额度设置</h4>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="quota_hourly" label={<span style={{ color: '#94A3B8' }}>5小时额度</span>}>
+                  <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="quota_weekly" label={<span style={{ color: '#94A3B8' }}>周额度</span>}>
+                  <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          {/* 同步配置 */}
+          <div style={{ marginBottom: 20, padding: 16, background: 'rgba(15, 23, 42, 0.5)', borderRadius: 8 }}>
+            <h4 style={{ color: '#F8FAFC', marginBottom: 16 }}>同步设置</h4>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item name="sync_enabled" label={<span style={{ color: '#94A3B8' }}>自动同步</span>} valuePropName="checked">
+                  <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item name="sync_interval" label={<span style={{ color: '#94A3B8' }}>同步间隔(分钟)</span>}>
+                  <InputNumber min={1} max={60} style={{ width: '100%', height: 40 }} />
+                </Form.Item>
+              </Col>
+            </Row>
+          </div>
+
+          {/* 自定义查询配置 */}
+          <div style={{ marginBottom: 20, padding: 16, background: 'rgba(15, 23, 42, 0.5)', borderRadius: 8 }}>
+            <h4 style={{ color: '#F8FAFC', marginBottom: 16 }}>
+              <Space>自定义查询 <Tooltip title="不同供应商用量API不同，可自定义配置"><QuestionCircleOutlined style={{ color: '#64748B' }} /></Tooltip></Space>
+            </h4>
+            <Form.Item name="enable_custom_config" valuePropName="checked">
+              <Switch checkedChildren="启用" unCheckedChildren="禁用" />
+            </Form.Item>
+            <Collapse ghost items={[
+              {
+                key: 'advanced',
+                label: '高级配置',
+                children: (
+                  <>
+                    <Form.Item name="model_name" label={<span style={{ color: '#94A3B8' }}>模型名称</span>}>
+                      <Input placeholder="如：gpt-4o、claude-3-opus" />
+                    </Form.Item>
+                    <Form.Item name="custom_api_path" label={<span style={{ color: '#94A3B8' }}>自定义API路径</span>}>
+                      <Input placeholder="如：/v1/usage/custom" />
+                    </Form.Item>
+                  </>
+                )
+              }
+            ]} />
+          </div>
+
+          {/* 当前用量状态 */}
+          {selectedProvider && (() => {
+            const stats = calcQuotaStats(quotas[selectedProvider.provider_id])
+            if (!stats) return null
             return (
-              <div style={{ color: '#64748B', textAlign: 'center', padding: '40px 0' }}>
-                暂无用量数据，请先同步
+              <div style={{ marginBottom: 20, padding: 16, background: 'rgba(15, 23, 42, 0.5)', borderRadius: 8 }}>
+                <h4 style={{ color: '#F8FAFC', marginBottom: 16 }}>当前用量</h4>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <div style={{ color: '#94A3B8', fontSize: 12 }}>5小时</div>
+                    <div style={{ color: '#F8FAFC', fontSize: 20, fontWeight: 600 }}>{Math.round(stats.hourlyUsedPercent)}%</div>
+                    <div style={{ color: '#64748B', fontSize: 12 }}>已用 {stats.hourlyTotal} 次</div>
+                  </Col>
+                  <Col span={12}>
+                    <div style={{ color: '#94A3B8', fontSize: 12 }}>本周</div>
+                    <div style={{ color: '#F8FAFC', fontSize: 20, fontWeight: 600 }}>{Math.round(stats.weeklyUsedPercent)}%</div>
+                    <div style={{ color: '#64748B', fontSize: 12 }}>已用 {stats.weeklyTotal} 次</div>
+                  </Col>
+                </Row>
               </div>
             )
-          }
-          
-          return (
-            <div>
-              {/* 汇总信息 */}
-              <Descriptions
-                title="汇总统计"
-                bordered
-                size="small"
-                column={2}
-                style={{ marginBottom: 24 }}
-              >
-                <Descriptions.Item label="5小时已用">
-                  <span style={{ color: '#F8FAFC', fontWeight: 600 }}>
-                    {Math.round(stats.hourlyUsedPercent)}%
-                  </span>
-                  （共 {stats.hourlyTotal} 次）
-                </Descriptions.Item>
-                <Descriptions.Item label="5小时剩余">
-                  <span style={{ color: '#10B981' }}>{Math.round(stats.hourlyRemainPercent)}%</span>
-                </Descriptions.Item>
-                <Descriptions.Item label="本周已用">
-                  <span style={{ color: '#F8FAFC', fontWeight: 600 }}>
-                    {Math.round(stats.weeklyUsedPercent)}%
-                  </span>
-                  （共 {stats.weeklyTotal} 次）
-                </Descriptions.Item>
-                <Descriptions.Item label="本周剩余">
-                  <span style={{ color: '#10B981' }}>{Math.round(stats.weeklyRemainPercent)}%</span>
-                </Descriptions.Item>
-              </Descriptions>
+          })()}
 
-              {/* 每个模型的详情 */}
-              <h4 style={{ color: '#F8FAFC', marginBottom: 16 }}>模型详情</h4>
-              {stats.modelRemains.map((item: any, idx: number) => (
-                <div 
-                  key={idx}
-                  style={{
-                    marginBottom: 16,
-                    padding: 16,
-                    background: 'rgba(15, 23, 42, 0.5)',
-                    borderRadius: 8,
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                  }}
-                >
-                  <div style={{ 
-                    color: '#3B82F6', 
-                    fontWeight: 600, 
-                    marginBottom: 12,
-                    fontSize: 14 
-                  }}>
-                    模型: {item.model_name || 'unknown'}
-                  </div>
-                  
-                  <Descriptions size="small" column={2}>
-                    <Descriptions.Item label="当前周期已用">
-                      {item.current_interval_usage_count || 0}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="当前周期总数">
-                      {item.current_interval_total_count || 0}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="当前周期剩余">
-                      <span style={{ color: '#10B981' }}>
-                        {item.current_interval_remaining_percent || 0}%
-                      </span>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="当前周期剩余时间">
-                      {formatRemainTime(item.remains_time || 0)}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="本周已用">
-                      {item.current_weekly_usage_count || 0}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="本周总数">
-                      {item.current_weekly_total_count || 0}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="本周剩余">
-                      <span style={{ color: '#10B981' }}>
-                        {item.current_weekly_remaining_percent || 0}%
-                      </span>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="本周剩余时间">
-                      {formatRemainTime(item.weekly_remains_time || 0)}
-                    </Descriptions.Item>
-                  </Descriptions>
-                </div>
-              ))}
-              
-              {quota?.hourly?.last_sync && (
-                <div style={{ color: '#64748B', fontSize: 12, marginTop: 16 }}>
-                  最后同步时间: {formatDateTime(quota.hourly.last_sync)}
-                </div>
-              )}
-            </div>
-          )
-        })()}
+          {/* 按钮 */}
+          <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
+            <Space>
+              <Button icon={<SyncOutlined />} onClick={() => selectedProvider && handleSync(selectedProvider.provider_id)}>手动同步</Button>
+              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', border: 'none' }}>保存配置</Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* 添加供应商弹窗 */}
       <Modal
-        title={
-          <span style={{ 
-            fontFamily: "'Space Grotesk', sans-serif",
-            color: '#F8FAFC',
-          }}>
-            添加供应商
-          </span>
-        }
-        open={modalVisible}
-        onCancel={() => {
-          setModalVisible(false)
-          form.resetFields()
-        }}
+        title={<span style={{ color: '#F8FAFC' }}>添加供应商</span>}
+        open={createModalVisible}
+        onCancel={() => { setCreateModalVisible(false); form.resetFields(); }}
         footer={null}
-        width={600}
+        width={560}
       >
         <Form form={form} onFinish={handleCreate} layout="vertical">
           <Form.Item name="name" label={<span style={{ color: '#94A3B8' }}>供应商名称</span>} rules={[{ required: true }]}>
             <Input placeholder="如：火山方舟" />
           </Form.Item>
           <Form.Item name="type" label={<span style={{ color: '#94A3B8' }}>类型</span>} rules={[{ required: true }]}>
-            <Select style={{ borderRadius: 10 }}>
+            <Select placeholder="请选择类型">
               <Select.Option value="openai">OpenAI</Select.Option>
               <Select.Option value="anthropic">Anthropic</Select.Option>
               <Select.Option value="google">Google</Select.Option>
@@ -484,8 +398,8 @@ const ProvidersPage = () => {
               <Select.Option value="volcengine">火山方舟</Select.Option>
               <Select.Option value="moonshot">Moonshot</Select.Option>
               <Select.Option value="baidu">百度千帆</Select.Option>
-              <Select.Option value="minimax">MiniMax 稀宇</Select.Option>
-              <Select.Option value="deepseek">DeepSeek 深度求索</Select.Option>
+              <Select.Option value="minimax">MiniMax</Select.Option>
+              <Select.Option value="deepseek">DeepSeek</Select.Option>
               <Select.Option value="zhipu">智谱清言</Select.Option>
               <Select.Option value="cohere">Cohere</Select.Option>
               <Select.Option value="mistral">Mistral</Select.Option>
@@ -506,51 +420,15 @@ const ProvidersPage = () => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="timeout" label={<span style={{ color: '#94A3B8' }}>超时时间(秒)</span>} initialValue={60}>
+              <Form.Item name="timeout" label={<span style={{ color: '#94A3B8' }}>超时(秒)</span>} initialValue={60}>
                 <InputNumber min={10} max={300} style={{ width: '100%', height: 40 }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="quota_hourly" label={<span style={{ color: '#94A3B8' }}>5小时额度</span>}>
-                <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="quota_weekly" label={<span style={{ color: '#94A3B8' }}>周额度</span>}>
-                <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="sync_enabled" label={<span style={{ color: '#94A3B8' }}>自动同步用量</span>} valuePropName="checked" initialValue={false}>
-                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="sync_interval" label={<span style={{ color: '#94A3B8' }}>同步间隔(分钟)</span>} initialValue={5}>
-                <InputNumber min={1} max={60} style={{ width: '100%', height: 40 }} />
               </Form.Item>
             </Col>
           </Row>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
-              <Button onClick={() => setModalVisible(false)} style={{ borderRadius: 10 }}>
-                取消
-              </Button>
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-                  border: 'none',
-                  borderRadius: 10,
-                }}
-              >
-                创建
-              </Button>
+              <Button onClick={() => setCreateModalVisible(false)}>取消</Button>
+              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none' }}>创建</Button>
             </Space>
           </Form.Item>
         </Form>
@@ -558,28 +436,18 @@ const ProvidersPage = () => {
 
       {/* 编辑供应商弹窗 */}
       <Modal
-        title={
-          <span style={{ 
-            fontFamily: "'Space Grotesk', sans-serif",
-            color: '#F8FAFC',
-          }}>
-            编辑供应商
-          </span>
-        }
-        open={!!editProvider}
-        onCancel={() => {
-          setEditProvider(null)
-          form.resetFields()
-        }}
+        title={<span style={{ color: '#F8FAFC' }}>编辑供应商</span>}
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); setSelectedProvider(null); form.resetFields(); }}
         footer={null}
-        width={600}
+        width={560}
       >
         <Form form={form} onFinish={handleUpdate} layout="vertical">
           <Form.Item name="name" label={<span style={{ color: '#94A3B8' }}>供应商名称</span>} rules={[{ required: true }]}>
-            <Input placeholder="如：火山方舟" />
+            <Input />
           </Form.Item>
           <Form.Item name="type" label={<span style={{ color: '#94A3B8' }}>类型</span>} rules={[{ required: true }]}>
-            <Select style={{ borderRadius: 10 }}>
+            <Select>
               <Select.Option value="openai">OpenAI</Select.Option>
               <Select.Option value="anthropic">Anthropic</Select.Option>
               <Select.Option value="google">Google</Select.Option>
@@ -587,8 +455,8 @@ const ProvidersPage = () => {
               <Select.Option value="volcengine">火山方舟</Select.Option>
               <Select.Option value="moonshot">Moonshot</Select.Option>
               <Select.Option value="baidu">百度千帆</Select.Option>
-              <Select.Option value="minimax">MiniMax 稀宇</Select.Option>
-              <Select.Option value="deepseek">DeepSeek 深度求索</Select.Option>
+              <Select.Option value="minimax">MiniMax</Select.Option>
+              <Select.Option value="deepseek">DeepSeek</Select.Option>
               <Select.Option value="zhipu">智谱清言</Select.Option>
               <Select.Option value="cohere">Cohere</Select.Option>
               <Select.Option value="mistral">Mistral</Select.Option>
@@ -597,10 +465,10 @@ const ProvidersPage = () => {
             </Select>
           </Form.Item>
           <Form.Item name="endpoint" label={<span style={{ color: '#94A3B8' }}>API端点</span>} rules={[{ required: true }]}>
-            <Input placeholder="https://api.openai.com/v1" />
+            <Input />
           </Form.Item>
-          <Form.Item name="api_key" label={<span style={{ color: '#94A3B8' }}>API Key（留空则不修改）</span>}>
-            <Input.Password placeholder="请输入API Key" />
+          <Form.Item name="api_key" label={<span style={{ color: '#94A3B8' }}>API Key（留空不修改）</span>}>
+            <Input.Password placeholder="留空则不修改" />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
@@ -609,57 +477,25 @@ const ProvidersPage = () => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="timeout" label={<span style={{ color: '#94A3B8' }}>超时时间(秒)</span>}>
+              <Form.Item name="timeout" label={<span style={{ color: '#94A3B8' }}>超时(秒)</span>}>
                 <InputNumber min={10} max={300} style={{ width: '100%', height: 40 }} />
               </Form.Item>
             </Col>
           </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="quota_hourly" label={<span style={{ color: '#94A3B8' }}>5小时额度</span>}>
-                <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="quota_weekly" label={<span style={{ color: '#94A3B8' }}>周额度</span>}>
-                <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="sync_enabled" label={<span style={{ color: '#94A3B8' }}>自动同步用量</span>} valuePropName="checked">
-                <Switch checkedChildren="启用" unCheckedChildren="禁用" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="sync_interval" label={<span style={{ color: '#94A3B8' }}>同步间隔(分钟)</span>}>
-                <InputNumber min={1} max={60} style={{ width: '100%', height: 40 }} />
-              </Form.Item>
-            </Col>
-          </Row>
           <Form.Item name="status" label={<span style={{ color: '#94A3B8' }}>状态</span>}>
-            <Select style={{ borderRadius: 10 }}>
+            <Select>
               <Select.Option value="active">启用</Select.Option>
-          <Select.Option value="disabled">禁用</Select.Option>
+              <Select.Option value="disabled">禁用</Select.Option>
             </Select>
           </Form.Item>
+          <div style={{ padding: 12, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, marginBottom: 16 }}>
+            <SettingOutlined style={{ marginRight: 8, color: '#3B82F6' }} />
+            <span style={{ color: '#3B82F6', fontSize: 13 }}>用量配置请到「用量配置」弹窗设置</span>
+          </div>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
-              <Button onClick={() => setEditProvider(null)} style={{ borderRadius: 10 }}>
-                取消
-              </Button>
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-                  border: 'none',
-                  borderRadius: 10,
-                }}
-              >
-                保存
-              </Button>
+              <Button onClick={() => setEditModalVisible(false)}>取消</Button>
+              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none' }}>保存</Button>
             </Space>
           </Form.Item>
         </Form>

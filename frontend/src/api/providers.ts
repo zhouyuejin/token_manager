@@ -19,6 +19,15 @@ export interface Provider {
   sync_enabled: boolean
   sync_interval: number  // 单位：秒
   last_sync_at: string
+  // 自定义用量查询配置（不同供应商查询方式不同）
+  quota_config?: {
+    // 查询的模型名称（某些供应商需要指定模型查询用量）
+    model_name?: string
+    // 自定义API路径（某些供应商需要不同的API端点）
+    custom_api_path?: string
+    // 其他自定义参数
+    extra_params?: Record<string, string>
+  }
 }
 
 export interface ProviderQuota {
@@ -69,4 +78,5 @@ export const updateProviderQuota = (providerId: string, data: {
   quota_weekly?: number
   sync_enabled?: boolean
   sync_interval?: number
+  quota_config?: Provider['quota_config']
 }) => put(`/admin/providers/${providerId}/quota`, data)
