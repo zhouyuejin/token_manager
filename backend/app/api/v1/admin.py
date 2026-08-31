@@ -70,7 +70,8 @@ async def list_users(
                 status=u.status.value,
                 quota=u.quota,
                 quota_used=u.quota_used,
-                created_at=u.created_at
+                created_at=u.created_at,
+                model_group_ids=json.loads(u.model_group_ids or '[]')
             )
             for u in items
         ]
@@ -96,6 +97,7 @@ async def create_user(
         raise HTTPException(status_code=400, detail="邮箱已被注册")
     
     # 创建用户
+    import json
     user = User(
         user_id=f"usr_{secrets.token_hex(8)}",
         username=user_data.username,
@@ -103,7 +105,8 @@ async def create_user(
         password=get_password_hash(user_data.password),
         role=UserRole(user_data.role) if user_data.role else UserRole.user,
         quota=user_data.quota,
-        status=UserStatus.active
+        status=UserStatus.active,
+        model_group_ids=json.dumps(user_data.model_group_ids or [])
     )
     
     db.add(user)
@@ -126,6 +129,7 @@ async def create_user(
         ip_address=ip_address,
     )
     
+    import json
     return AdminUserResponse(
         user_id=user.user_id,
         username=user.username,
@@ -134,7 +138,8 @@ async def create_user(
         status=user.status.value,
         quota=user.quota,
         quota_used=user.quota_used,
-        created_at=user.created_at
+        created_at=user.created_at,
+        model_group_ids=json.loads(user.model_group_ids or '[]')
     )
 
 
@@ -157,6 +162,7 @@ async def update_user(
     if user.role == UserRole.admin:
         raise HTTPException(status_code=400, detail="不能编辑管理员用户")
     
+    import json
     changed = {}
     if user_data.role is not None:
         changed["role"] = user_data.role
@@ -164,6 +170,9 @@ async def update_user(
     if user_data.status is not None:
         changed["status"] = user_data.status
         user.status = UserStatus(user_data.status)
+    if user_data.model_group_ids is not None:
+        changed["model_group_ids"] = user_data.model_group_ids
+        user.model_group_ids = json.dumps(user_data.model_group_ids)
     if user_data.quota is not None:
         changed["quota"] = user_data.quota
         user.quota = user_data.quota

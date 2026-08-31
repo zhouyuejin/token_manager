@@ -36,3 +36,4 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     last_login_at = Column(DateTime, nullable=True)
+    model_group_ids = Column(Text, default='[]', comment="允许使用的模型分组ID列表，JSON数组")

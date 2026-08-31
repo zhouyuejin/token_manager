@@ -2,7 +2,7 @@
 用户相关Schema
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -15,11 +15,15 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """创建用户请求"""
     password: str = Field(..., min_length=8, max_length=32)
+    role: str = "user"
+    model_group_ids: Optional[List[str]] = Field(default_factory=list)
 
 
 class UserUpdate(BaseModel):
     """更新用户请求"""
     email: Optional[str] = None
+    role: Optional[str] = None
+    model_group_ids: Optional[List[str]] = None
 
 
 class UserResponse(UserBase):
@@ -32,6 +36,7 @@ class UserResponse(UserBase):
     quota_remain: int
     created_at: datetime
     last_login_at: Optional[datetime] = None
+    model_group_ids: List[str] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

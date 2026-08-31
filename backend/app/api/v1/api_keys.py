@@ -121,9 +121,15 @@ async def create_api_key(
     )
     
     # 关联模型分组
-    if api_key_data.model_group_ids:
+    # 如果没有提供 model_group_ids（普通用户），则使用用户被分配的模型分组
+    group_ids = api_key_data.model_group_ids
+    if not group_ids:
+        import json
+        group_ids = json.loads(current_user.model_group_ids or '[]')
+    
+    if group_ids:
         groups = db.query(ModelGroup).filter(
-            ModelGroup.group_id.in_(api_key_data.model_group_ids)
+            ModelGroup.group_id.in_(group_ids)
         ).all()
         new_api_key.model_groups = groups
     

@@ -288,7 +288,23 @@ const ApiKeysPage = () => {
           setNewKey(null)
           form.resetFields()
         }}
-        footer={newKey ? null : undefined}
+        footer={newKey ? null : [
+          <Button key="cancel" onClick={() => setModalVisible(false)}>
+            取消
+          </Button>,
+          <Button 
+            key="submit" 
+            type="primary"
+            onClick={() => form.submit()}
+            style={{
+              background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+              border: 'none',
+              borderRadius: 10,
+            }}
+          >
+            创建
+          </Button>,
+        ]}
         style={{ top: 100 }}
       >
         {newKey ? (
@@ -346,7 +362,7 @@ const ApiKeysPage = () => {
             </Button>
           </div>
         ) : (
-          <Form form={form} onFinish={handleCreate} layout="vertical">
+          <Form form={form} onFinish={handleCreate} layout="vertical" initialValues={{ qps_limit: 10 }}>
             <Form.Item 
               name="name" 
               label={<span style={{ color: '#CBD5E1' }}>Key名称</span>} 
@@ -363,22 +379,7 @@ const ApiKeysPage = () => {
               />
             </Form.Item>
             
-            <Form.Item 
-              name="model_group_ids" 
-              label={<span style={{ color: '#CBD5E1' }}>模型分组</span>}
-            >
-              <Select
-                mode="multiple"
-                placeholder="选择可用的模型分组"
-                allowClear
-              >
-                {groups.filter(g => g.status === 'active').map(g => (
-                  <Select.Option key={g.group_id} value={g.group_id}>
-                    {g.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
+
 
             <Form.Item 
               name="daily_limit" 
@@ -407,34 +408,9 @@ const ApiKeysPage = () => {
               <InputNumber 
                 min={1} 
                 max={100} 
-                defaultValue={10} 
+                
                 style={{ width: '100%', height: 40 }}
               />
-            </Form.Item>
-            <Form.Item style={{ marginTop: 24 }}>
-              <Space>
-                <Button 
-                  onClick={() => setModalVisible(false)}
-                  style={{
-                    borderRadius: 10,
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                  }}
-                >
-                  取消
-                </Button>
-                <Button 
-                  type="primary" 
-                  htmlType="submit"
-                  style={{
-                    background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-                    border: 'none',
-                    borderRadius: 10,
-                    fontFamily: "'Space Grotesk', sans-serif",
-                  }}
-                >
-                  创建
-                </Button>
-              </Space>
             </Form.Item>
           </Form>
         )}
@@ -476,22 +452,7 @@ const ApiKeysPage = () => {
             />
           </Form.Item>
           
-          <Form.Item 
-            name="model_group_ids" 
-            label={<span style={{ color: '#CBD5E1' }}>模型分组</span>}
-          >
-            <Select
-              mode="multiple"
-              placeholder="选择可用的模型分组"
-              allowClear
-            >
-              {groups.filter(g => g.status === 'active').map(g => (
-                <Select.Option key={g.group_id} value={g.group_id}>
-                  {g.name}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+
 
           <Form.Item 
             name="daily_limit" 

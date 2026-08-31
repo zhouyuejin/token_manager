@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.model_group import ModelGroup, ModelGroupStatus, provider_model_groups
 from app.models.provider import Provider
-from app.dependencies import require_admin
+from app.dependencies import get_current_user, require_admin
 from app.schemas.model_group import (
     ModelGroupCreate, ModelGroupUpdate, ModelGroupResponse,
     ModelGroupListResponse
@@ -24,10 +24,10 @@ router = APIRouter()
 @router.get("", response_model=ModelGroupListResponse)
 async def list_model_groups(
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
-    获取模型分组列表（管理员）
+    获取模型分组列表（所有登录用户可读）
     """
     groups = db.query(ModelGroup).all()
     
@@ -52,7 +52,7 @@ async def list_model_groups(
 async def create_model_group(
     group_data: ModelGroupCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     创建模型分组（管理员）
@@ -95,7 +95,7 @@ async def create_model_group(
 async def get_model_group(
     group_id: str,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取模型分组详情（管理员）
@@ -128,7 +128,7 @@ async def update_model_group(
     group_id: str,
     group_data: ModelGroupUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     更新模型分组（管理员）
@@ -180,7 +180,7 @@ async def update_model_group(
 async def delete_model_group(
     group_id: str,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     删除模型分组（管理员）
@@ -205,7 +205,7 @@ async def delete_model_group(
 async def get_groups_by_provider(
     provider_id: str,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取指定供应商关联的模型分组

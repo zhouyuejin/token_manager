@@ -6,6 +6,7 @@ import {
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from '../../api/users'
+import { getModelGroups, ModelGroup } from '../../api/modelGroups'
 import dayjs from 'dayjs'
 
 const UsersPage = () => {
@@ -15,12 +16,14 @@ const UsersPage = () => {
   const [editUser, setEditUser] = useState<User | null>(null)
   const [quotaModalVisible, setQuotaModalVisible] = useState(false)
   const [quotaUser, setQuotaUser] = useState<User | null>(null)
+  const [groups, setGroups] = useState<ModelGroup[]>([])
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
   const message = useMessage()
 
   useEffect(() => {
     fetchUsers()
+    fetchGroups()
   }, [])
 
   const fetchUsers = async () => {
@@ -33,6 +36,23 @@ const UsersPage = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchGroups = async () => {
+    try {
+      const data = await getModelGroups()
+      setGroups(data.items || [])
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const getGroupNames = (groupIds: string[]) => {
+    if (!groupIds || groupIds.length === 0) return '未分配'
+    return groupIds.map(id => {
+      const group = groups.find(g => g.group_id === id)
+      return group?.name || id
+    }).join(', ')
   }
 
   const handleCreate = async (values: any) => {
@@ -165,6 +185,23 @@ const UsersPage = () => {
       dataIndex: 'created_at', 
       key: 'created_at',
       render: (val: string) => <span style={{ color: '#94A3B8' }}>{dayjs.utc(val).local().format('YYYY-MM-DD')}</span>
+    },
+    { 
+      title: '模型分组', 
+      dataIndex: 'model_group_ids', 
+      key: 'model_group_ids',
+      render: (groupIds: string[]) => (
+        <Tag 
+          color={groupIds && groupIds.length > 0 ? 'blue' : 'default'}
+          style={{ 
+            borderRadius: '6px',
+            background: groupIds && groupIds.length > 0 ? 'rgba(37, 99, 235, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+            border: 'none',
+          }}
+        >
+          {getGroupNames(groupIds)}
+        </Tag>
+      )
     },
     {
       title: '操作',
@@ -319,6 +356,22 @@ const UsersPage = () => {
               placeholder="请输入初始额度"
             />
           </Form.Item>
+          <Form.Item 
+            name="model_group_ids" 
+            label={<span style={{ color: '#94A3B8' }}>模型分组</span>}
+          >
+            <Select 
+              mode="multiple" 
+              placeholder="选择允许使用的模型分组"
+              allowClear
+            >
+              {groups.filter(g => g.status === 'active').map(g => (
+                <Select.Option key={g.group_id} value={g.group_id}>
+                  {g.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
               <Button 
@@ -377,6 +430,22 @@ const UsersPage = () => {
             <Select>
               <Select.Option value="active">启用</Select.Option>
               <Select.Option value="disabled">禁用</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item 
+            name="model_group_ids" 
+            label={<span style={{ color: '#94A3B8' }}>模型分组</span>}
+          >
+            <Select 
+              mode="multiple" 
+              placeholder="选择允许使用的模型分组"
+              allowClear
+            >
+              {groups.filter(g => g.status === 'active').map(g => (
+                <Select.Option key={g.group_id} value={g.group_id}>
+                  {g.name}
+                </Select.Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item style={{ marginTop: 24 }}>
