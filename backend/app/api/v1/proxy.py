@@ -2,6 +2,7 @@
 代理接口 - 核心中转功能
 """
 import json
+import time
 from typing import Optional, List, Union
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
@@ -183,9 +184,42 @@ async def chat_completions(
     
     # 6. 转发请求
     if chat_request.stream:
-        # 流式响应
+        # 流式响应 - 使用包装器追踪延迟
+        stream_generator, start_time = proxy_service.forward_stream_request(provider, model_mapping, request_data)
+        
+        # 保存用户信息用于延迟记录
+        _user_id = user.user_id
+        _key_id = api_key.key_id
+        _provider_id = provider.provider_id
+        _model = chat_request.model
+        
+        def sync_generator():
+            """同步generator，用于在StreamingResponse中迭代"""
+            from app.core.database import SessionLocal
+            db = SessionLocal()
+            try:
+                for chunk in stream_generator:
+                    yield chunk
+            finally:
+                # 流结束时记录延迟（使用新的数据库会话）
+                latency_ms = int((time.time() - start_time) * 1000)
+                try:
+                    service = create_proxy_service(db)
+                    service.record_usage(
+                        user_id=_user_id,
+                        key_id=_key_id,
+                        provider_id=_provider_id,
+                        model=_model,
+                        tokens={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        latency_ms=latency_ms,
+                        status_code=200,
+                        error_message=None
+                    )
+                finally:
+                    db.close()
+        
         return StreamingResponse(
-            proxy_service.forward_stream_request(provider, model_mapping, request_data),
+            sync_generator(),
             media_type="text/event-stream"
         )
     else:

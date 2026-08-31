@@ -8,41 +8,67 @@ from datetime import datetime
 
 class ApiKeyBase(BaseModel):
     """API Key基础字段"""
-    key_name: str
+    name: str = Field(
+        validation_alias='key_name',  # 接收时用 key_name
+        serialization_alias='name'      # 返回时用 name
+    )
     daily_limit: int = 0
     monthly_limit: int = 0
     qps_limit: int = 10
+    
+    model_config = {'populate_by_name': True}
 
 
-class ApiKeyCreate(ApiKeyBase):
+class ApiKeyCreate(BaseModel):
     """创建API Key请求"""
-    pass
+    name: str = Field(
+        validation_alias='key_name',  # 接收 name 或 key_name
+        serialization_alias='name'      # 返回 name
+    )
+    daily_limit: int = 0
+    monthly_limit: int = 0
+    qps_limit: int = 10
+    model_group_ids: Optional[List[str]] = None
+
+    model_config = {'populate_by_name': True}
 
 
 class ApiKeyUpdate(BaseModel):
     """更新API Key请求"""
-    key_name: Optional[str] = None
+    name: Optional[str] = Field(
+        default=None,
+        validation_alias='key_name',  # 接收 name 或 key_name
+        serialization_alias='name'      # 返回 name
+    )
     daily_limit: Optional[int] = None
     monthly_limit: Optional[int] = None
     qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
-    model_group_ids: Optional[List[str]] = None  # 关联的模型分组
+    model_group_ids: Optional[List[str]] = None
+
+    model_config = {'populate_by_name': True}
 
 
-class ApiKeyResponse(ApiKeyBase):
+class ApiKeyResponse(BaseModel):
     """API Key响应"""
     key_id: str
     user_id: str
     api_key: str
+    name: str = Field(
+        validation_alias='key_name',  # 接收时用 key_name
+        serialization_alias='name'      # 返回时用 name
+    )
+    daily_limit: int
     daily_used: int
+    monthly_limit: int
     monthly_used: int
+    qps_limit: int
     status: str
     created_at: datetime
     last_used_at: Optional[datetime] = None
-    model_groups: List[str] = []  # 关联的模型分组ID列表
+    model_groups: List[str] = []
 
-    class Config:
-        from_attributes = True
+    model_config = {'populate_by_name': True}
 
 
 class ApiKeyListResponse(BaseModel):
@@ -60,4 +86,9 @@ class ApiKeyCreatedResponse(BaseModel):
     """创建API Key成功响应"""
     key_id: str
     api_key: str
-    key_name: str
+    name: str = Field(
+        validation_alias='key_name',  # 接收时用 key_name
+        serialization_alias='name'      # 返回时用 name
+    )
+    
+    model_config = {'populate_by_name': True}
