@@ -164,7 +164,7 @@ const UsersPage = () => {
       title: '创建时间', 
       dataIndex: 'created_at', 
       key: 'created_at',
-      render: (val: string) => <span style={{ color: '#94A3B8' }}>{dayjs(val).format('YYYY-MM-DD')}</span>
+      render: (val: string) => <span style={{ color: '#94A3B8' }}>{dayjs.utc(val).local().format('YYYY-MM-DD')}</span>
     },
     {
       title: '操作',
