@@ -76,7 +76,7 @@ async def list_api_keys(
             key_id=key.key_id,
             user_id=key.user_id,
             api_key=key.api_key,
-            key_name=key.key_name,
+            name=key.key_name,
             daily_limit=key.daily_limit,
             daily_used=key.daily_used,
             monthly_limit=key.monthly_limit,
@@ -111,7 +111,7 @@ async def create_api_key(
         key_id=key_id,
         user_id=current_user.user_id,
         api_key=api_key,
-        key_name=api_key_data.key_name,
+        key_name=api_key_data.name,
         daily_limit=api_key_data.daily_limit,
         monthly_limit=api_key_data.monthly_limit,
         qps_limit=api_key_data.qps_limit,
@@ -119,6 +119,13 @@ async def create_api_key(
         monthly_reset_at=datetime.now().date(),
         status=ApiKeyStatus.active
     )
+    
+    # 关联模型分组
+    if api_key_data.model_group_ids:
+        groups = db.query(ModelGroup).filter(
+            ModelGroup.group_id.in_(api_key_data.model_group_ids)
+        ).all()
+        new_api_key.model_groups = groups
     
     db.add(new_api_key)
     db.commit()
@@ -160,7 +167,7 @@ async def get_api_key(
         key_id=api_key.key_id,
         user_id=api_key.user_id,
         api_key=api_key.api_key,
-        key_name=api_key.key_name,
+        name=api_key.key_name,
         daily_limit=api_key.daily_limit,
         daily_used=api_key.daily_used,
         monthly_limit=api_key.monthly_limit,
@@ -195,8 +202,8 @@ async def update_api_key(
         )
     
     # 更新字段
-    if api_key_data.key_name is not None:
-        api_key.key_name = api_key_data.key_name
+    if api_key_data.name is not None:
+        api_key.key_name = api_key_data.name
     if api_key_data.daily_limit is not None:
         api_key.daily_limit = api_key_data.daily_limit
     if api_key_data.monthly_limit is not None:
@@ -303,7 +310,7 @@ async def list_all_api_keys(
             key_id=key.key_id,
             user_id=key.user_id,
             api_key=key.api_key,
-            key_name=key.key_name,
+            name=key.key_name,
             daily_limit=key.daily_limit,
             daily_used=key.daily_used,
             monthly_limit=key.monthly_limit,

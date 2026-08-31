@@ -214,7 +214,9 @@ class ProxyService:
         model_mapping: ModelMapping,
         request_data: Dict[str, Any]
     ):
-        """转发流式请求到上游供应商"""
+        """转发流式请求到上游供应商，返回 (generator, start_time) 元组"""
+        start_time = time.time()
+        
         # 构建上游请求
         upstream_url = f"{provider.endpoint.rstrip('/')}/chat/completions"
         
@@ -227,30 +229,33 @@ class ProxyService:
             "Content-Type": "application/json"
         }
         
-        try:
-            with httpx.Client(timeout=provider.timeout) as client:
-                with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
-                    # 检查响应状态码
-                    if response.status_code != 200:
-                        error_msg = f"HTTP {response.status_code}"
-                        try:
-                            error_data = response.json()
-                            error_msg = error_data.get("error", {}).get("message") or \
-                                       error_data.get("message") or \
-                                       error_data.get("detail") or \
-                                       error_msg
-                        except:
-                            pass
-                        yield f'data: {{"error": "{error_msg}"}}\n\n'
-                        yield "data: [DONE]\n\n"
-                        return
-                    
-                    for chunk in response.iter_lines():
-                        if chunk:
-                            yield chunk
-                            
-        except Exception as e:
-            yield f'data: {{"error": "{str(e)}"}}\n\n'
+        def generate():
+            try:
+                with httpx.Client(timeout=provider.timeout) as client:
+                    with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
+                        # 检查响应状态码
+                        if response.status_code != 200:
+                            error_msg = f"HTTP {response.status_code}"
+                            try:
+                                error_data = response.json()
+                                error_msg = error_data.get("error", {}).get("message") or \
+                                           error_data.get("message") or \
+                                           error_data.get("detail") or \
+                                           error_msg
+                            except:
+                                pass
+                            yield f'data: {{"error": "{error_msg}"}}\n\n'
+                            yield "data: [DONE]\n\n"
+                            return
+                        
+                        for chunk in response.iter_lines():
+                            if chunk:
+                                yield chunk
+                                
+            except Exception as e:
+                yield f'data: {{"error": "{str(e)}"}}\n\n'
+        
+        return generate(), start_time
     
     def calculate_tokens(self, request_data: Dict[str, Any], response_data: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
         """计算Token数量（估算）"""
