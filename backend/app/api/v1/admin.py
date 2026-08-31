@@ -714,15 +714,21 @@ async def create_model_mapping(
     """
     创建模型映射（管理员）
     """
+    # 如果没有传model_id，则自动生成一个
+    if not model_data.model_id:
+        model_id = f"model_{secrets.token_hex(8)}"
+    else:
+        model_id = model_data.model_id
+    
     # 检查model_id是否已存在
     existing = db.query(ModelMapping).filter(
-        ModelMapping.model_id == model_data.model_id
+        ModelMapping.model_id == model_id
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="模型ID已存在")
     
     mapping = ModelMapping(
-        model_id=model_data.model_id,
+        model_id=model_id,
         display_name=model_data.display_name,
         provider_id=model_data.provider_id,
         provider_model=model_data.provider_model,
@@ -756,7 +762,8 @@ async def create_model_mapping(
         provider_id=mapping.provider_id,
         provider_model=mapping.provider_model,
         aliases=mapping.aliases,
-        status=mapping.status.value
+        status=mapping.status.value,
+        created_at=mapping.created_at
     )
 
 
@@ -840,3 +847,187 @@ async def delete_model_mapping(
     )
     
     return {"message": "删除成功"}
+
+
+# ========== 模型同步管理 ==========
+
+@router.get("/providers/{provider_id}/models")
+async def get_provider_models(
+    provider_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    获取供应商已同步的模型列表
+    """
+    provider = db.query(Provider).filter(
+        Provider.provider_id == provider_id
+    ).first()
+    
+    if not provider:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    
+    from app.services.model_sync_service import create_model_sync_service
+    sync_service = create_model_sync_service(db)
+    models = sync_service.get_provider_models(provider)
+    
+    return {
+        "provider_id": provider.provider_id,
+        "provider_name": provider.name,
+        "models": [m.to_dict() for m in models],
+        "last_sync_at": provider.last_models_sync_at.isoformat() if provider.last_models_sync_at else None
+    }
+
+
+@router.post("/providers/{provider_id}/models/sync")
+async def sync_provider_models(
+    request: Request,
+    provider_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    同步单个供应商的模型列表
+    """
+    provider = db.query(Provider).filter(
+        Provider.provider_id == provider_id
+    ).first()
+    
+    if not provider:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    
+    from app.services.model_sync_service import create_model_sync_service
+    sync_service = create_model_sync_service(db)
+    
+    result = await sync_service.sync_provider_models(provider)
+    
+    # 记录操作
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="sync_models",
+        target_type="provider",
+        target_id=provider_id,
+        detail={"model_count": result.get("count", 0)},
+        ip_address=ip_address,
+    )
+    
+    return result
+
+
+@router.post("/providers/models/sync-all")
+async def sync_all_provider_models(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    同步所有供应商的模型列表
+    """
+    from app.services.model_sync_service import create_model_sync_service
+    sync_service = create_model_sync_service(db)
+    
+    result = await sync_service.sync_all_providers()
+    
+    # 记录操作
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="sync_all_models",
+        target_type="provider",
+        target_id="all",
+        detail={"success": result["success"], "failed": result["failed"]},
+        ip_address=ip_address,
+    )
+    
+    return result
+
+
+# ========== 模型映射自动创建 ==========
+
+@router.post("/providers/{provider_id}/models/auto-create-mappings")
+async def auto_create_model_mappings(
+    request: Request,
+    provider_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    自动创建模型映射
+    """
+    provider = db.query(Provider).filter(
+        Provider.provider_id == provider_id
+    ).first()
+    
+    if not provider:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    
+    from app.services.model_sync_service import sync_and_create_mappings
+    
+    result = await sync_and_create_mappings(db, provider, auto_enable=True)
+    
+    # 记录操作
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="auto_create_mappings",
+        target_type="provider",
+        target_id=provider_id,
+        detail={"created": result.get("mapping_created", 0), "skipped": result.get("mapping_skipped", 0)},
+        ip_address=ip_address,
+    )
+    
+    return result
+
+
+@router.post("/providers/models/sync-all-with-mappings")
+async def sync_all_with_mappings(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    同步所有供应商模型并自动创建映射
+    """
+    from app.services.model_sync_service import sync_and_create_mappings
+    
+    providers = db.query(Provider).filter(
+        Provider.status == "active"
+    ).all()
+    
+    results = []
+    total_models = 0
+    total_mappings = 0
+    
+    for provider in providers:
+        result = await sync_and_create_mappings(db, provider, auto_enable=True)
+        results.append({
+            "provider_id": provider.provider_id,
+            "provider_name": provider.name,
+            **result
+        })
+        if result.get("sync_success"):
+            total_models += result.get("sync_count", 0)
+            total_mappings += result.get("mapping_created", 0)
+    
+    # 记录操作
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="sync_all_with_mappings",
+        target_type="provider",
+        target_id="all",
+        detail={"total_models": total_models, "total_mappings": total_mappings},
+        ip_address=ip_address,
+    )
+    
+    return {
+        "total_providers": len(providers),
+        "total_models": total_models,
+        "total_mappings": total_mappings,
+        "results": results
+    }

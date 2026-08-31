@@ -2,22 +2,28 @@ import { useState, useEffect } from 'react'
 import { useMessage } from '../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
-  InputNumber, Popconfirm 
+  InputNumber, Popconfirm, Select 
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
-import { getApiKeys, createApiKey, deleteApiKey, ApiKey } from '../api/apiKeys'
+import { getApiKeys, createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
+import { getModelGroups, ModelGroup } from '../api/modelGroups'
 import dayjs from 'dayjs'
 
 const ApiKeysPage = () => {
   const [loading, setLoading] = useState(false)
   const [keys, setKeys] = useState<ApiKey[]>([])
+  const [groups, setGroups] = useState<ModelGroup[]>([])
   const [modalVisible, setModalVisible] = useState(false)
+  const [editModalVisible, setEditModalVisible] = useState(false)
+  const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [form] = Form.useForm()
+  const [editForm] = Form.useForm()
   const message = useMessage()
 
   useEffect(() => {
     fetchKeys()
+    fetchGroups()
   }, [])
 
   const fetchKeys = async () => {
@@ -32,11 +38,46 @@ const ApiKeysPage = () => {
     }
   }
 
+  const fetchGroups = async () => {
+    try {
+      const data = await getModelGroups()
+      setGroups(data.items || [])
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   const handleCreate = async (values: any) => {
     try {
       const result = await createApiKey(values)
       setNewKey(result.api_key)
       message.success('创建成功')
+      fetchKeys()
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const handleEdit = (record: ApiKey) => {
+    setEditingKey(record)
+    editForm.setFieldsValue({
+      name: record.name,
+      daily_limit: record.daily_limit,
+      monthly_limit: record.monthly_limit,
+      qps_limit: record.qps_limit,
+      model_group_ids: record.model_groups || []
+    })
+    setEditModalVisible(true)
+  }
+
+  const handleUpdate = async (values: any) => {
+    if (!editingKey) return
+    try {
+      await updateApiKey(editingKey.key_id, values)
+      message.success('更新成功')
+      setEditModalVisible(false)
+      setEditingKey(null)
+      editForm.resetFields()
       fetchKeys()
     } catch (error) {
       console.error(error)
@@ -56,6 +97,13 @@ const ApiKeysPage = () => {
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key)
     message.success('已复制到剪贴板')
+  }
+
+  const getGroupNames = (groupIds: string[]) => {
+    return groupIds.map(id => {
+      const group = groups.find(g => g.group_id === id)
+      return group?.name || id
+    }).join(', ')
   }
 
   const columns = [
@@ -79,6 +127,18 @@ const ApiKeysPage = () => {
         }}>
           {key.substring(0, 10)}...{key.substring(key.length - 4)}
         </span>
+      )
+    },
+    { 
+      title: '模型分组', 
+      dataIndex: 'model_groups', 
+      key: 'model_groups',
+      render: (groupIds: string[]) => (
+        groupIds && groupIds.length > 0 ? (
+          <Tag color="blue">{getGroupNames(groupIds)}</Tag>
+        ) : (
+          <Tag>未分组</Tag>
+        )
       )
     },
     { 
@@ -147,6 +207,13 @@ const ApiKeysPage = () => {
           >
             复制
           </Button>
+          <Button 
+            type="text" 
+            onClick={() => handleEdit(record)}
+            style={{ color: '#10B981' }}
+          >
+            编辑
+          </Button>
           <Popconfirm
             title="确认删除此Key？"
             onConfirm={() => handleDelete(record.key_id)}
@@ -189,30 +256,21 @@ const ApiKeysPage = () => {
             fontWeight: 500,
           }}
         >
-          创建 Key
+          创建 API Key
         </Button>
       </div>
 
-      <div style={{
-        background: 'rgba(17, 24, 39, 0.6)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        borderRadius: 16,
-        overflow: 'hidden',
-      }}>
-        <Table
-          dataSource={keys}
-          columns={columns}
-          rowKey="key_id"
-          loading={loading}
-          pagination={{
-            style: { 
-              background: 'transparent',
-              padding: '16px 24px',
-            },
-          }}
-        />
-      </div>
+      <Table
+        columns={columns}
+        dataSource={keys}
+        rowKey="key_id"
+        loading={loading}
+        style={{ 
+          background: 'rgba(30, 41, 59, 0.5)',
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}
+      />
 
       {/* 创建Key弹窗 */}
       <Modal
@@ -304,6 +362,24 @@ const ApiKeysPage = () => {
                 }}
               />
             </Form.Item>
+            
+            <Form.Item 
+              name="model_group_ids" 
+              label={<span style={{ color: '#CBD5E1' }}>模型分组</span>}
+            >
+              <Select
+                mode="multiple"
+                placeholder="选择可用的模型分组"
+                allowClear
+              >
+                {groups.filter(g => g.status === 'active').map(g => (
+                  <Select.Option key={g.group_id} value={g.group_id}>
+                    {g.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+
             <Form.Item 
               name="daily_limit" 
               label={<span style={{ color: '#CBD5E1' }}>日限额</span>}
@@ -362,6 +438,117 @@ const ApiKeysPage = () => {
             </Form.Item>
           </Form>
         )}
+      </Modal>
+
+      {/* 编辑Key弹窗 */}
+      <Modal
+        title={
+          <span style={{ 
+            fontFamily: "'Space Grotesk', sans-serif",
+            color: '#F8FAFC',
+          }}>
+            编辑 API Key
+          </span>
+        }
+        open={editModalVisible}
+        onCancel={() => {
+          setEditModalVisible(false)
+          setEditingKey(null)
+          editForm.resetFields()
+        }}
+        footer={null}
+        style={{ top: 100 }}
+      >
+        <Form form={editForm} onFinish={handleUpdate} layout="vertical">
+          <Form.Item 
+            name="name" 
+            label={<span style={{ color: '#CBD5E1' }}>Key名称</span>} 
+            rules={[{ required: true, message: '请输入Key名称' }]}
+          >
+            <Input 
+              placeholder="请输入Key名称" 
+              style={{
+                height: 40,
+                background: 'rgba(30, 41, 59, 0.8)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 10,
+              }}
+            />
+          </Form.Item>
+          
+          <Form.Item 
+            name="model_group_ids" 
+            label={<span style={{ color: '#CBD5E1' }}>模型分组</span>}
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择可用的模型分组"
+              allowClear
+            >
+              {groups.filter(g => g.status === 'active').map(g => (
+                <Select.Option key={g.group_id} value={g.group_id}>
+                  {g.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item 
+            name="daily_limit" 
+            label={<span style={{ color: '#CBD5E1' }}>日限额</span>}
+          >
+            <InputNumber 
+              min={0} 
+              placeholder="0表示不限" 
+              style={{ width: '100%', height: 40 }}
+            />
+          </Form.Item>
+          <Form.Item 
+            name="monthly_limit" 
+            label={<span style={{ color: '#CBD5E1' }}>月限额</span>}
+          >
+            <InputNumber 
+              min={0} 
+              placeholder="0表示不限" 
+              style={{ width: '100%', height: 40 }}
+            />
+          </Form.Item>
+          <Form.Item 
+            name="qps_limit" 
+            label={<span style={{ color: '#CBD5E1' }}>QPS限制</span>}
+          >
+            <InputNumber 
+              min={1} 
+              max={100} 
+              style={{ width: '100%', height: 40 }}
+            />
+          </Form.Item>
+          <Form.Item style={{ marginTop: 24 }}>
+            <Space>
+              <Button 
+                onClick={() => setEditModalVisible(false)}
+                style={{
+                  borderRadius: 10,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                取消
+              </Button>
+              <Button 
+                type="primary" 
+                htmlType="submit"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  border: 'none',
+                  borderRadius: 10,
+                  fontFamily: "'Space Grotesk', sans-serif",
+                }}
+              >
+                保存
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   )

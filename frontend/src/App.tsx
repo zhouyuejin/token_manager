@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import AdminUsers from './pages/admin/Users'
 import AdminProviders from './pages/admin/Providers'
 import AdminModels from './pages/admin/Models'
+import AdminModelGroups from './pages/admin/ModelGroups'
 import OperationLogs from './pages/admin/OperationLogs'
 import LoginLogs from './pages/admin/LoginLogs'
 
@@ -39,6 +40,7 @@ function App() {
         <Route path="admin/users" element={<AdminUsers />} />
         <Route path="admin/providers" element={<AdminProviders />} />
         <Route path="admin/models" element={<AdminModels />} />
+        <Route path="admin/model-groups" element={<AdminModelGroups />} />
         <Route path="admin/logs/operations" element={<OperationLogs />} />
         <Route path="admin/logs/logins" element={<LoginLogs />} />
       </Route>
