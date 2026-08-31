@@ -97,7 +97,7 @@ const OperationLogsPage = () => {
       key: 'created_at',
       render: (val: string) => (
         <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
-          {dayjs(val).format('YYYY-MM-DD HH:mm:ss')}
+          {dayjs.utc(val).local().format('YYYY-MM-DD HH:mm:ss')}
         </span>
       ),
     },

@@ -130,7 +130,7 @@ const ApiKeysPage = () => {
       key: 'created_at',
       render: (val: string) => (
         <span style={{ color: '#94A3B8' }}>
-          {dayjs(val).format('YYYY-MM-DD HH:mm')}
+          {dayjs.utc(val).local().format('YYYY-MM-DD HH:mm')}
         </span>
       )
     },
