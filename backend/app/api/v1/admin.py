@@ -16,8 +16,10 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.provider_quota import ProviderQuota, QuotaType
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.usage_log import UsageLog
 from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
+    AdminStatsResponse,
     AdminUserCreate, AdminUserUpdate, AdminUserResponse,
     UserListResponse, QuotaAdjustRequest,
     ProviderCreate, ProviderUpdate, ProviderResponse, ProviderListResponse,
@@ -28,6 +30,95 @@ from app.services.sync_service import create_sync_service
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
+
+# ========== 用量统计 ==========
+
+@router.get("/stats/usage", response_model=AdminStatsResponse)
+async def get_admin_usage_stats(
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """
+    获取管理员用量统计（所有用户）
+    """
+    from datetime import timedelta
+    
+    # 默认查询最近7天
+    if not end_date:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    
+    # 基础统计 - 所有用户
+    total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(
+        and_(
+            func.date(UsageLog.created_at) >= start_date,
+            func.date(UsageLog.created_at) <= end_date
+        )
+    ).scalar() or 0
+    
+    total_requests = db.query(UsageLog).filter(
+        and_(
+            func.date(UsageLog.created_at) >= start_date,
+            func.date(UsageLog.created_at) <= end_date
+        )
+    ).count()
+    
+    # 按用户统计
+    user_stats = db.query(
+        UsageLog.user_id,
+        func.sum(UsageLog.total_tokens).label('tokens')
+    ).filter(
+        and_(
+            func.date(UsageLog.created_at) >= start_date,
+            func.date(UsageLog.created_at) <= end_date
+        )
+    ).group_by(UsageLog.user_id).all()
+    
+    # 获取用户名
+    user_ids = [stat.user_id for stat in user_stats]
+    users = db.query(User.user_id, User.username).filter(
+        User.user_id.in_(user_ids)
+    ).all() if user_ids else []
+    user_map = {u.user_id: u.username for u in users}
+    
+    by_user = [
+        {
+            "user_id": stat.user_id,
+            "username": user_map.get(stat.user_id, stat.user_id),
+            "tokens": stat.tokens or 0
+        }
+        for stat in user_stats
+    ]
+    
+    # 按供应商统计
+    provider_stats = db.query(
+        UsageLog.provider_id,
+        func.sum(UsageLog.total_tokens).label('tokens')
+    ).filter(
+        and_(
+            func.date(UsageLog.created_at) >= start_date,
+            func.date(UsageLog.created_at) <= end_date
+        )
+    ).group_by(UsageLog.provider_id).all()
+    
+    by_provider = [
+        {
+            "provider": stat.provider_id,
+            "tokens": stat.tokens or 0
+        }
+        for stat in provider_stats
+    ]
+    
+    return AdminStatsResponse(
+        total_tokens=total_tokens,
+        total_requests=total_requests,
+        by_user=by_user,
+        by_provider=by_provider
+    )
+
 
 # ========== 用户管理 ==========
 

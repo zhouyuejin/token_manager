@@ -183,3 +183,26 @@ class ModelMappingListResponse(BaseModel):
     """模型映射列表响应"""
     total: int
     items: List[ModelMappingResponse]
+
+
+# ========== 用量统计 ==========
+
+class UserUsage(BaseModel):
+    """用户用量统计"""
+    user_id: str
+    username: str
+    tokens: int
+
+
+class ProviderUsage(BaseModel):
+    """供应商用量统计"""
+    provider: str
+    tokens: int
+
+
+class AdminStatsResponse(BaseModel):
+    """管理员用量统计响应"""
+    total_tokens: int = 0
+    total_requests: int = 0
+    by_user: List[UserUsage] = []
+    by_provider: List[ProviderUsage] = []

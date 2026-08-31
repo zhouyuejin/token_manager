@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Card, Row, Col, Statistic, DatePicker, Table, Button, Space, Tag } from 'antd'
-import { DownloadOutlined, ApiOutlined, ThunderboltOutlined, ClockCircleOutlined, CheckCircleOutlined } from '@ant-design/icons'
-import { getUsageStats } from '../api/stats'
+import { DownloadOutlined, ApiOutlined, ThunderboltOutlined, ClockCircleOutlined, CheckCircleOutlined, TeamOutlined } from '@ant-design/icons'
+import { getUsageStats, getAdminStats } from '../api/stats'
 import { getApiKeys } from '../api/apiKeys'
+import { useAuthStore } from '../store/auth'
 import dayjs from 'dayjs'
 
 const { RangePicker } = DatePicker
 
 const StatsPage = () => {
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'admin'
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<any>(null)
   const [keys, setKeys] = useState<any[]>([])
@@ -18,18 +21,34 @@ const StatsPage = () => {
 
   useEffect(() => {
     fetchData()
-  }, [dateRange])
+  }, [dateRange, isAdmin])
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [statsData, keysData] = await Promise.all([
-        getUsageStats({
-          start_date: dateRange[0].format('YYYY-MM-DD'),
-          end_date: dateRange[1].format('YYYY-MM-DD'),
-        }),
-        getApiKeys()
-      ])
+      const statsParams = {
+        start_date: dateRange[0].format('YYYY-MM-DD'),
+        end_date: dateRange[1].format('YYYY-MM-DD'),
+      }
+      
+      let statsData: any
+      if (isAdmin) {
+        // 管理员获取所有数据
+        const [adminStats, myStats] = await Promise.all([
+          getAdminStats(statsParams),
+          getUsageStats(statsParams)
+        ])
+        // 合并数据：既有所有用户的统计，也有自己的详细统计
+        statsData = {
+          ...adminStats,
+          by_model: myStats.by_model,
+          by_day: myStats.by_day,
+        }
+      } else {
+        statsData = await getUsageStats(statsParams)
+      }
+      
+      const keysData = await getApiKeys()
       setStats(statsData)
       setKeys(keysData.items || [])
     } catch (error) {
@@ -127,6 +146,22 @@ const StatsPage = () => {
         </span>
       )
     },
+  ]
+
+  // 管理员用 - 按用户统计列
+  const userColumns = [
+    { title: '用户', dataIndex: 'username', key: 'username',
+      render: (text: string, record: any) => <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{text || record.user_id}</span> },
+    { title: 'Token数', dataIndex: 'tokens', key: 'tokens',
+      render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>{v?.toLocaleString()}</span> },
+  ]
+
+  // 管理员用 - 按供应商统计列
+  const providerColumns = [
+    { title: '供应商', dataIndex: 'provider', key: 'provider',
+      render: (text: string) => <span style={{ color: '#F8FAFC' }}>{text}</span> },
+    { title: 'Token数', dataIndex: 'tokens', key: 'tokens',
+      render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>{v?.toLocaleString()}</span> },
   ]
 
   const keyColumns = [
@@ -466,6 +501,40 @@ const StatsPage = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* 管理员额外显示按用户/供应商统计 */}
+      {isAdmin && (
+        <Row gutter={[20, 20]} style={{ marginBottom: 20 }}>
+          <Col xs={24} lg={12}>
+            <Card 
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <TeamOutlined style={{ color: '#3B82F6' }} />
+                  <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>按用户统计</span>
+                </div>
+              }
+              loading={loading}
+              style={{ background: 'rgba(17, 24, 39, 0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 16 }}
+            >
+              <Table dataSource={stats?.by_user || []} columns={userColumns} rowKey="user_id" pagination={false} size="small" />
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card 
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <ApiOutlined style={{ color: '#10B981' }} />
+                  <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>按供应商统计</span>
+                </div>
+              }
+              loading={loading}
+              style={{ background: 'rgba(17, 24, 39, 0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 16 }}
+            >
+              <Table dataSource={stats?.by_provider || []} columns={providerColumns} rowKey="provider" pagination={false} size="small" />
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       {/* 按模型统计 + 每日趋势 */}
       <Row gutter={[20, 20]}>
