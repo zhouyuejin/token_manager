@@ -13,3 +13,16 @@ from app.schemas.stats import (
     UsageStats, ModelUsage, DailyUsage, 
     UsageStatsResponse, UsageQuery
 )
+from app.schemas.chat import (
+    ChatMessageCreate,
+    ChatMessageResponse,
+    ChatMessageListResponse,
+    ChatConversationCreate,
+    ChatConversationUpdate,
+    ChatConversationResponse,
+    ChatConversationListResponse,
+    ChatSendMessageRequest,
+    ChatSendMessageResponse,
+    ModelGroupInfo,
+    AvailableModelsResponse
+)

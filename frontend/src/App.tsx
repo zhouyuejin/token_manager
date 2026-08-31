@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import ApiKeys from './pages/ApiKeys'
 import Stats from './pages/Stats'
 import Settings from './pages/Settings'
+import Chat from './pages/Chat'
 import AdminUsers from './pages/admin/Users'
 import AdminProviders from './pages/admin/Providers'
 import AdminModels from './pages/admin/Models'
@@ -33,6 +34,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="api-keys" element={<ApiKeys />} />
+        <Route path="chat" element={<Chat />} />
         <Route path="stats" element={<Stats />} />
         <Route path="settings" element={<Settings />} />
         
