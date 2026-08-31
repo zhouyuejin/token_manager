@@ -33,19 +33,25 @@ const formatRemainTime = (ms: number): string => {
   return `${seconds}秒`
 }
 
-// 计算用量数据
+// 计算用量数据 - 展示第一个模型的数据（与详情保持一致）
 const calcQuotaStats = (quota: any) => {
   if (!quota) return null
   const modelRemains = quota.hourly?.raw_data?.model_remains || []
   if (modelRemains.length === 0) return null
   
-  const hourlyTotal = modelRemains.reduce((sum: number, m: any) => sum + (m.current_interval_total_count || 0), 0)
-  const hourlyRemainPercent = modelRemains.reduce((sum: number, m: any) => sum + (m.current_interval_remaining_percent || 0), 0) / modelRemains.length
+  // 取第一个模型的数据
+  const m = modelRemains[0]
+  
+  const hourlyTotal = m.current_interval_total_count || 0
+  const hourlyRemainPercent = m.current_interval_remaining_percent || 0
   const hourlyUsedPercent = 100 - hourlyRemainPercent
   
-  const weeklyTotal = modelRemains.reduce((sum: number, m: any) => sum + (m.current_weekly_total_count || 0), 0)
-  const weeklyRemainPercent = modelRemains.reduce((sum: number, m: any) => sum + (m.current_weekly_remaining_percent || 0), 0) / modelRemains.length
+  const weeklyTotal = m.current_weekly_total_count || 0
+  const weeklyRemainPercent = m.current_weekly_remaining_percent || 0
   const weeklyUsedPercent = 100 - weeklyRemainPercent
+  
+  const hourlyRemainTime = m.remains_time || 0
+  const weeklyRemainTime = m.weekly_remains_time || 0
   
   return {
     modelRemains,
@@ -54,7 +60,9 @@ const calcQuotaStats = (quota: any) => {
     hourlyUsedPercent,
     weeklyTotal,
     weeklyRemainPercent,
-    weeklyUsedPercent
+    weeklyUsedPercent,
+    hourlyRemainTime,
+    weeklyRemainTime
   }
 }
 
@@ -148,25 +156,28 @@ const ProvidersPage = () => {
     })
   }
 
-  // 渲染用量进度条
-  const renderQuotaProgress = (usedPercent: number, remainPercent: number, total: number) => {
+  // 渲染用量进度条 - 显示剩余百分比
+  const renderQuotaProgress = (usedPercent: number, remainPercent: number, total: number, remainTime: number) => {
     if (usedPercent === 0 && remainPercent === 0 && total === 0) {
       return <span style={{ color: '#64748B', fontSize: 12 }}>暂无数据</span>
     }
     return (
-      <div style={{ minWidth: 180 }}>
+      <div style={{ minWidth: 200 }}>
         <Progress 
-          percent={Math.round(usedPercent)} 
+          percent={Math.round(remainPercent)} 
           size="small"
-          status={usedPercent > 90 ? 'exception' : 'normal'}
+          status={remainPercent < 10 ? 'exception' : 'normal'}
           strokeColor={{
-            '0%': '#2563EB',
+            '0%': '#10B981',
             '100%': '#3B82F6',
           }}
           trailColor="rgba(30, 41, 59, 0.8)"
         />
-        <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
-          已用 {Math.round(usedPercent)}% · 剩余 {Math.round(remainPercent)}% · 共 {total} 次
+        <div style={{ fontSize: 11, color: '#10B981', marginTop: 4, fontWeight: 600 }}>
+          当前剩余 {Math.round(remainPercent)}%
+        </div>
+        <div style={{ fontSize: 11, color: '#94A3B8' }}>
+          剩余时间 {formatRemainTime(remainTime)}
         </div>
       </div>
     )
@@ -234,7 +245,7 @@ const ProvidersPage = () => {
               render: (_: any, record: Provider) => {
                 const stats = calcQuotaStats(quotas[record.provider_id])
                 if (!stats) return <span style={{ color: '#64748B' }}>-</span>
-                return renderQuotaProgress(stats.hourlyUsedPercent, stats.hourlyRemainPercent, stats.hourlyTotal)
+                return renderQuotaProgress(stats.hourlyUsedPercent, stats.hourlyRemainPercent, stats.hourlyTotal, stats.hourlyRemainTime)
               }
             },
             { 
@@ -243,7 +254,7 @@ const ProvidersPage = () => {
               render: (_: any, record: Provider) => {
                 const stats = calcQuotaStats(quotas[record.provider_id])
                 if (!stats) return <span style={{ color: '#64748B' }}>-</span>
-                return renderQuotaProgress(stats.weeklyUsedPercent, stats.weeklyRemainPercent, stats.weeklyTotal)
+                return renderQuotaProgress(stats.weeklyUsedPercent, stats.weeklyRemainPercent, stats.weeklyTotal, stats.weeklyRemainTime)
               }
             },
             { 
