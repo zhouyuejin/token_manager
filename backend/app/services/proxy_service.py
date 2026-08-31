@@ -67,28 +67,44 @@ class ProxyService:
         
         return {"allowed": True}
     
-    def get_model_mapping(self, model_id: str) -> Optional[ModelMapping]:
-        """获取模型映射"""
-        # 先精确匹配
-        mapping = self.db.query(ModelMapping).filter(
-            ModelMapping.model_id == model_id,
-            ModelMapping.status == "active"
-        ).first()
-        
-        if mapping:
-            return mapping
-        
-        # 再匹配别名
-        mappings = self.db.query(ModelMapping).filter(
+    def get_model_mapping(self, model_id: str, provider_id: str = None) -> Optional[ModelMapping]:
+        """
+        获取模型映射
+        如果指定了 provider_id，则只从该供应商的 enabled_models 中查找
+        """
+        # 先获取所有活跃的映射
+        all_mappings = self.db.query(ModelMapping).filter(
             ModelMapping.status == "active"
         ).all()
         
-        for m in mappings:
+        # 获取该供应商启用的模型列表
+        enabled_model_ids = None
+        if provider_id:
+            provider = self.get_provider(provider_id)
+            if provider and provider.enabled_models:
+                try:
+                    enabled_model_ids = json.loads(provider.enabled_models) if isinstance(provider.enabled_models, str) else provider.enabled_models
+                except:
+                    enabled_model_ids = None
+        
+        # 先精确匹配 model_id
+        for m in all_mappings:
+            if m.model_id == model_id:
+                # 如果指定了 provider_id 且有 enabled_models 配置，检查是否在列表中
+                if enabled_model_ids is not None and m.model_id not in enabled_model_ids:
+                    return None
+                return m
+        
+        # 再匹配别名
+        for m in all_mappings:
             aliases = m.aliases
             if aliases:
                 try:
                     alias_list = json.loads(aliases) if isinstance(aliases, str) else aliases
                     if model_id in alias_list:
+                        # 如果指定了 provider_id 且有 enabled_models 配置，检查是否在列表中
+                        if enabled_model_ids is not None and m.model_id not in enabled_model_ids:
+                            return None
                         return m
                 except:
                     pass
