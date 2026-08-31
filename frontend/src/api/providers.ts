@@ -27,6 +27,7 @@ export interface ProviderQuota {
     percent: number
     reset_at: string
     last_sync: string
+    raw_data: any
   }
   weekly: {
     limit: number
@@ -35,6 +36,7 @@ export interface ProviderQuota {
     percent: number
     reset_at: string
     last_sync: string
+    raw_data: any
   }
 }
 
