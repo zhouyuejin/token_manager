@@ -300,7 +300,8 @@ async def list_providers(
                 sync_enabled=bool(p.sync_enabled) if p.sync_enabled else False,
                 sync_interval=p.sync_interval or 300,
                 last_sync_at=p.last_sync_at,
-                quota_config=json.loads(p.quota_config) if p.quota_config else None
+                quota_config=json.loads(p.quota_config) if p.quota_config else None,
+                enabled_models=json.loads(p.enabled_models) if p.enabled_models else None
             )
             for p in providers
         ]
@@ -328,6 +329,7 @@ async def create_provider(
         quota_hourly=provider_data.quota_hourly,
         quota_weekly=provider_data.quota_weekly,
         quota_config=json.dumps(provider_data.quota_config.model_dump()) if provider_data.quota_config else None,
+        enabled_models=json.dumps(provider_data.enabled_models) if provider_data.enabled_models else None,
         status=ProviderStatus.active
     )
     
@@ -368,6 +370,14 @@ async def create_provider(
         ip_address=ip_address,
     )
     
+    # 解析 enabled_models
+    enabled_models_list = []
+    if provider.enabled_models:
+        try:
+            enabled_models_list = json.loads(provider.enabled_models) if isinstance(provider.enabled_models, str) else provider.enabled_models
+        except:
+            enabled_models_list = []
+    
     return ProviderResponse(
         provider_id=provider.provider_id,
         name=provider.name,
@@ -378,6 +388,7 @@ async def create_provider(
         status=provider.status.value,
         health_status=provider.health_status.value if provider.health_status else "healthy",
         last_check_at=provider.last_check_at,
+        enabled_models=enabled_models_list,
         quota_hourly=provider.quota_hourly,
         quota_weekly=provider.quota_weekly,
         sync_enabled=bool(provider.sync_enabled) if provider.sync_enabled else False,
@@ -439,6 +450,9 @@ async def update_provider(
     if provider_data.quota_config is not None:
         changed["quota_config"] = provider_data.quota_config.model_dump()
         provider.quota_config = json.dumps(provider_data.quota_config.model_dump())
+    if provider_data.enabled_models is not None:
+        changed["enabled_models"] = provider_data.enabled_models
+        provider.enabled_models = json.dumps(provider_data.enabled_models) if provider_data.enabled_models else None
     
     db.commit()
     
@@ -694,10 +708,16 @@ async def list_models(
             ModelMappingResponse(
                 model_id=m.model_id,
                 display_name=m.display_name,
+                description=m.description,
                 provider_id=m.provider_id,
                 provider_model=m.provider_model,
                 aliases=m.aliases,
-                status=m.status.value
+                price_type=m.price_type.value if m.price_type else "token",
+                price_per_1k_input=float(m.price_per_1k_input) if m.price_per_1k_input else 0,
+                price_per_1k_output=float(m.price_per_1k_output) if m.price_per_1k_output else 0,
+                price_per_request=float(m.price_per_request) if m.price_per_request else 0,
+                status=m.status.value if m.status else "active",
+                created_at=m.created_at
             )
             for m in models
         ]
@@ -727,12 +747,19 @@ async def create_model_mapping(
     if existing:
         raise HTTPException(status_code=400, detail="模型ID已存在")
     
+    from app.models.model_mapping import PriceType
+    
     mapping = ModelMapping(
         model_id=model_id,
         display_name=model_data.display_name,
+        description=model_data.description,
         provider_id=model_data.provider_id,
         provider_model=model_data.provider_model,
-        aliases=model_data.aliases,
+        aliases=json.dumps(model_data.aliases) if model_data.aliases else None,
+        price_type=PriceType(model_data.price_type) if model_data.price_type else PriceType.token,
+        price_per_1k_input=model_data.price_per_1k_input or 0,
+        price_per_1k_output=model_data.price_per_1k_output or 0,
+        price_per_request=model_data.price_per_request or 0,
         status=ModelMappingStatus(model_data.status) if model_data.status else ModelMappingStatus.active
     )
     
@@ -751,7 +778,9 @@ async def create_model_mapping(
             "display_name": mapping.display_name,
             "provider_id": mapping.provider_id,
             "provider_model": mapping.provider_model,
-            "aliases": mapping.aliases,
+            "price_type": mapping.price_type.value,
+            "price_per_1k_input": float(mapping.price_per_1k_input),
+            "price_per_1k_output": float(mapping.price_per_1k_output),
         },
         ip_address=ip_address,
     )
@@ -759,9 +788,14 @@ async def create_model_mapping(
     return ModelMappingResponse(
         model_id=mapping.model_id,
         display_name=mapping.display_name,
+        description=mapping.description,
         provider_id=mapping.provider_id,
         provider_model=mapping.provider_model,
         aliases=mapping.aliases,
+        price_type=mapping.price_type.value if mapping.price_type else "token",
+        price_per_1k_input=float(mapping.price_per_1k_input) if mapping.price_per_1k_input else 0,
+        price_per_1k_output=float(mapping.price_per_1k_output) if mapping.price_per_1k_output else 0,
+        price_per_request=float(mapping.price_per_request) if mapping.price_per_request else 0,
         status=mapping.status.value,
         created_at=mapping.created_at
     )
@@ -784,10 +818,15 @@ async def update_model_mapping(
     if not mapping:
         raise HTTPException(status_code=404, detail="模型映射不存在")
     
+    from app.models.model_mapping import PriceType
+    
     changed = {}
     if model_data.display_name is not None:
         changed["display_name"] = model_data.display_name
         mapping.display_name = model_data.display_name
+    if model_data.description is not None:
+        changed["description"] = model_data.description
+        mapping.description = model_data.description
     if model_data.provider_id is not None:
         changed["provider_id"] = model_data.provider_id
         mapping.provider_id = model_data.provider_id
@@ -796,7 +835,19 @@ async def update_model_mapping(
         mapping.provider_model = model_data.provider_model
     if model_data.aliases is not None:
         changed["aliases"] = model_data.aliases
-        mapping.aliases = model_data.aliases
+        mapping.aliases = json.dumps(model_data.aliases) if model_data.aliases else None
+    if model_data.price_type is not None:
+        changed["price_type"] = model_data.price_type
+        mapping.price_type = PriceType(model_data.price_type)
+    if model_data.price_per_1k_input is not None:
+        changed["price_per_1k_input"] = model_data.price_per_1k_input
+        mapping.price_per_1k_input = model_data.price_per_1k_input
+    if model_data.price_per_1k_output is not None:
+        changed["price_per_1k_output"] = model_data.price_per_1k_output
+        mapping.price_per_1k_output = model_data.price_per_1k_output
+    if model_data.price_per_request is not None:
+        changed["price_per_request"] = model_data.price_per_request
+        mapping.price_per_request = model_data.price_per_request
     if model_data.status is not None:
         changed["status"] = model_data.status
         mapping.status = ModelMappingStatus(model_data.status)
@@ -854,11 +905,13 @@ async def delete_model_mapping(
 @router.get("/providers/{provider_id}/models")
 async def get_provider_models(
     provider_id: str,
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin)
 ):
     """
-    获取供应商已同步的模型列表
+    获取供应商的模型映射列表（分页）
     """
     provider = db.query(Provider).filter(
         Provider.provider_id == provider_id
@@ -867,15 +920,33 @@ async def get_provider_models(
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     
-    from app.services.model_sync_service import create_model_sync_service
-    sync_service = create_model_sync_service(db)
-    models = sync_service.get_provider_models(provider)
+    # 查询该供应商的模型映射
+    query = db.query(ModelMapping).filter(ModelMapping.provider_id == provider_id)
+    
+    # 获取总数
+    total = query.count()
+    
+    # 分页
+    offset = (page - 1) * page_size
+    models = query.order_by(ModelMapping.created_at.desc()).offset(offset).limit(page_size).all()
     
     return {
         "provider_id": provider.provider_id,
         "provider_name": provider.name,
-        "models": [m.to_dict() for m in models],
-        "last_sync_at": provider.last_models_sync_at.isoformat() if provider.last_models_sync_at else None
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "model_id": m.model_id,
+                "display_name": m.display_name,
+                "provider_model": m.provider_model,
+                "status": m.status.value if m.status else "active",
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+            }
+            for m in models
+        ]
     }
 
 
