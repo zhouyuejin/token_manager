@@ -610,7 +610,8 @@ async def _stream_generator(
     content = ""
     
     try:
-        for chunk in proxy_service.forward_stream_request(provider, model_mapping, request_data):
+        stream_generator, _ = proxy_service.forward_stream_request(provider, model_mapping, request_data)
+        for chunk in stream_generator:
             # 解析chunk，提取内容
             if chunk.startswith("data: "):
                 data_str = chunk[6:]
