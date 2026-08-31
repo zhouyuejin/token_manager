@@ -160,13 +160,34 @@ class ProxyService:
                 
                 latency_ms = int((time.time() - start_time) * 1000)
                 
-                return {
-                    "success": True,
-                    "status_code": response.status_code,
-                    "data": response.json() if response.text else {},
-                    "latency_ms": latency_ms,
-                    "error": None
-                }
+                # 检查响应状态码
+                if response.status_code == 200:
+                    return {
+                        "success": True,
+                        "status_code": response.status_code,
+                        "data": response.json() if response.text else {},
+                        "latency_ms": latency_ms,
+                        "error": None
+                    }
+                else:
+                    # 处理错误响应
+                    error_msg = f"HTTP {response.status_code}"
+                    try:
+                        error_data = response.json()
+                        if isinstance(error_data, dict):
+                            error_msg = error_data.get("error", {}).get("message") or \
+                                       error_data.get("message") or \
+                                       error_data.get("detail") or \
+                                       error_msg
+                    except:
+                        pass
+                    return {
+                        "success": False,
+                        "status_code": response.status_code,
+                        "data": {},
+                        "latency_ms": latency_ms,
+                        "error": error_msg
+                    }
                 
         except httpx.TimeoutException:
             latency_ms = int((time.time() - start_time) * 1000)
@@ -209,6 +230,21 @@ class ProxyService:
         try:
             with httpx.Client(timeout=provider.timeout) as client:
                 with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
+                    # 检查响应状态码
+                    if response.status_code != 200:
+                        error_msg = f"HTTP {response.status_code}"
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get("error", {}).get("message") or \
+                                       error_data.get("message") or \
+                                       error_data.get("detail") or \
+                                       error_msg
+                        except:
+                            pass
+                        yield f'data: {{"error": "{error_msg}"}}\n\n'
+                        yield "data: [DONE]\n\n"
+                        return
+                    
                     for chunk in response.iter_lines():
                         if chunk:
                             yield chunk

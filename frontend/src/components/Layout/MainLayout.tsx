@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Avatar, Dropdown, MenuProps, Badge, Tooltip } from 'antd'
 import {
   DashboardOutlined,
+  MessageOutlined,
   KeyOutlined,
   BarChartOutlined,
   SettingOutlined,
@@ -32,6 +33,7 @@ const getPageTitle = (pathname: string): string => {
   const map: Record<string, string> = {
     '/dashboard': '仪表盘',
     '/api-keys': 'API Key 管理',
+    '/chat': 'AI 对话',
     '/stats': '用量统计',
     '/admin/users': '用户管理',
     '/admin/providers': '供应商管理',
@@ -84,6 +86,7 @@ const MainLayout = () => {
   const menuItems: MenuProps['items'] = [
     { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
     { key: '/api-keys', icon: <KeyOutlined />, label: 'API Key' },
+    { key: '/chat', icon: <MessageOutlined />, label: 'AI 对话' },
     { key: '/stats', icon: <BarChartOutlined />, label: '用量统计' },
     ...(isAdmin
       ? [
