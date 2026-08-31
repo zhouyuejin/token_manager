@@ -4,7 +4,6 @@ import { useAuthStore } from './store/auth'
 import MainLayout from './components/Layout/MainLayout'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import Dashboard from './pages/Dashboard'
 import ApiKeys from './pages/ApiKeys'
 import Stats from './pages/Stats'
 import Settings from './pages/Settings'
@@ -26,16 +25,15 @@ function App() {
   return (
     <Routes>
       {/* 公开路由 */}
-      <Route path="/login" element={!token ? <Login /> : <Navigate to="/dashboard" />} />
-      <Route path="/register" element={!token ? <Register /> : <Navigate to="/dashboard" />} />
+      <Route path="/login" element={!token ? <Login /> : <Navigate to="/stats" />} />
+      <Route path="/register" element={!token ? <Register /> : <Navigate to="/stats" />} />
       
       {/* 受保护路由 */}
       <Route path="/" element={token ? <MainLayout /> : <Navigate to="/login" />}>
-        <Route index element={<Navigate to="/dashboard" />} />
-        <Route path="dashboard" element={<Dashboard />} />
+        <Route index element={<Navigate to="/stats" />} />
+        <Route path="stats" element={<Stats />} />
         <Route path="api-keys" element={<ApiKeys />} />
         <Route path="chat" element={<Chat />} />
-        <Route path="stats" element={<Stats />} />
         <Route path="settings" element={<Settings />} />
         
         {/* 管理员路由 */}

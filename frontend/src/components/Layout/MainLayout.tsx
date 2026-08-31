@@ -34,7 +34,7 @@ const getPageTitle = (pathname: string): string => {
     '/dashboard': '仪表盘',
     '/api-keys': 'API Key 管理',
     '/chat': 'AI 对话',
-    '/stats': '用量统计',
+    '/stats': '仪表盘',
     '/admin/users': '用户管理',
     '/admin/providers': '供应商管理',
     '/admin/models': '模型管理',
@@ -84,10 +84,9 @@ const MainLayout = () => {
   const isAdmin = user?.role === 'admin'
 
   const menuItems: MenuProps['items'] = [
-    { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
+    { key: '/stats', icon: <DashboardOutlined />, label: '仪表盘' },
     { key: '/api-keys', icon: <KeyOutlined />, label: 'API Key' },
     { key: '/chat', icon: <MessageOutlined />, label: 'AI 对话' },
-    { key: '/stats', icon: <BarChartOutlined />, label: '用量统计' },
     ...(isAdmin
       ? [
           {
