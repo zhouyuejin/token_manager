@@ -108,7 +108,7 @@ const Login = () => {
     try {
       await login({ username, password })
       message.success('登录成功')
-      navigate('/dashboard')
+      navigate('/stats')
     } catch (error) {
       // 错误已在请求拦截器中处理
     }

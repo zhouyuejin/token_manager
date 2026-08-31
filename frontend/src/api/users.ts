@@ -9,6 +9,7 @@ export interface User {
   quota: number
   quota_used: number
   created_at: string
+  model_group_ids: string[]
 }
 
 export interface CreateUserParams {
@@ -17,6 +18,7 @@ export interface CreateUserParams {
   password: string
   role?: string
   quota?: number
+  model_group_ids?: string[]
 }
 
 export const getUsers = (params?: {
@@ -33,6 +35,7 @@ export const updateUser = (userId: string, data: {
   quota?: number
   status?: string
   role?: string
+  model_group_ids?: string[]
 }) => put(`/admin/users/${userId}`, data)
 
 export const deleteUser = (userId: string) => del(`/admin/users/${userId}`)

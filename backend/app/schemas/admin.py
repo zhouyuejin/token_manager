@@ -15,6 +15,7 @@ class AdminUserCreate(BaseModel):
     password: str = Field(..., min_length=8)
     role: str = "user"
     quota: int = 0
+    model_group_ids: List[str] = Field(default_factory=list)
 
 
 class AdminUserUpdate(BaseModel):
@@ -22,6 +23,7 @@ class AdminUserUpdate(BaseModel):
     role: Optional[str] = None
     status: Optional[str] = None
     quota: Optional[int] = None
+    model_group_ids: Optional[List[str]] = None
 
 
 class AdminUserResponse(BaseModel):
@@ -34,6 +36,7 @@ class AdminUserResponse(BaseModel):
     quota: int
     quota_used: int
     created_at: datetime
+    model_group_ids: List[str] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
