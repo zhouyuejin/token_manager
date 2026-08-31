@@ -2,6 +2,7 @@
 管理后台接口
 """
 import secrets
+import json
 from typing import Optional
 from datetime import datetime
 from sqlalchemy import func, and_
@@ -301,7 +302,8 @@ async def list_providers(
                 sync_interval=p.sync_interval or 300,
                 last_sync_at=p.last_sync_at,
                 quota_config=json.loads(p.quota_config) if p.quota_config else None,
-                enabled_models=json.loads(p.enabled_models) if p.enabled_models else None
+                enabled_models=json.loads(p.enabled_models) if p.enabled_models else None,
+                models=json.loads(p.models) if p.models else None
             )
             for p in providers
         ]

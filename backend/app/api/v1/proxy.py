@@ -160,19 +160,28 @@ async def chat_completions(
     if not provider:
         raise HTTPException(status_code=500, detail="供应商不可用")
     
-    # 3. 检查额度
+    # 3. 检查该模型是否在供应商的 enabled_models 列表中（如果配置了的话）
+    if provider.enabled_models:
+        try:
+            enabled_models = json.loads(provider.enabled_models) if isinstance(provider.enabled_models, str) else provider.enabled_models
+            if model_mapping.model_id not in enabled_models:
+                raise HTTPException(status_code=403, detail=f"该模型未在此供应商上启用")
+        except:
+            pass  # 如果解析失败，跳过检查
+    
+    # 4. 检查额度
     # 估算token数量（简化处理）
     estimated_tokens = 1000
     quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
         raise HTTPException(status_code=403, detail=quota_check["message"])
     
-    # 4. 构建请求数据
+    # 5. 构建请求数据
     request_data = chat_request.model_dump(exclude={"stream"})
     # 移除None值
     request_data = {k: v for k, v in request_data.items() if v is not None}
     
-    # 5. 转发请求
+    # 6. 转发请求
     if chat_request.stream:
         # 流式响应
         return StreamingResponse(
@@ -183,13 +192,13 @@ async def chat_completions(
         # 普通响应
         result = proxy_service.forward_request(provider, model_mapping, request_data)
         
-        # 6. 计算token数量
+        # 7. 计算token数量
         tokens = proxy_service.calculate_tokens(
             request_data,
             result["data"] if result["success"] else None
         )
         
-        # 7. 记录用量
+        # 8. 记录用量
         proxy_service.record_usage(
             user_id=user.user_id,
             key_id=api_key.key_id,
@@ -201,11 +210,11 @@ async def chat_completions(
             error_message=result["error"]
         )
         
-        # 8. 如果成功，扣减额度
+        # 9. 如果成功，扣减额度
         if result["success"] and result["status_code"] == 200:
             proxy_service.deduct_quota(user, api_key, tokens)
         
-        # 9. 返回响应
+        # 10. 返回响应
         if not result["success"]:
             raise HTTPException(
                 status_code=result["status_code"],

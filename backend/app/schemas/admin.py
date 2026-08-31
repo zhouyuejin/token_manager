@@ -111,7 +111,7 @@ class ProviderResponse(BaseModel):
     last_sync_at: Optional[datetime] = None
     quota_config: Optional[QuotaConfig] = None
     enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
-    models: Optional[List[str]] = None  # 兼容旧字段
+    models: Optional[List[dict]] = None  # 兼容旧字段
 
     class Config:
         from_attributes = True

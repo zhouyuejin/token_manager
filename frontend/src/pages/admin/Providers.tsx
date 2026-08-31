@@ -283,14 +283,6 @@ const ProvidersPage = () => {
         </h2>
         <Space>
           <Button 
-            icon={<SyncOutlined />} 
-            onClick={handleSyncAllModels}
-            loading={syncLoading === 'all'}
-            style={{ borderRadius: 10 }}
-          >
-            批量拉取模型
-          </Button>
-          <Button 
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={() => setCreateModalVisible(true)}
@@ -343,8 +335,6 @@ const ProvidersPage = () => {
               render: (_: any, record: Provider) => (
                 <Space>
                   <Button type="text" icon={<SettingOutlined />} onClick={() => openConfigModal(record)} style={{ color: '#10B981' }}>用量配置</Button>
-                  <Button type="text" icon={<CloudOutlined />} onClick={() => handleViewModels(record)} style={{ color: '#8B5CF6' }}>模型</Button>
-                  <Button type="text" icon={<SyncOutlined />} onClick={() => handleSyncModels(record.provider_id)} style={{ color: '#F59E0B' }}>拉取</Button>
                   <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
                   <Popconfirm title="确认删除此供应商？" onConfirm={() => handleDelete(record.provider_id)}>
                     <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>

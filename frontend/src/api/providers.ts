@@ -14,7 +14,7 @@ export interface Provider {
   quota_type: string
   quota_hourly: number
   quota_weekly: number
-  models: string[]
+  models: { model_id: string; name: string; owned_by: string }[]
   // 同步配置
   sync_enabled: boolean
   sync_interval: number  // 单位：秒
