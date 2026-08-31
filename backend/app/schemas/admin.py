@@ -63,6 +63,8 @@ class ProviderCreate(BaseModel):
     timeout: int = 60
     quota_hourly: int = 0
     quota_weekly: int = 0
+    sync_enabled: bool = False
+    sync_interval: int = 300  # 默认5分钟
 
 
 class ProviderUpdate(BaseModel):
@@ -76,6 +78,8 @@ class ProviderUpdate(BaseModel):
     status: Optional[str] = None
     quota_hourly: Optional[int] = None
     quota_weekly: Optional[int] = None
+    sync_enabled: Optional[bool] = None
+    sync_interval: Optional[int] = None
 
 
 class ProviderResponse(BaseModel):
@@ -91,6 +95,9 @@ class ProviderResponse(BaseModel):
     last_check_at: Optional[datetime]
     quota_hourly: int
     quota_weekly: int
+    sync_enabled: bool = False
+    sync_interval: int = 300
+    last_sync_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

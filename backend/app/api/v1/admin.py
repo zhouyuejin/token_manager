@@ -330,6 +330,20 @@ async def create_provider(
     db.commit()
     db.refresh(provider)
     
+    # 更新同步任务
+    try:
+        from app.services.scheduler_service import update_provider_sync_job
+        interval_seconds = provider_data.sync_interval or 300
+        if provider_data.sync_enabled:
+            update_provider_sync_job(
+                provider.provider_id,
+                provider.name,
+                provider_data.sync_enabled,
+                interval_seconds
+            )
+    except Exception as e:
+        logger.warning(f"更新同步任务失败: {e}")
+    
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,
@@ -360,7 +374,10 @@ async def create_provider(
         health_status=provider.health_status.value if provider.health_status else "healthy",
         last_check_at=provider.last_check_at,
         quota_hourly=provider.quota_hourly,
-        quota_weekly=provider.quota_weekly
+        quota_weekly=provider.quota_weekly,
+        sync_enabled=bool(provider.sync_enabled) if provider.sync_enabled else False,
+        sync_interval=provider.sync_interval or 300,
+        last_sync_at=provider.last_sync_at
     )
 
 
@@ -407,8 +424,29 @@ async def update_provider(
     if provider_data.quota_weekly is not None:
         changed["quota_weekly"] = provider_data.quota_weekly
         provider.quota_weekly = provider_data.quota_weekly
+    if provider_data.sync_enabled is not None:
+        changed["sync_enabled"] = provider_data.sync_enabled
+        provider.sync_enabled = 1 if provider_data.sync_enabled else 0
+    if provider_data.sync_interval is not None:
+        changed["sync_interval"] = provider_data.sync_interval
+        provider.sync_interval = provider_data.sync_interval
     
     db.commit()
+    
+    # 更新同步任务
+    try:
+        from app.services.scheduler_service import update_provider_sync_job
+        if provider_data.sync_enabled is not None or provider_data.sync_interval is not None:
+            sync_enabled = provider_data.sync_enabled if provider_data.sync_enabled is not None else (provider.sync_enabled == 1)
+            sync_interval = provider_data.sync_interval if provider_data.sync_interval is not None else (provider.sync_interval or 300)
+            update_provider_sync_job(
+                provider.provider_id,
+                provider.name,
+                sync_enabled,
+                sync_interval
+            )
+    except Exception as e:
+        logger.warning(f"更新同步任务失败: {e}")
     
     ip_address = extract_client_ip(request)
     record_operation(
