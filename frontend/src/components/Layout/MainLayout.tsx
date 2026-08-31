@@ -35,7 +35,7 @@ const getPageTitle = (pathname: string): string => {
     '/stats': '用量统计',
     '/admin/users': '用户管理',
     '/admin/providers': '供应商管理',
-    '/admin/models': '模型映射',
+    '/admin/models': '模型管理',
     '/admin/model-groups': '模型分组',
     '/admin/logs/operations': '操作日志',
     '/admin/logs/logins': '登录日志',
@@ -94,7 +94,7 @@ const MainLayout = () => {
             children: [
               { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
               { key: '/admin/providers', icon: <CloudOutlined />, label: '供应商管理' },
-              { key: '/admin/models', icon: <AppstoreOutlined />, label: '模型映射' },
+              { key: '/admin/models', icon: <AppstoreOutlined />, label: '模型管理' },
               { key: '/admin/model-groups', icon: <UnorderedListOutlined />, label: '模型分组' },
               { key: '/admin/logs/operations', icon: <FileSearchOutlined />, label: '操作日志' },
               { key: '/admin/logs/logins', icon: <LoginOutlined />, label: '登录日志' },

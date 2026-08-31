@@ -19,6 +19,8 @@ export interface Provider {
   sync_enabled: boolean
   sync_interval: number  // 单位：秒
   last_sync_at: string
+  // 启用的模型映射ID列表
+  enabled_models?: string[]
   // 自定义用量查询配置（不同供应商查询方式不同）
   quota_config?: {
     // 查询的模型名称（某些供应商需要指定模型查询用量）
@@ -81,11 +83,16 @@ export const updateProviderQuota = (providerId: string, data: {
   quota_config?: Provider['quota_config']
 }) => put(`/admin/providers/${providerId}/quota`, data)
 
-// 模型同步
-export const getProviderModels = (providerId: string) =>
-  get<{ provider_id: string; provider_name: string; models: any[]; last_sync_at: string }>(
-    `/admin/providers/${providerId}/models`
-  )
+// 模型同步（分页）
+export const getProviderModels = (providerId: string, page: number = 1, pageSize: number = 20) =>
+  get<{ 
+    provider_id: string; 
+    provider_name: string; 
+    total: number;
+    page: number;
+    page_size: number;
+    items: any[] 
+  }>(`/admin/providers/${providerId}/models`, { params: { page, page_size: pageSize } })
 
 export const syncProviderModels = (providerId: string) =>
   post<{ success: boolean; count: number; models: any[]; message: string }>(

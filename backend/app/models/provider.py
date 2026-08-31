@@ -75,6 +75,10 @@ class Provider(Base):
     models = Column(Text, nullable=True, comment="同步到的模型列表(JSON数组)")
     last_models_sync_at = Column(DateTime, nullable=True, comment="最后模型同步时间")
     
+    # 启用的模型映射ID列表(JSON格式)
+    # 存储该供应商可用的模型映射ID
+    enabled_models = Column(Text, nullable=True, comment="启用的模型映射ID列表(JSON数组)")
+    
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     

@@ -73,6 +73,7 @@ class ProviderCreate(BaseModel):
     sync_enabled: bool = False
     sync_interval: int = 300  # 默认5分钟
     quota_config: Optional[QuotaConfig] = None
+    enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
 
 
 class ProviderUpdate(BaseModel):
@@ -89,6 +90,7 @@ class ProviderUpdate(BaseModel):
     sync_enabled: Optional[bool] = None
     sync_interval: Optional[int] = None
     quota_config: Optional[QuotaConfig] = None
+    enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
 
 
 class ProviderResponse(BaseModel):
@@ -108,6 +110,8 @@ class ProviderResponse(BaseModel):
     sync_interval: int = 300
     last_sync_at: Optional[datetime] = None
     quota_config: Optional[QuotaConfig] = None
+    enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
+    models: Optional[List[str]] = None  # 兼容旧字段
 
     class Config:
         from_attributes = True
@@ -127,8 +131,13 @@ class ModelMappingCreate(BaseModel):
     provider_id: str
     provider_model: str
     display_name: str
-    model_type: str = "chat"
+    description: Optional[str] = None
     aliases: Optional[List[str]] = None
+    # 定价配置
+    price_type: str = "token"  # token 或 request
+    price_per_1k_input: float = 0
+    price_per_1k_output: float = 0
+    price_per_request: float = 0
     status: str = "active"
 
 
@@ -137,7 +146,13 @@ class ModelMappingUpdate(BaseModel):
     provider_id: Optional[str] = None
     provider_model: Optional[str] = None
     display_name: Optional[str] = None
-    model_type: Optional[str] = None
+    description: Optional[str] = None
+    aliases: Optional[List[str]] = None
+    # 定价配置
+    price_type: Optional[str] = None
+    price_per_1k_input: Optional[float] = None
+    price_per_1k_output: Optional[float] = None
+    price_per_request: Optional[float] = None
     status: Optional[str] = None
 
 
@@ -147,7 +162,13 @@ class ModelMappingResponse(BaseModel):
     provider_id: str
     provider_model: str
     display_name: str
+    description: Optional[str] = None
     aliases: Optional[str] = None
+    # 定价配置
+    price_type: str = "token"
+    price_per_1k_input: float = 0
+    price_per_1k_output: float = 0
+    price_per_request: float = 0
     status: str
     created_at: Optional[datetime] = None
 

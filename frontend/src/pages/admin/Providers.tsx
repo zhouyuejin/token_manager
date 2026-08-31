@@ -10,6 +10,7 @@ import {
   getAllProviderQuotas, syncProviderQuota, updateProviderQuota, Provider, 
   getProviderModels, syncProviderModels, syncAllProviderModels
 } from '../../api/providers'
+import { getModels, ModelMapping } from '../../api/models'
 
 
 // 时间格式化
@@ -56,6 +57,9 @@ const ProvidersPage = () => {
   const [modelModalVisible, setModelModalVisible] = useState(false)
   const [selectedProviderModels, setSelectedProviderModels] = useState<any[]>([])
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
+  const [modelPagination, setModelPagination] = useState({ current: 1, pageSize: 20, total: 0 })
+  const [modelLoading, setModelLoading] = useState(false)
+  const [allModels, setAllModels] = useState<ModelMapping[]>([])
   const [form] = Form.useForm()
   const [configForm] = Form.useForm()
   const message = useMessage()
@@ -67,10 +71,12 @@ const ProvidersPage = () => {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [providersRes, quotasRes] = await Promise.all([
+      const [providersRes, quotasRes, modelsRes] = await Promise.all([
         getProviders(),
-        getAllProviderQuotas()
+        getAllProviderQuotas(),
+        getModels()
       ])
+      setAllModels(modelsRes.items || [])
       setProviders(providersRes.items || [])
       
       const quotaMap: Record<string, any> = {}
@@ -129,14 +135,30 @@ const ProvidersPage = () => {
   }
 
   // 查看供应商模型列表
-  const handleViewModels = async (provider: Provider) => {
+  const handleViewModels = async (provider: Provider, page: number = 1) => {
+    setModelLoading(true)
     try {
-      const result = await getProviderModels(provider.provider_id)
-      setSelectedProviderModels(result.models || [])
+      const result = await getProviderModels(provider.provider_id, page, modelPagination.pageSize)
+      setSelectedProviderModels(result.items || [])
       setSelectedProvider(provider)
+      setModelPagination({
+        current: result.page,
+        pageSize: result.page_size,
+        total: result.total
+      })
       setModelModalVisible(true)
     } catch (error) {
       message.error('获取模型列表失败')
+    } finally {
+      setModelLoading(false)
+    }
+  }
+
+  // 分页变化
+  const handleModelPageChange = (page: number, pageSize: number) => {
+    if (selectedProvider) {
+      setModelPagination({ ...modelPagination, current: page, pageSize })
+      handleViewModels(selectedProvider, page)
     }
   }
 
@@ -206,7 +228,10 @@ const ProvidersPage = () => {
   // 打开编辑弹窗
   const openEditModal = (provider: Provider) => {
     setSelectedProvider(provider)
-    form.setFieldsValue(provider)
+    form.setFieldsValue({
+      ...provider,
+      enabled_models: provider.enabled_models || []
+    })
     setEditModalVisible(true)
   }
 
@@ -484,6 +509,18 @@ const ProvidersPage = () => {
               </Form.Item>
             </Col>
           </Row>
+          <Form.Item name="enabled_models" label={<span style={{ color: '#94A3B8' }}>关联模型（可选）</span>}>
+            <Select mode="multiple" placeholder="选择该供应商可用的模型" allowClear>
+              {allModels.filter(m => m.status === 'active').map(m => (
+                <Select.Option key={m.model_id} value={m.model_id}>
+                  {m.display_name || m.model_id} ({m.provider_model})
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <div style={{ padding: 12, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, marginBottom: 16 }}>
+            <div style={{ color: '#3B82F6', fontSize: 12 }}>💡 提示：创建供应商后可手动同步模型，然后在模型管理中添加定价</div>
+          </div>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
               <Button onClick={() => setCreateModalVisible(false)}>取消</Button>
@@ -547,6 +584,15 @@ const ProvidersPage = () => {
               <Select.Option value="disabled">禁用</Select.Option>
             </Select>
           </Form.Item>
+          <Form.Item name="enabled_models" label={<span style={{ color: '#94A3B8' }}>关联模型</span>}>
+            <Select mode="multiple" placeholder="选择该供应商可用的模型" allowClear>
+              {allModels.filter(m => m.status === 'active').map(m => (
+                <Select.Option key={m.model_id} value={m.model_id}>
+                  {m.display_name || m.model_id} ({m.provider_model})
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <div style={{ padding: 12, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, marginBottom: 16 }}>
             <SettingOutlined style={{ marginRight: 8, color: '#3B82F6' }} />
             <span style={{ color: '#3B82F6', fontSize: 13 }}>用量配置请到「用量配置」弹窗设置</span>
@@ -562,34 +608,47 @@ const ProvidersPage = () => {
 
       {/* 模型列表弹窗 */}
       <Modal
-        title={<span style={{ color: '#F8FAFC' }}>{selectedProvider?.name} - 模型列表</span>}
+        title={<span style={{ color: '#F8FAFC' }}>{selectedProvider?.name} - 模型映射列表</span>}
         open={modelModalVisible}
         onCancel={() => { setModelModalVisible(false); setSelectedProvider(null); setSelectedProviderModels([]); }}
         footer={null}
-        width={600}
+        width={800}
       >
-        {selectedProviderModels.length === 0 ? (
+        {selectedProviderModels.length === 0 && !modelLoading ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>
-            暂无可用模型，请先拉取模型列表
+            暂无可用模型，请先在模型映射中添加
           </div>
         ) : (
-          <div style={{ maxHeight: 400, overflow: 'auto' }}>
-            {selectedProviderModels.map((model: any, index: number) => (
-              <div 
-                key={index}
-                style={{
-                  padding: '12px 16px',
-                  marginBottom: 8,
-                  background: 'rgba(30, 41, 59, 0.5)',
-                  borderRadius: 8,
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                }}
-              >
-                <div style={{ color: '#F8FAFC', fontWeight: 500 }}>{model.name || model.model_id}</div>
-                <div style={{ color: '#64748B', fontSize: 12, marginTop: 4 }}>ID: {model.model_id}</div>
-              </div>
-            ))}
-          </div>
+          <Table
+            dataSource={selectedProviderModels}
+            columns={[
+              { title: '平台模型ID', dataIndex: 'model_id', key: 'model_id', render: (t: string) => <span style={{ color: '#F8FAFC' }}>{t}</span> },
+              { title: '显示名称', dataIndex: 'display_name', key: 'display_name', render: (t: string) => <span style={{ color: '#94A3B8' }}>{t || '-'}</span> },
+              { title: '上游模型', dataIndex: 'provider_model', key: 'provider_model', render: (t: string) => <span style={{ color: '#10B981' }}>{t}</span> },
+              { 
+                title: '状态', 
+                dataIndex: 'status', 
+                key: 'status',
+                render: (status: string) => (
+                  <Tag color={status === 'active' ? 'success' : 'default'} style={{ borderRadius: 6 }}>
+                    {status === 'active' ? '启用' : '禁用'}
+                  </Tag>
+                )
+              },
+              { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (t: string) => <span style={{ color: '#64748B', fontSize: 12 }}>{t ? t.substring(0, 19) : '-'}</span> },
+            ]}
+            rowKey="model_id"
+            loading={modelLoading}
+            pagination={{
+              current: modelPagination.current,
+              pageSize: modelPagination.pageSize,
+              total: modelPagination.total,
+              onChange: handleModelPageChange,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total: number) => `共 ${total} 条`
+            }}
+          />
         )}
       </Modal>
     </div>
