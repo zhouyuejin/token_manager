@@ -212,6 +212,26 @@ const ProvidersPage = () => {
                         {quota.weekly?.used?.toLocaleString()} / {quota.weekly?.limit?.toLocaleString()}
                       </div>
                     </div>
+                    
+                    {/* API 原始数据展示 */}
+                    {quota.hourly?.raw_data?.model_remains && (
+                      <div style={{ marginTop: 16, padding: 12, background: 'rgba(15, 23, 42, 0.5)', borderRadius: 8, fontSize: 12 }}>
+                        <div style={{ color: '#94A3B8', marginBottom: 8, fontWeight: 600 }}>API 返回明细</div>
+                        {quota.hourly.raw_data.model_remains.map((item: any, idx: number) => (
+                          <div key={idx} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: idx < quota.hourly.raw_data.model_remains.length - 1 ? '1px solid rgba(148, 163, 184, 0.2)' : 'none' }}>
+                            <div style={{ color: '#3B82F6', marginBottom: 4 }}>模型: {item.model_name || 'unknown'}</div>
+                            <div style={{ color: '#94A3B8' }}>当前周期已用: {item.current_interval_usage_count || 0}</div>
+                            <div style={{ color: '#94A3B8' }}>当前周期总数: {item.current_interval_total_count || 0}</div>
+                            <div style={{ color: '#94A3B8' }}>本周已用: {item.current_weekly_usage_count || 0}</div>
+                            <div style={{ color: '#94A3B8' }}>本周总数: {item.current_weekly_total_count || 0}</div>
+                            <div style={{ color: '#94A3B8' }}>当前周期剩余: {item.current_interval_remaining_percent || 0}%</div>
+                            <div style={{ color: '#94A3B8' }}>本周剩余: {item.current_weekly_remaining_percent || 0}%</div>
+                            <div style={{ color: '#94A3B8' }}>剩余时间(ms): {item.remains_time || 0}</div>
+                            <div style={{ color: '#94A3B8' }}>周剩余时间(ms): {item.weekly_remains_time || 0}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ color: '#64748B', textAlign: 'center', padding: '20px 0' }}>

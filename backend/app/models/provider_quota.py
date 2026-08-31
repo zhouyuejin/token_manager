@@ -1,7 +1,7 @@
 """
 供应商配额模型
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Numeric
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Numeric, Text
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -34,3 +34,4 @@ class ProviderQuota(Base):
     sync_status = Column(Enum(SyncStatus), default=SyncStatus.success, comment="同步状态")
     sync_error = Column(String(500), nullable=True, comment="同步错误信息")
     sync_at = Column(DateTime, nullable=False, comment="同步时间")
+    raw_data = Column(Text, nullable=True, comment="原始API响应数据")

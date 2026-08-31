@@ -21,6 +21,7 @@ class BaseQuotaSyncAdapter(ABC):
     
     @abstractmethod
     async def fetch_quota(self) -> Dict[str, Any]:
+        #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """
         获取配额信息
         返回格式: {
@@ -43,6 +44,7 @@ class VolcengineAdapter(BaseQuotaSyncAdapter):
         return "volcengine"
     
     async def fetch_quota(self) -> Dict[str, Any]:
+        #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取火山方舟用量"""
         # 火山方舟API获取用量
         # 具体实现需要根据火山方舟的API文档
@@ -86,6 +88,7 @@ class OpenAIAdapter(BaseQuotaSyncAdapter):
         return "openai"
     
     async def fetch_quota(self) -> Dict[str, Any]:
+        #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取OpenAI用量"""
         # OpenAI API获取使用量
         url = "https://api.openai.com/v1/usage"
@@ -134,6 +137,7 @@ class AnthropicAdapter(BaseQuotaSyncAdapter):
         return "anthropic"
     
     async def fetch_quota(self) -> Dict[str, Any]:
+        #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取Anthropic用量"""
         # Anthropic API获取使用量
         url = "https://api.anthropic.com/v1/organizations/self/usage"
@@ -175,6 +179,7 @@ class AzureAdapter(BaseQuotaSyncAdapter):
         return "azure"
     
     async def fetch_quota(self) -> Dict[str, Any]:
+        #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取Azure用量"""
         # Azure需要通过Azure Monitor或Usage API获取
         # 这里是一个简化实现
@@ -182,6 +187,63 @@ class AzureAdapter(BaseQuotaSyncAdapter):
             "hourly": {"limit": self.provider.quota_hourly, "used": 0},
             "weekly": {"limit": self.provider.quota_weekly, "used": 0}
         }
+
+
+
+class MinimaxAdapter(BaseQuotaSyncAdapter):
+    """Minimax用量同步适配器"""
+    
+    def get_provider_type(self) -> str:
+        return "minimax"
+    
+    async def fetch_quota(self) -> Dict[str, Any]:
+        """获取Minimax用量"""
+        # Minimax API: GET https://www.minimaxi.com/v1/token_plan/remains
+        url = "https://www.minimaxi.com/v1/token_plan/remains"
+        
+        headers = {
+            "Authorization": f"Bearer {self.provider.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(url, headers=headers)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # 解析 model_remains 获取用量
+                    model_remains = data.get("model_remains", [])
+                    # 当前周期总数
+                    used_hourly = sum(item.get("current_interval_total_count", 0) for item in model_remains)
+                    # 每周总数
+                    used_weekly = sum(item.get("current_weekly_total_count", 0) for item in model_remains)
+                    
+                    return {
+                        "hourly": {
+                            "limit": self.provider.quota_hourly,
+                            "used": used_hourly
+                        },
+                        "weekly": {
+                            "limit": self.provider.quota_weekly,
+                            "used": used_weekly
+                        },
+                        "raw_data": data
+                    }
+                else:
+                    print(f"Minimax用量同步失败: HTTP {response.status_code}")
+        except Exception as e:
+            print(f"Minimax用量同步失败: {e}")
+        
+        # 返回默认值（如果API调用失败）
+        return {
+            "hourly": {"limit": self.provider.quota_hourly, "used": 0},
+            "weekly": {"limit": self.provider.quota_weekly, "used": 0}
+        }
+
+
+    
 
 
 class QuotaSyncService:
@@ -192,6 +254,7 @@ class QuotaSyncService:
         "openai": OpenAIAdapter,
         "anthropic": AnthropicAdapter,
         "azure": AzureAdapter,
+        "minimax": MinimaxAdapter,
     }
     
     def __init__(self, db: Session):
@@ -237,6 +300,7 @@ class QuotaSyncService:
                 hourly_quota.quota_percent = 0
             hourly_quota.sync_at = datetime.now()
             hourly_quota.sync_status = SyncStatus.success
+            hourly_quota.raw_data = json.dumps(quota_data.get("raw_data")) if quota_data.get("raw_data") else None
             
             # 更新周配额
             weekly_quota = self.db.query(ProviderQuota).filter(
@@ -261,6 +325,7 @@ class QuotaSyncService:
                 weekly_quota.quota_percent = 0
             weekly_quota.sync_at = datetime.now()
             weekly_quota.sync_status = SyncStatus.success
+            weekly_quota.raw_data = json.dumps(quota_data.get("raw_data")) if quota_data.get("raw_data") else None
             
             self.db.commit()
             return True

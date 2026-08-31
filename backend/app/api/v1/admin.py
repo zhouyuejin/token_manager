@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole, UserStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
+from app.models.provider_quota import ProviderQuota, QuotaType
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
 from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
@@ -22,6 +23,7 @@ from app.schemas.admin import (
     ModelMappingCreate, ModelMappingUpdate, ModelMappingResponse, ModelMappingListResponse
 )
 from app.services.operation_log_service import record_operation
+from app.services.sync_service import create_sync_service
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
@@ -451,7 +453,6 @@ async def delete_provider(
     
     return {"message": "删除成功"}
 
-
 @router.get("/providers/quotas")
 async def get_all_provider_quotas(
     db: Session = Depends(get_db),
@@ -464,29 +465,56 @@ async def get_all_provider_quotas(
     
     result = []
     for p in providers:
+        # 从 provider_quotas 表获取实际用量
+        hourly_quota = db.query(ProviderQuota).filter(
+            ProviderQuota.provider_id == p.provider_id,
+            ProviderQuota.quota_type == QuotaType.hourly
+        ).first()
+        
+        weekly_quota = db.query(ProviderQuota).filter(
+            ProviderQuota.provider_id == p.provider_id,
+            ProviderQuota.quota_type == QuotaType.weekly
+        ).first()
+        
+        hourly_limit = hourly_quota.quota_limit if hourly_quota else p.quota_hourly
+        hourly_used = hourly_quota.quota_used if hourly_quota else 0
+        hourly_remain = hourly_quota.quota_remain if hourly_quota else p.quota_hourly
+        hourly_percent = float(hourly_quota.quota_percent) if hourly_quota and hourly_quota.quota_percent else 0
+        hourly_sync = hourly_quota.sync_at.isoformat() if hourly_quota and hourly_quota.sync_at else None
+        import json
+        hourly_raw = json.loads(hourly_quota.raw_data) if hourly_quota and hourly_quota.raw_data else None
+        
+        weekly_limit = weekly_quota.quota_limit if weekly_quota else p.quota_weekly
+        weekly_used = weekly_quota.quota_used if weekly_quota else 0
+        weekly_remain = weekly_quota.quota_remain if weekly_quota else p.quota_weekly
+        weekly_percent = float(weekly_quota.quota_percent) if weekly_quota and weekly_quota.quota_percent else 0
+        weekly_sync = weekly_quota.sync_at.isoformat() if weekly_quota and weekly_quota.sync_at else None
+        weekly_raw = json.loads(weekly_quota.raw_data) if weekly_quota and weekly_quota.raw_data else None
+        
         result.append({
             "provider_id": p.provider_id,
             "provider_name": p.name,
             "hourly": {
-                "limit": p.quota_hourly,
-                "used": 0,  # TODO: 从provider_quotas表获取
-                "remain": p.quota_hourly,
-                "percent": 0,
+                "limit": hourly_limit,
+                "used": hourly_used,
+                "remain": hourly_remain,
+                "percent": hourly_percent,
                 "reset_at": None,
-                "last_sync": None
+                "last_sync": hourly_sync,
+                "raw_data": hourly_raw
             },
             "weekly": {
-                "limit": p.quota_weekly,
-                "used": 0,
-                "remain": p.quota_weekly,
-                "percent": 0,
+                "limit": weekly_limit,
+                "used": weekly_used,
+                "remain": weekly_remain,
+                "percent": weekly_percent,
                 "reset_at": None,
-                "last_sync": None
+                "last_sync": weekly_sync,
+                "raw_data": weekly_raw
             }
         })
     
     return {"items": result}
-
 
 @router.post("/providers/{provider_id}/quota/sync")
 async def sync_provider_quota(
@@ -502,8 +530,12 @@ async def sync_provider_quota(
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
     
-    # TODO: 实现实际的同步逻辑
-    # 这里只是占位
+    # 创建同步服务并执行同步
+    sync_service = create_sync_service(db)
+    success = await sync_service.sync_provider_quota(provider)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="同步失败")
     
     ip_address = extract_client_ip(request)
     record_operation(
@@ -516,7 +548,6 @@ async def sync_provider_quota(
     )
     
     return {"message": "同步成功", "provider_id": provider_id}
-
 
 # ========== 模型映射管理 ==========
 
