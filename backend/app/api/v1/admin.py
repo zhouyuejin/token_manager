@@ -296,7 +296,11 @@ async def list_providers(
                 health_status=p.health_status.value if p.health_status else "healthy",
                 last_check_at=p.last_check_at,
                 quota_hourly=p.quota_hourly,
-                quota_weekly=p.quota_weekly
+                quota_weekly=p.quota_weekly,
+                sync_enabled=bool(p.sync_enabled) if p.sync_enabled else False,
+                sync_interval=p.sync_interval or 300,
+                last_sync_at=p.last_sync_at,
+                quota_config=json.loads(p.quota_config) if p.quota_config else None
             )
             for p in providers
         ]
@@ -323,6 +327,7 @@ async def create_provider(
         timeout=provider_data.timeout,
         quota_hourly=provider_data.quota_hourly,
         quota_weekly=provider_data.quota_weekly,
+        quota_config=json.dumps(provider_data.quota_config.model_dump()) if provider_data.quota_config else None,
         status=ProviderStatus.active
     )
     
@@ -377,7 +382,8 @@ async def create_provider(
         quota_weekly=provider.quota_weekly,
         sync_enabled=bool(provider.sync_enabled) if provider.sync_enabled else False,
         sync_interval=provider.sync_interval or 300,
-        last_sync_at=provider.last_sync_at
+        last_sync_at=provider.last_sync_at,
+        quota_config=json.loads(provider.quota_config) if provider.quota_config else None
     )
 
 
@@ -430,6 +436,9 @@ async def update_provider(
     if provider_data.sync_interval is not None:
         changed["sync_interval"] = provider_data.sync_interval
         provider.sync_interval = provider_data.sync_interval
+    if provider_data.quota_config is not None:
+        changed["quota_config"] = provider_data.quota_config.model_dump()
+        provider.quota_config = json.dumps(provider_data.quota_config.model_dump())
     
     db.commit()
     
@@ -586,6 +595,86 @@ async def sync_provider_quota(
     )
     
     return {"message": "同步成功", "provider_id": provider_id}
+
+
+@router.put("/providers/{provider_id}/quota")
+async def update_provider_quota(
+    request: Request,
+    provider_id: str,
+    quota_data: dict,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    更新供应商用量配置（额度、同步设置、自定义查询配置）
+    """
+    provider = db.query(Provider).filter(Provider.provider_id == provider_id).first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+    
+    changed = {}
+    
+    # 更新额度
+    if "quota_hourly" in quota_data and quota_data["quota_hourly"] is not None:
+        changed["quota_hourly"] = quota_data["quota_hourly"]
+        provider.quota_hourly = quota_data["quota_hourly"]
+    
+    if "quota_weekly" in quota_data and quota_data["quota_weekly"] is not None:
+        changed["quota_weekly"] = quota_data["quota_weekly"]
+        provider.quota_weekly = quota_data["quota_weekly"]
+    
+    # 更新同步设置
+    if "sync_enabled" in quota_data and quota_data["sync_enabled"] is not None:
+        changed["sync_enabled"] = quota_data["sync_enabled"]
+        provider.sync_enabled = 1 if quota_data["sync_enabled"] else 0
+    
+    if "sync_interval" in quota_data and quota_data["sync_interval"] is not None:
+        changed["sync_interval"] = quota_data["sync_interval"]
+        provider.sync_interval = quota_data["sync_interval"]
+    
+    # 更新自定义查询配置
+    if "quota_config" in quota_data and quota_data["quota_config"] is not None:
+        changed["quota_config"] = quota_data["quota_config"]
+        provider.quota_config = json.dumps(quota_data["quota_config"])
+    
+    db.commit()
+    
+    # 更新同步任务
+    try:
+        from app.services.scheduler_service import update_provider_sync_job
+        sync_enabled = quota_data.get("sync_enabled", provider.sync_enabled == 1)
+        sync_interval = quota_data.get("sync_interval", provider.sync_interval or 300)
+        logger.info(f"[API] 更新供应商 {provider.name} 同步配置: enabled={sync_enabled}, interval={sync_interval}")
+        update_provider_sync_job(
+            provider.provider_id,
+            provider.name,
+            sync_enabled,
+            sync_interval
+        )
+    except Exception as e:
+        logger.warning(f"更新同步任务失败: {e}")
+    
+    ip_address = extract_client_ip(request)
+    record_operation(
+        db=db,
+        operator=admin,
+        action="update_quota",
+        target_type="provider_quota",
+        target_id=provider_id,
+        detail=changed,
+        ip_address=ip_address,
+    )
+    
+    return {
+        "message": "用量配置更新成功",
+        "provider_id": provider_id,
+        "quota_hourly": provider.quota_hourly,
+        "quota_weekly": provider.quota_weekly,
+        "sync_enabled": provider.sync_enabled == 1,
+        "sync_interval": provider.sync_interval,
+        "quota_config": json.loads(provider.quota_config) if provider.quota_config else None
+    }
+
 
 # ========== 模型映射管理 ==========
 

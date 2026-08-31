@@ -20,10 +20,12 @@ class BaseQuotaSyncAdapter(ABC):
         self.provider = provider
     
     @abstractmethod
-    async def fetch_quota(self) -> Dict[str, Any]:
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """
         获取配额信息
+        参数:
+            config: 自定义配置，包含 model_name, custom_api_path, extra_params 等
         返回格式: {
             "hourly": {"limit": int, "used": int},
             "weekly": {"limit": int, "used": int}
@@ -43,7 +45,7 @@ class VolcengineAdapter(BaseQuotaSyncAdapter):
     def get_provider_type(self) -> str:
         return "volcengine"
     
-    async def fetch_quota(self) -> Dict[str, Any]:
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取火山方舟用量"""
         # 火山方舟API获取用量
@@ -87,7 +89,7 @@ class OpenAIAdapter(BaseQuotaSyncAdapter):
     def get_provider_type(self) -> str:
         return "openai"
     
-    async def fetch_quota(self) -> Dict[str, Any]:
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取OpenAI用量"""
         # OpenAI API获取使用量
@@ -136,7 +138,7 @@ class AnthropicAdapter(BaseQuotaSyncAdapter):
     def get_provider_type(self) -> str:
         return "anthropic"
     
-    async def fetch_quota(self) -> Dict[str, Any]:
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取Anthropic用量"""
         # Anthropic API获取使用量
@@ -178,7 +180,7 @@ class AzureAdapter(BaseQuotaSyncAdapter):
     def get_provider_type(self) -> str:
         return "azure"
     
-    async def fetch_quota(self) -> Dict[str, Any]:
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         #  endpoint={self.provider.endpoint}, api_key={self.provider.api_key[:10]}..." if self.provider.api_key else "None")
         """获取Azure用量"""
         # Azure需要通过Azure Monitor或Usage API获取
@@ -196,7 +198,7 @@ class MinimaxAdapter(BaseQuotaSyncAdapter):
     def get_provider_type(self) -> str:
         return "minimax"
     
-    async def fetch_quota(self) -> Dict[str, Any]:
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """获取Minimax用量"""
         # Minimax API: GET https://www.minimaxi.com/v1/token_plan/remains
         url = "https://www.minimaxi.com/v1/token_plan/remains"
@@ -274,8 +276,16 @@ class QuotaSyncService:
             print(f"不支持的供应商类型: {provider.type.value}")
             return False
         
+        # 解析自定义配置
+        config = None
+        if provider.quota_config:
+            try:
+                config = json.loads(provider.quota_config)
+            except:
+                pass
+        
         try:
-            quota_data = await adapter.fetch_quota()
+            quota_data = await adapter.fetch_quota(config)
             
             # 更新小时配额
             hourly_quota = self.db.query(ProviderQuota).filter(
