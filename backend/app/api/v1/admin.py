@@ -480,7 +480,7 @@ async def get_all_provider_quotas(
         hourly_used = hourly_quota.quota_used if hourly_quota else 0
         hourly_remain = hourly_quota.quota_remain if hourly_quota else p.quota_hourly
         hourly_percent = float(hourly_quota.quota_percent) if hourly_quota and hourly_quota.quota_percent else 0
-        hourly_sync = hourly_quota.sync_at.isoformat() if hourly_quota and hourly_quota.sync_at else None
+        hourly_sync = hourly_quota.sync_at.isoformat() + "Z" if hourly_quota and hourly_quota.sync_at else None
         import json
         hourly_raw = json.loads(hourly_quota.raw_data) if hourly_quota and hourly_quota.raw_data else None
         
@@ -488,7 +488,7 @@ async def get_all_provider_quotas(
         weekly_used = weekly_quota.quota_used if weekly_quota else 0
         weekly_remain = weekly_quota.quota_remain if weekly_quota else p.quota_weekly
         weekly_percent = float(weekly_quota.quota_percent) if weekly_quota and weekly_quota.quota_percent else 0
-        weekly_sync = weekly_quota.sync_at.isoformat() if weekly_quota and weekly_quota.sync_at else None
+        weekly_sync = weekly_quota.sync_at.isoformat() + "Z" if weekly_quota and weekly_quota.sync_at else None
         weekly_raw = json.loads(weekly_quota.raw_data) if weekly_quota and weekly_quota.raw_data else None
         
         result.append({
