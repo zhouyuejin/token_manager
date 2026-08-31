@@ -1049,3 +1049,100 @@ body::before {
   box-shadow: none !important;
   color: var(--color-foreground) !important;
 }
+
+
+/* ========================================
+   InputNumber 数字输入框修复
+   修复多余的线条和样式问题
+   ======================================== */
+
+/* InputNumber 容器 */
+.ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+/* InputNumber 内部输入框 - 移除多余边框 */
+.ant-input-number-input-wrap {
+  flex: 1;
+  height: 100%;
+}
+
+.ant-input-number-input {
+  color: var(--color-foreground) !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  height: 38px !important;
+  padding: 0 12px !important;
+}
+
+/* InputNumber 加减按钮容器 - 移除多余线条 */
+.ant-input-number-handler-wrap {
+  background: transparent !important;
+  border-left: none !important;
+}
+
+/* 加减按钮 - 统一样式 */
+.ant-input-number-handler {
+  border: none !important;
+  background: transparent !important;
+}
+
+.ant-input-number-handler-up-inner,
+.ant-input-number-handler-down-inner {
+  color: var(--color-muted-foreground) !important;
+}
+
+/* 悬停状态 */
+.ant-input-number-handler:hover .ant-input-number-handler-up-inner,
+.ant-input-number-handler:hover .ant-input-number-handler-down-inner {
+  color: var(--color-primary) !important;
+}
+
+/* 移除默认的 handler 边框 */
+.ant-input-number-handler-up {
+  border: none !important;
+  border-left: none !important;
+}
+
+.ant-input-number-handler-down {
+  border: none !important;
+  border-left: none !important;
+}
+
+/* Modal 内 InputNumber 修复 */
+.ant-modal .ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+}
+
+.ant-modal .ant-input-number-input-wrap {
+  flex: 1;
+}
+
+.ant-modal .ant-input-number-input {
+  color: var(--color-foreground) !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  height: 38px !important;
+}
+
+.ant-modal .ant-input-number-handler-wrap {
+  background: transparent !important;
+  border-left: none !important;
+}
+
+.ant-modal .ant-input-number-handler {
+  border: none !important;
+  background: transparent !important;
+}

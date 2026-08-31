@@ -260,7 +260,6 @@ const ProvidersPage = () => {
               render: (_: any, record: Provider) => (
                 <Space>
                   <Button type="text" icon={<SettingOutlined />} onClick={() => openConfigModal(record)} style={{ color: '#10B981' }}>用量配置</Button>
-                  <Button type="text" icon={<SyncOutlined />} onClick={() => handleSync(record.provider_id)} style={{ color: '#3B82F6' }}>同步</Button>
                   <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
                   <Popconfirm title="确认删除此供应商？" onConfirm={() => handleDelete(record.provider_id)}>
                     <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
