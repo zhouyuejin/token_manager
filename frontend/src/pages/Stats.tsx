@@ -632,7 +632,7 @@ const StatsPage = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}>
-                每日趋势
+                七日趋势
               </span>
             }
             loading={loading}
@@ -643,12 +643,90 @@ const StatsPage = () => {
               borderRadius: 16,
             }}
           >
-            <Table
-              dataSource={stats?.by_day || []}
-              columns={dayColumns}
-              rowKey="date"
-              pagination={false}
-              size="small"
+            <ReactECharts
+              style={{ height: 300 }}
+              option={{
+                tooltip: {
+                  trigger: 'axis',
+                  backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                  textStyle: { color: '#F8FAFC' },
+                  axisPointer: { type: 'shadow' }
+                },
+                legend: {
+                  data: ['Token数', '请求数'],
+                  textStyle: { color: '#94A3B8' },
+                  top: 0
+                },
+                grid: {
+                  left: '3%',
+                  right: '4%',
+                  bottom: '3%',
+                  top: '15%',
+                  containLabel: true
+                },
+                xAxis: {
+                  type: 'category',
+                  data: (stats?.by_day || []).map((item: any) => item.date),
+                  axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
+                  axisLabel: { color: '#94A3B8', fontSize: 11 }
+                },
+                yAxis: [
+                  {
+                    type: 'value',
+                    name: 'Token数',
+                    nameTextStyle: { color: '#94A3B8', padding: [0, 0, 0, 10] },
+                    axisLine: { show: false },
+                    splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
+                    axisLabel: { color: '#94A3B8' }
+                  },
+                  {
+                    type: 'value',
+                    name: '请求数',
+                    nameTextStyle: { color: '#94A3B8', padding: [0, 0, 0, 10] },
+                    axisLine: { show: false },
+                    splitLine: { show: false },
+                    axisLabel: { color: '#94A3B8' }
+                  }
+                ],
+                series: [
+                  {
+                    name: 'Token数',
+                    type: 'bar',
+                    barMaxWidth: 40,
+                    itemStyle: { 
+                      color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                          { offset: 0, color: '#3B82F6' },
+                          { offset: 1, color: '#1D4ED8' }
+                        ]
+                      },
+                      borderRadius: [4, 4, 0, 0]
+                    },
+                    data: (stats?.by_day || []).map((item: any) => item.tokens || 0)
+                  },
+                  {
+                    name: '请求数',
+                    type: 'bar',
+                    yAxisIndex: 1,
+                    barMaxWidth: 40,
+                    itemStyle: { 
+                      color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                          { offset: 0, color: '#F59E0B' },
+                          { offset: 1, color: '#D97706' }
+                        ]
+                      },
+                      borderRadius: [4, 4, 0, 0]
+                    },
+                    data: (stats?.by_day || []).map((item: any) => item.requests || 0)
+                  }
+                ]
+              }}
             />
           </Card>
         </Col>
