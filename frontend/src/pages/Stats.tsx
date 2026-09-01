@@ -5,6 +5,7 @@ import { getUsageStats, getAdminStats } from '../api/stats'
 import { getApiKeys } from '../api/apiKeys'
 import { useAuthStore } from '../store/auth'
 import dayjs from 'dayjs'
+import ReactECharts from 'echarts-for-react'
 
 const { RangePicker } = DatePicker
 
@@ -546,7 +547,7 @@ const StatsPage = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}>
-                按模型统计
+                模型成本分布
               </span>
             }
             loading={loading}
@@ -556,13 +557,70 @@ const StatsPage = () => {
               border: '1px solid rgba(255, 255, 255, 0.1)',
               borderRadius: 16,
             }}
+            styles={{ body: { padding: '16px' } }}
           >
-            <Table
-              dataSource={stats?.by_model || []}
-              columns={modelColumns}
-              rowKey="model"
-              pagination={false}
-              size="small"
+            <ReactECharts
+              style={{ height: 300 }}
+              option={{
+                tooltip: {
+                  trigger: 'axis',
+                  backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                  textStyle: { color: '#F8FAFC' },
+                  axisPointer: { type: 'shadow' },
+                  formatter: (params: any) => {
+                    const item = params[0];
+                    const value = item?.value ?? 0;
+                    const displayValue = Number(value) < 0.01 
+                      ? Number(value).toFixed(4) 
+                      : Number(value).toFixed(2);
+                    return (item?.name || '') + ': $' + displayValue;
+                  }
+                },
+                grid: {
+                  left: '3%',
+                  right: '4%',
+                  bottom: '3%',
+                  top: '10%',
+                  containLabel: true
+                },
+                xAxis: {
+                  type: 'category',
+                  data: (stats?.by_model || []).map((item: any) => item.model),
+                  axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
+                  axisLabel: { color: '#94A3B8', fontSize: 11, rotate: 45 }
+                },
+                yAxis: {
+                  type: 'value',
+                  name: 'Cost ($)',
+                  nameTextStyle: { color: '#94A3B8', padding: [0, 0, 0, 10] },
+                  axisLine: { show: false },
+                  splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
+                  axisLabel: { color: '#94A3B8' }
+                },
+                series: [
+                  {
+                    name: 'Cost',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 8,
+                    lineStyle: { color: '#10B981', width: 3 },
+                    itemStyle: { color: '#10B981' },
+                    areaStyle: {
+                      color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                          { offset: 0, color: 'rgba(16, 185, 129, 0.3)' },
+                          { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }
+                        ]
+                      }
+                    },
+                    data: (stats?.by_model || []).map((item: any) => item.cost || 0)
+                  }
+                ]
+              }}
             />
           </Card>
         </Col>

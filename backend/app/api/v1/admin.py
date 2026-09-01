@@ -104,9 +104,16 @@ async def get_admin_usage_stats(
         )
     ).group_by(UsageLog.provider_id).all()
     
+    # 获取供应商名称
+    provider_ids = [stat.provider_id for stat in provider_stats]
+    providers = db.query(Provider.provider_id, Provider.name).filter(
+        Provider.provider_id.in_(provider_ids)
+    ).all() if provider_ids else []
+    provider_map = {p.provider_id: p.name for p in providers}
+    
     by_provider = [
         {
-            "provider": stat.provider_id,
+            "provider": provider_map.get(stat.provider_id, stat.provider_id),
             "tokens": stat.tokens or 0
         }
         for stat in provider_stats

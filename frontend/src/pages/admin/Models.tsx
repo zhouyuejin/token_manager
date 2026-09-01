@@ -71,6 +71,7 @@ const ModelsPage = () => {
     try {
       await updateModel(editModel.model_id, values)
       message.success('更新成功')
+      setModalVisible(false)
       setEditModel(null)
       form.resetFields()
       setPriceType('token')

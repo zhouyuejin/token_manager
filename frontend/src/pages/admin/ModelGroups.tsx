@@ -117,18 +117,21 @@ const ModelGroups: React.FC = () => {
     {
       title: '分组名称',
       dataIndex: 'name',
-      key: 'name'
+      key: 'name',
+      width: 150
     },
     {
       title: '描述',
       dataIndex: 'description',
       key: 'description',
-      ellipsis: true
+      ellipsis: true,
+      width: 200
     },
     {
       title: '关联供应商',
       dataIndex: 'provider_ids',
       key: 'provider_ids',
+      width: 200,
       render: (ids: string[]) => (
         <Tag color="blue">{getProviderNames(ids) || '未关联'}</Tag>
       )
@@ -156,14 +159,15 @@ const ModelGroups: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 120,
+      fixed: 'right' as const,
       render: (_: any, record: ModelGroup) => (
-        <Space>
+        <Space size="small">
           <Button 
-            type="text" 
+            type="link" 
             icon={<EditOutlined />} 
             onClick={() => handleEdit(record)}
-            style={{ color: '#3B82F6' }}
+            style={{ padding: '4px 8px' }}
           >
             编辑
           </Button>
@@ -171,7 +175,7 @@ const ModelGroups: React.FC = () => {
             title="确认删除此分组？" 
             onConfirm={() => handleDelete(record.group_id)}
           >
-            <Button type="text" danger icon={<DeleteOutlined />}>
+            <Button type="link" danger icon={<DeleteOutlined />} style={{ padding: '4px 8px' }}>
               删除
             </Button>
           </Popconfirm>
@@ -200,6 +204,7 @@ const ModelGroups: React.FC = () => {
           rowKey="group_id"
           loading={loading}
           pagination={false}
+          scroll={{ x: 'max-content' }}
         />
       </Card>
 

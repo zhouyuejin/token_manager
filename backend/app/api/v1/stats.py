@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey
 from app.models.usage_log import UsageLog
+from app.models.model_mapping import ModelMapping
 from app.dependencies import get_current_user
 from app.schemas.stats import UsageStatsResponse, ModelUsage, DailyUsage
 
@@ -70,10 +71,12 @@ async def get_usage_stats(
     success_count = query.filter(UsageLog.status_code == 200).count()
     success_rate = (success_count / total_requests * 100) if total_requests > 0 else 100.0
     
-    # 按模型统计
+    # 按模型统计（包含输入/输出token分别统计，用于计算成本）
     model_stats = db.query(
         UsageLog.model,
         func.sum(UsageLog.total_tokens).label('tokens'),
+        func.sum(UsageLog.prompt_tokens).label('prompt_tokens'),
+        func.sum(UsageLog.completion_tokens).label('completion_tokens'),
         func.count(UsageLog.id).label('requests')
     ).filter(
         and_(
@@ -83,15 +86,43 @@ async def get_usage_stats(
         )
     ).group_by(UsageLog.model).all()
     
-    by_model = [
-        ModelUsage(
-            model=stat.model,
+    # 获取模型显示名称和价格
+    model_ids = [stat.model for stat in model_stats]
+    model_mappings = []
+    if model_ids:
+        model_mappings = db.query(
+            ModelMapping.model_id, 
+            ModelMapping.display_name,
+            ModelMapping.price_per_1k_input,
+            ModelMapping.price_per_1k_output
+        ).filter(
+            ModelMapping.model_id.in_(model_ids)
+        ).all()
+    model_info_map = {m.model_id: m for m in model_mappings}
+    
+    by_model = []
+    for stat in model_stats:
+        model_info = model_info_map.get(stat.model)
+        # 计算成本：(输入token数/1000)*输入单价 + (输出token数/1000)*输出单价
+        if model_info:
+            # 检查价格是否存在（不为 None）
+            input_price = float(model_info.price_per_1k_input) if model_info.price_per_1k_input is not None else 0
+            output_price = float(model_info.price_per_1k_output) if model_info.price_per_1k_output is not None else 0
+            # 将 Decimal 转换为 float
+            prompt_tokens = float(stat.prompt_tokens) if stat.prompt_tokens else 0
+            completion_tokens = float(stat.completion_tokens) if stat.completion_tokens else 0
+            input_cost = prompt_tokens / 1000 * input_price
+            output_cost = completion_tokens / 1000 * output_price
+            cost = input_cost + output_cost
+        else:
+            cost = 0.0
+        
+        by_model.append(ModelUsage(
+            model=model_info.display_name if model_info else stat.model,
             tokens=stat.tokens or 0,
             requests=stat.requests,
-            cost=0.0  # TODO: 根据模型单价计算
-        )
-        for stat in model_stats
-    ]
+            cost=round(cost, 4)
+        ))
     
     # 按日期统计
     day_stats = db.query(
