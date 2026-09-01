@@ -20,6 +20,8 @@ import {
 } from '@ant-design/icons'
 import { useAuthStore } from '../../store/auth'
 import { useTheme } from '../../theme'
+import NotificationDropdown from '../NotificationDropdown'
+import { useNotificationStore } from '../../store/notification'
 
 const { Sider } = Layout
 
@@ -73,6 +75,7 @@ const MainLayout = () => {
   })), [theme, setTheme, themeOptions])
   const location = useLocation()
   const { token, user, logout } = useAuthStore()
+  const { unreadCount } = useNotificationStore()
 
   // 初始化折叠状态,优先从 localStorage 读取
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -503,37 +506,41 @@ const MainLayout = () => {
               </Tooltip>
             </Dropdown>
 
-            <Tooltip title="通知" placement="bottom">
-              <button
-                type="button"
-                aria-label="通知"
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  background: 'transparent',
-                  border: 'none',
-                  transition: 'all 0.2s ease',
-                  position: 'relative',
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'transparent')
-                }
-              >
-                <Badge count={3} size="small" offset={[-2, 2]}>
-                  <BellOutlined
-                    style={{ color: 'rgba(148, 163, 184, 0.85)', fontSize: 16 }}
-                  />
-                </Badge>
-              </button>
-            </Tooltip>
+            <NotificationDropdown
+              trigger={
+                <Tooltip title="通知" placement="bottom">
+                  <button
+                    type="button"
+                    aria-label="通知"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      background: 'transparent',
+                      border: 'none',
+                      transition: 'all 0.2s ease',
+                      position: 'relative',
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = 'transparent')
+                    }
+                  >
+                    <Badge count={unreadCount} size="small" offset={[-2, 2]}>
+                      <BellOutlined
+                        style={{ color: 'rgba(148, 163, 184, 0.85)', fontSize: 16 }}
+                      />
+                    </Badge>
+                  </button>
+                </Tooltip>
+              }
+            />
 
             {/* 用户信息下拉 */}
             <Dropdown
