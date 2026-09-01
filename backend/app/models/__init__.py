@@ -13,3 +13,4 @@ from app.models.system_config import SystemConfig
 from app.models.login_log import LoginLog
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.chat import ChatConversation, ChatMessage
+from app.models.notification import Notification, NotificationType
