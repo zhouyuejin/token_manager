@@ -1,18 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Form, Input, Button, Switch } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, BellOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
 import { useMessage } from '../utils/message'
+import { getNotificationSettings, updateNotificationSettings } from '../api/users'
 
 const SettingsPage = () => {
   const { user } = useAuthStore()
   const [loading, setLoading] = useState(false)
+  const [notifyLoading, setNotifyLoading] = useState(false)
   const message = useMessage()
   const [notifySettings, setNotifySettings] = useState({
     quota_low_alert: true,
     quota_change_alert: true,
     daily_report: false,
   })
+
+  // 页面加载时获取通知设置
+  useEffect(() => {
+    const fetchNotifySettings = async () => {
+      try {
+        const data = await getNotificationSettings()
+        setNotifySettings({
+          quota_low_alert: data.quota_low_alert,
+          quota_change_alert: data.quota_change_alert,
+          daily_report: data.daily_report,
+        })
+      } catch (error) {
+        console.error('获取通知设置失败:', error)
+      }
+    }
+    fetchNotifySettings()
+  }, [])
 
   const onPasswordChange = async (values: any) => {
     if (values.new_password !== values.confirm_password) {
@@ -34,13 +53,17 @@ const SettingsPage = () => {
   const onNotifyChange = async (key: string, value: boolean) => {
     const newSettings = { ...notifySettings, [key]: value }
     setNotifySettings(newSettings)
+    setNotifyLoading(true)
     try {
-      // TODO: 调用保存通知设置API
+      await updateNotificationSettings(newSettings)
       message.success('通知设置已更新')
     } catch (error) {
       console.error(error)
+      message.error('通知设置更新失败')
       // 回滚状态
       setNotifySettings(notifySettings)
+    } finally {
+      setNotifyLoading(false)
     }
   }
 
@@ -252,6 +275,7 @@ const SettingsPage = () => {
             <Switch 
               checked={notifySettings.quota_low_alert}
               onChange={(checked) => onNotifyChange('quota_low_alert', checked)}
+              loading={notifyLoading}
               style={{
                 background: notifySettings.quota_low_alert ? '#2563EB' : '#334155',
               }}
@@ -274,6 +298,7 @@ const SettingsPage = () => {
             <Switch 
               checked={notifySettings.quota_change_alert}
               onChange={(checked) => onNotifyChange('quota_change_alert', checked)}
+              loading={notifyLoading}
               style={{
                 background: notifySettings.quota_change_alert ? '#2563EB' : '#334155',
               }}
@@ -296,6 +321,7 @@ const SettingsPage = () => {
             <Switch 
               checked={notifySettings.daily_report}
               onChange={(checked) => onNotifyChange('daily_report', checked)}
+              loading={notifyLoading}
               style={{
                 background: notifySettings.daily_report ? '#2563EB' : '#334155',
               }}

@@ -21,6 +21,12 @@ export interface CreateUserParams {
   model_group_ids?: string[]
 }
 
+export interface NotificationSettings {
+  quota_low_alert: boolean
+  quota_change_alert: boolean
+  daily_report: boolean
+}
+
 export const getUsers = (params?: {
   page?: number
   page_size?: number
@@ -47,3 +53,10 @@ export const adjustQuota = (userId: string, data: {
 
 export const resetPassword = (userId: string, newPassword: string) =>
   post(`/admin/users/${userId}/reset-password`, { new_password: newPassword })
+
+// 通知设置相关API
+export const getNotificationSettings = () => 
+  get<NotificationSettings>('/users/me/notification-settings')
+
+export const updateNotificationSettings = (settings: NotificationSettings) =>
+  put<NotificationSettings>('/users/me/notification-settings', settings)

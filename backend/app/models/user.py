@@ -1,7 +1,7 @@
 """
 用户模型
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Boolean
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -37,3 +37,8 @@ class User(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     last_login_at = Column(DateTime, nullable=True)
     model_group_ids = Column(Text, default='[]', comment="允许使用的模型分组ID列表，JSON数组")
+    
+    # 通知设置
+    quota_low_alert = Column(Boolean, default=True, comment="额度不足通知")
+    quota_change_alert = Column(Boolean, default=True, comment="额度变动通知")
+    daily_report = Column(Boolean, default=False, comment="每日用量报表")

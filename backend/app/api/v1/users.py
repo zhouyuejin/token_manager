@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash
 from app.models.user import User
 from app.dependencies import get_current_user
-from app.schemas.user import UserInfo, PasswordChange
+from app.schemas.user import UserInfo, PasswordChange, NotificationSettings
 
 router = APIRouter()
 
@@ -52,6 +52,41 @@ async def change_password(
     db.commit()
     
     return {"message": "密码修改成功"}
+
+
+@router.get("/me/notification-settings", response_model=NotificationSettings)
+async def get_notification_settings(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取当前用户通知设置
+    """
+    return NotificationSettings(
+        quota_low_alert=current_user.quota_low_alert if current_user.quota_low_alert is not None else True,
+        quota_change_alert=current_user.quota_change_alert if current_user.quota_change_alert is not None else True,
+        daily_report=current_user.daily_report if current_user.daily_report is not None else False
+    )
+
+
+@router.put("/me/notification-settings", response_model=NotificationSettings)
+async def update_notification_settings(
+    settings: NotificationSettings,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    更新当前用户通知设置
+    """
+    current_user.quota_low_alert = settings.quota_low_alert
+    current_user.quota_change_alert = settings.quota_change_alert
+    current_user.daily_report = settings.daily_report
+    db.commit()
+    
+    return NotificationSettings(
+        quota_low_alert=current_user.quota_low_alert,
+        quota_change_alert=current_user.quota_change_alert,
+        daily_report=current_user.daily_report
+    )
 
 
 @router.get("/{user_id}", response_model=UserInfo)

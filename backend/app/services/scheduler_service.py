@@ -2,13 +2,19 @@
 定时任务服务
 """
 import asyncio
-from datetime import date, datetimetime
+from datetime import date, datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
 
 from app.core.database import SessionLocal
 from app.services.sync_service import create_sync_service
+from app.services.email_service import (
+    send_quota_low_alert,
+    send_daily_report,
+    send_quota_change_notification
+)
 
 
 # 全局调度器
@@ -17,6 +23,9 @@ scheduler = AsyncIOScheduler()
 # 存储每个供应商的同步任务ID
 _provider_jobs = {}
 
+# 记录上次发送额度不足通知的用户（避免重复发送）
+_quota_low_notified_users = set()
+
 
 async def sync_single_provider(provider_id: str):
     """同步单个供应商的配额"""
@@ -24,7 +33,6 @@ async def sync_single_provider(provider_id: str):
     db = SessionLocal()
     try:
         from app.models.provider import Provider
-        
         from app.models.provider import ProviderStatus
         
         provider = db.query(Provider).filter(
@@ -223,6 +231,112 @@ def reset_monthly_usage():
         db.close()
 
 
+def check_quota_low_alert():
+    """检查额度不足并发送通知"""
+    logger.info("开始检查额度不足用户...")
+    
+    global _quota_low_notified_users
+    
+    db = SessionLocal()
+    try:
+        from app.models.user import User, UserStatus
+        
+        # 查询所有启用了额度不足通知且状态正常的用户
+        users = db.query(User).filter(
+            User.quota_low_alert == True,
+            User.status == UserStatus.active
+        ).all()
+        
+        notified_count = 0
+        for user in users:
+            if user.quota <= 0:
+                continue
+                
+            percent_remaining = ((user.quota - user.quota_used) / user.quota) * 100
+            
+            # 当剩余额度低于20%时发送通知
+            if percent_remaining < 20:
+                user_key = f"{user.user_id}_{date.today()}"
+                
+                # 如果今天还没有发送过通知
+                if user_key not in _quota_low_notified_users:
+                    # 异步发送邮件
+                    asyncio.create_task(
+                        send_quota_low_alert(
+                            to_email=user.email,
+                            username=user.username,
+                            quota=user.quota,
+                            quota_used=user.quota_used,
+                            threshold_percent=20
+                        )
+                    )
+                    _quota_low_notified_users.add(user_key)
+                    notified_count += 1
+                    logger.info(f"已向用户 {user.username} 发送额度不足通知")
+        
+        logger.info(f"额度不足检查完成，共通知 {notified_count} 位用户")
+    except Exception as e:
+        logger.error(f"检查额度不足失败: {e}")
+    finally:
+        db.close()
+
+
+def send_daily_reports():
+    """发送每日用量报表"""
+    logger.info("开始发送每日用量报表...")
+    
+    db = SessionLocal()
+    try:
+        from app.models.user import User, UserStatus
+        from app.models.quota_record import QuotaRecord
+        from datetime import datetime, timedelta
+        
+        # 查询所有启用了每日报表的用户
+        users = db.query(User).filter(
+            User.daily_report == True,
+            User.status == UserStatus.active
+        ).all()
+        
+        # 获取今天的开始时间
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        sent_count = 0
+        for user in users:
+            # 计算今日使用量（从 quota_records 表统计）
+            daily_usage = db.query(QuotaRecord).filter(
+                QuotaRecord.user_id == user.user_id,
+                QuotaRecord.created_at >= today_start
+            ).all()
+            
+            daily_used = sum(record.amount for record in daily_usage)
+            
+            # 获取模型使用统计
+            model_usage = {}
+            for record in daily_usage:
+                model_name = record.model_name or "Unknown"
+                model_usage[model_name] = model_usage.get(model_name, 0) + record.amount
+            
+            # 异步发送邮件
+            asyncio.create_task(
+                send_daily_report(
+                    to_email=user.email,
+                    username=user.username,
+                    quota=user.quota,
+                    quota_used=user.quota_used,
+                    daily_used=daily_used,
+                    model_usage=model_usage
+                )
+            )
+            sent_count += 1
+            logger.info(f"已向用户 {user.username} 发送每日用量报表")
+        
+        logger.info(f"每日报表发送完成，共发送 {sent_count} 份")
+    except Exception as e:
+        logger.error(f"发送每日报表失败: {e}")
+    finally:
+        db.close()
+
+
 def setup_scheduler():
     """设置定时任务"""
     # 每5分钟检查并更新所有供应商的同步任务
@@ -237,9 +351,7 @@ def setup_scheduler():
     # 每天凌晨0点重置每日用量
     scheduler.add_job(
         reset_daily_usage,
-        trigger="cron",
-        hour=0,
-        minute=0,
+        trigger=CronTrigger(hour=0, minute=0),
         id="reset_daily_usage",
         name="重置每日用量",
         replace_existing=True
@@ -248,12 +360,27 @@ def setup_scheduler():
     # 每月1号凌晨0点重置每月用量
     scheduler.add_job(
         reset_monthly_usage,
-        trigger="cron",
-        day=1,
-        hour=0,
-        minute=0,
+        trigger=CronTrigger(day=1, hour=0, minute=0),
         id="reset_monthly_usage",
         name="重置每月用量",
+        replace_existing=True
+    )
+    
+    # 每小时检查一次额度不足
+    scheduler.add_job(
+        check_quota_low_alert,
+        trigger=CronTrigger(minute=0),
+        id="check_quota_low_alert",
+        name="检查额度不足",
+        replace_existing=True
+    )
+    
+    # 每天早上8点发送每日用量报表
+    scheduler.add_job(
+        send_daily_reports,
+        trigger=CronTrigger(hour=8, minute=0),
+        id="send_daily_reports",
+        name="发送每日用量报表",
         replace_existing=True
     )
     
@@ -283,3 +410,53 @@ def stop_scheduler():
     """停止定时任务"""
     scheduler.shutdown()
     logger.info("定时任务已停止")
+
+
+# === 额度变动通知功能 ===
+
+async def notify_quota_change(
+    user_id: str,
+    change_amount: int,
+    change_type: str,
+    reason: str = ""
+):
+    """
+    发送额度变动通知（供外部调用）
+    
+    Args:
+        user_id: 用户ID
+        change_amount: 变动额度
+        change_type: 变动类型 (increase/decrease)
+        reason: 变动原因
+    """
+    db = SessionLocal()
+    try:
+        from app.models.user import User, UserStatus
+        
+        user = db.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            logger.warning(f"用户 {user_id} 不存在")
+            return False
+        
+        # 检查用户是否启用了额度变动通知
+        if not user.quota_change_alert or user.status != UserStatus.active:
+            logger.info(f"用户 {user.username} 未启用额度变动通知，跳过")
+            return False
+        
+        await send_quota_change_notification(
+            to_email=user.email,
+            username=user.username,
+            change_amount=change_amount,
+            change_type=change_type,
+            current_quota=user.quota,
+            reason=reason
+        )
+        
+        logger.info(f"已向用户 {user.username} 发送额度变动通知")
+        return True
+        
+    except Exception as e:
+        logger.error(f"发送额度变动通知失败: {e}")
+        return False
+    finally:
+        db.close()

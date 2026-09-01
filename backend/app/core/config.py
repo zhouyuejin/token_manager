@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     # 日志
     LOG_LEVEL: str = "INFO"
     
+    # 邮件配置
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "Token Manager"
+    
     @property
     def DATABASE_URL(self) -> str:
         """数据库连接URL"""
