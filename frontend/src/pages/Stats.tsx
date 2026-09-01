@@ -531,7 +531,60 @@ const StatsPage = () => {
               loading={loading}
               style={{ background: 'rgba(17, 24, 39, 0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 16 }}
             >
-              <Table dataSource={stats?.by_provider || []} columns={providerColumns} rowKey="provider" pagination={false} size="small" />
+              <ReactECharts
+              style={{ height: 300 }}
+              option={{
+                tooltip: {
+                  trigger: 'axis',
+                  backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                  textStyle: { color: '#F8FAFC' },
+                  axisPointer: { type: 'shadow' },
+                  formatter: (params: any) => {
+                    const item = params[0];
+                    return (item?.name || '') + ': ' + Number(item?.value || 0).toLocaleString();
+                  }
+                },
+                grid: {
+                  left: '3%',
+                  right: '10%',
+                  bottom: '3%',
+                  top: '3%',
+                  containLabel: true
+                },
+                xAxis: {
+                  type: 'value',
+                  axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
+                  splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
+                  axisLabel: { color: '#94A3B8' }
+                },
+                yAxis: {
+                  type: 'category',
+                  data: (stats?.by_provider || []).map((item: any) => item.provider),
+                  axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
+                  axisLabel: { color: '#94A3B8', fontSize: 11 }
+                },
+                series: [
+                  {
+                    name: 'Token数',
+                    type: 'bar',
+                    barMaxWidth: 24,
+                    itemStyle: { 
+                      color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 1, y2: 0,
+                        colorStops: [
+                          { offset: 0, color: '#10B981' },
+                          { offset: 1, color: '#059669' }
+                        ]
+                      },
+                      borderRadius: [0, 4, 4, 0]
+                    },
+                    data: (stats?.by_provider || []).map((item: any) => item.tokens || 0)
+                  }
+                ]
+              }}
+            />
             </Card>
           </Col>
         </Row>

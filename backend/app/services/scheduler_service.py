@@ -2,7 +2,7 @@
 定时任务服务
 """
 import asyncio
-from datetime import datetime
+from datetime import date, datetimetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
@@ -174,16 +174,18 @@ def reset_daily_usage():
     db = SessionLocal()
     try:
         from app.models.api_key import ApiKey
-        from datetime import date
+        from datetime import date, datetime
         
         today = date.today()
         
         # 重置所有API Key的日用量
         api_keys = db.query(ApiKey).all()
         for key in api_keys:
-            if key.daily_reset_at is None or key.daily_reset_at != today:
+            # 确保daily_reset_at是date类型进行比较
+            reset_date = key.daily_reset_at.date() if key.daily_reset_at else None
+            if reset_date is None or reset_date != today:
                 key.daily_used = 0
-                key.daily_reset_at = today
+                key.daily_reset_at = datetime.now()
         
         db.commit()
         logger.info(f"已重置 {len(api_keys)} 个API Key的日用量")
@@ -200,16 +202,18 @@ def reset_monthly_usage():
     db = SessionLocal()
     try:
         from app.models.api_key import ApiKey
-        from datetime import date
+        from datetime import date, datetime
         
         today = date.today()
         
         # 重置所有API Key的月用量
         api_keys = db.query(ApiKey).all()
         for key in api_keys:
-            if key.monthly_reset_at is None or key.monthly_reset_at.month != today.month:
+            # 确保monthly_reset_at是date类型进行比较
+            reset_date = key.monthly_reset_at.date() if key.monthly_reset_at else None
+            if reset_date is None or reset_date.month != today.month or reset_date.year != today.year:
                 key.monthly_used = 0
-                key.monthly_reset_at = today
+                key.monthly_reset_at = datetime.now()
         
         db.commit()
         logger.info(f"已重置 {len(api_keys)} 个API Key的月用量")
