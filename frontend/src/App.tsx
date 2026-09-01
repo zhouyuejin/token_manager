@@ -16,6 +16,7 @@ import AdminModelGroups from './pages/admin/ModelGroups'
 import OperationLogs from './pages/admin/OperationLogs'
 import LoginLogs from './pages/admin/LoginLogs'
 import { MessageProvider } from './components/MessageProvider'
+import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 
 function App() {
   const { token, checkAuth } = useAuthStore()
@@ -27,6 +28,7 @@ function App() {
   return (
     <AntApp>
       <MessageProvider>
+        {token && <NotificationWebSocketBridge />}
         <Routes>
           {/* 公开路由 */}
           <Route path="/login" element={!token ? <Login /> : <Navigate to="/stats" />} />
@@ -52,6 +54,11 @@ function App() {
       </MessageProvider>
     </AntApp>
   )
+}
+
+const NotificationWebSocketBridge: React.FC = () => {
+  useNotificationWebSocket()
+  return null
 }
 
 export default App
