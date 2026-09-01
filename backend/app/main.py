@@ -1,6 +1,7 @@
 """
 Token中转平台 - 主应用入口
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -22,13 +23,54 @@ logger.add(
     level=settings.LOG_LEVEL
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时
+    logger.info("Token中转平台启动")
+    
+    # 启动定时任务
+    try:
+        from app.tasks.daily_report import init_scheduler
+        init_scheduler()
+    except Exception as e:
+        logger.warning(f"每日报表定时任务启动失败: {e}")
+    
+    # 启动其他定时任务
+    try:
+        from app.services.scheduler_service import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logger.warning(f"定时任务启动失败: {e}")
+    
+    yield
+    
+    # 关闭时
+    logger.info("Token中转平台关闭")
+    
+    # 停止定时任务
+    try:
+        from app.tasks.daily_report import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception as e:
+        logger.warning(f"每日报表定时任务停止失败: {e}")
+    
+    try:
+        from app.services.scheduler_service import stop_scheduler
+        stop_scheduler()
+    except Exception as e:
+        logger.warning(f"定时任务停止失败: {e}")
+
+
 # 创建FastAPI应用
 app = FastAPI(
     title="Token中转平台 API",
     description="API代理/网关服务",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # CORS配置
@@ -54,32 +96,6 @@ app.include_router(api_router, prefix="/api/v1")
 async def health_check():
     """健康检查"""
     return {"status": "healthy", "version": "1.0.0"}
-
-
-@app.on_event("startup")
-async def startup_event():
-    """启动事件"""
-    logger.info("Token中转平台启动")
-    
-    # 启动定时任务
-    try:
-        from app.services.scheduler_service import start_scheduler
-        start_scheduler()
-    except Exception as e:
-        logger.warning(f"定时任务启动失败: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """关闭事件"""
-    logger.info("Token中转平台关闭")
-    
-    # 停止定时任务
-    try:
-        from app.services.scheduler_service import stop_scheduler
-        stop_scheduler()
-    except Exception as e:
-        logger.warning(f"定时任务停止失败: {e}")
 
 
 if __name__ == "__main__":
