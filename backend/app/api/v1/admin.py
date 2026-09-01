@@ -2,6 +2,7 @@
 管理后台接口
 """
 import secrets
+import asyncio
 import json
 from typing import Optional
 from datetime import datetime
@@ -26,6 +27,7 @@ from app.schemas.admin import (
     ModelMappingCreate, ModelMappingUpdate, ModelMappingResponse, ModelMappingListResponse
 )
 from app.services.operation_log_service import record_operation
+from app.services.scheduler_service import notify_quota_change
 from app.services.sync_service import create_sync_service
 from app.utils.request import extract_client_ip
 
@@ -277,7 +279,6 @@ async def update_user(
     
     db.commit()
     
-    ip_address = extract_client_ip(request)
     record_operation(
         db=db,
         operator=admin,
@@ -318,7 +319,6 @@ async def delete_user(
     db.delete(user)
     db.commit()
     
-    ip_address = extract_client_ip(request)
     record_operation(
         db=db,
         operator=admin,
@@ -356,7 +356,15 @@ async def adjust_user_quota(
     
     db.commit()
     
-    ip_address = extract_client_ip(request)
+    # 发送额度变动通知
+    change_type = "increase" if quota_data.amount > 0 else "decrease"
+    asyncio.create_task(notify_quota_change(
+        user_id=user_id,
+        change_amount=quota_data.amount,
+        change_type=change_type,
+        reason=quota_data.reason
+    ))
+    
     record_operation(
         db=db,
         operator=admin,
@@ -610,7 +618,7 @@ async def delete_provider(
     
     db.delete(provider)
     db.commit()
-    
+        
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,
@@ -962,7 +970,7 @@ async def update_model_mapping(
         mapping.status = ModelMappingStatus(model_data.status)
     
     db.commit()
-    
+        
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,
@@ -995,7 +1003,7 @@ async def delete_model_mapping(
     
     db.delete(mapping)
     db.commit()
-    
+        
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,

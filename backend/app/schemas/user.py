@@ -59,3 +59,13 @@ class PasswordChange(BaseModel):
     """修改密码请求"""
     old_password: str
     new_password: str = Field(..., min_length=8, max_length=32)
+
+
+class NotificationSettings(BaseModel):
+    """通知设置"""
+    quota_low_alert: bool = True
+    quota_change_alert: bool = True
+    daily_report: bool = False
+
+    class Config:
+        from_attributes = True
