@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { App as AntApp } from 'antd'
 import { useAuthStore } from './store/auth'
 import MainLayout from './components/Layout/MainLayout'
 import Login from './pages/Login'
@@ -23,28 +24,30 @@ function App() {
   }, [checkAuth])
 
   return (
-    <Routes>
-      {/* 公开路由 */}
-      <Route path="/login" element={!token ? <Login /> : <Navigate to="/stats" />} />
-      <Route path="/register" element={!token ? <Register /> : <Navigate to="/stats" />} />
-      
-      {/* 受保护路由 */}
-      <Route path="/" element={token ? <MainLayout /> : <Navigate to="/login" />}>
-        <Route index element={<Navigate to="/stats" />} />
-        <Route path="stats" element={<Stats />} />
-        <Route path="api-keys" element={<ApiKeys />} />
-        <Route path="chat" element={<Chat />} />
-        <Route path="settings" element={<Settings />} />
+    <AntApp>
+      <Routes>
+        {/* 公开路由 */}
+        <Route path="/login" element={!token ? <Login /> : <Navigate to="/stats" />} />
+        <Route path="/register" element={!token ? <Register /> : <Navigate to="/stats" />} />
         
-        {/* 管理员路由 */}
-        <Route path="admin/users" element={<AdminUsers />} />
-        <Route path="admin/providers" element={<AdminProviders />} />
-        <Route path="admin/models" element={<AdminModels />} />
-        <Route path="admin/model-groups" element={<AdminModelGroups />} />
-        <Route path="admin/logs/operations" element={<OperationLogs />} />
-        <Route path="admin/logs/logins" element={<LoginLogs />} />
-      </Route>
-    </Routes>
+        {/* 受保护路由 */}
+        <Route path="/" element={token ? <MainLayout /> : <Navigate to="/login" />}>
+          <Route index element={<Navigate to="/stats" />} />
+          <Route path="stats" element={<Stats />} />
+          <Route path="api-keys" element={<ApiKeys />} />
+          <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<Settings />} />
+          
+          {/* 管理员路由 */}
+          <Route path="admin/users" element={<AdminUsers />} />
+          <Route path="admin/providers" element={<AdminProviders />} />
+          <Route path="admin/models" element={<AdminModels />} />
+          <Route path="admin/model-groups" element={<AdminModelGroups />} />
+          <Route path="admin/logs/operations" element={<OperationLogs />} />
+          <Route path="admin/logs/logins" element={<LoginLogs />} />
+        </Route>
+      </Routes>
+    </AntApp>
   )
 }
 
