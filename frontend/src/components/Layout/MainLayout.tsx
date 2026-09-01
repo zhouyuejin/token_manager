@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Avatar, Dropdown, MenuProps, Badge, Tooltip } from 'antd'
 import {
@@ -19,6 +19,7 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons'
 import { useAuthStore } from '../../store/auth'
+import { useTheme } from '../../theme'
 
 const { Sider } = Layout
 
@@ -53,7 +54,23 @@ const roleLabel = (role?: string) => {
 }
 
 const MainLayout = () => {
+  const { theme, setTheme, themeOptions } = useTheme()
   const navigate = useNavigate()
+
+  // 主题菜单项
+  const themeMenuItems = useMemo(() => themeOptions.map((option) => ({
+    key: option.name,
+    label: (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 14 }}>{option.icon}</span>
+        <span>{option.label}</span>
+        {theme === option.name && (
+          <span style={{ marginLeft: 'auto', color: '#2563EB' }}>✓</span>
+        )}
+      </div>
+    ),
+    onClick: () => setTheme(option.name),
+  })), [theme, setTheme, themeOptions])
   const location = useLocation()
   const { token, user, logout } = useAuthStore()
 
@@ -438,8 +455,54 @@ const MainLayout = () => {
             </div>
           </div>
 
-          {/* 右:通知 + 用户 */}
+          {/* 右:主题切换 + 通知 + 用户 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* 主题切换 */}
+            <Dropdown
+              menu={{
+                items: themeMenuItems,
+                style: {
+                  background: 'rgba(17, 24, 39, 0.95)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: 12,
+                  padding: '8px',
+                  minWidth: 160,
+                },
+              }}
+              placement="bottomRight"
+              trigger={['click']}
+            >
+              <Tooltip title="切换主题" placement="bottom">
+                <button
+                  type="button"
+                  aria-label="切换主题"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    border: 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = 'transparent')
+                  }
+                >
+                  <span style={{ fontSize: 16 }}>
+                    {themeOptions.find((t) => t.name === theme)?.icon || '🎨'}
+                  </span>
+                </button>
+              </Tooltip>
+            </Dropdown>
+
             <Tooltip title="通知" placement="bottom">
               <button
                 type="button"
