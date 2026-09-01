@@ -307,7 +307,7 @@ export default function NotificationDropdown({ trigger }: NotificationDropdownPr
 
   return (
     <Dropdown
-      dropdownRender={() => dropdownContent}
+      popupRender={() => dropdownContent}
       trigger={['click']}
       open={open}
       onOpenChange={handleOpenChange}
