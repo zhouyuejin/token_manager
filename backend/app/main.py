@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.api.v1 import api_router
+from app.api.v1.ws import router as ws_router
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.middleware import ProxyAuthMiddleware
@@ -41,6 +42,9 @@ app.add_middleware(
 
 # 添加代理认证中间件
 app.add_middleware(ProxyAuthMiddleware)
+
+# 注册WebSocket路由（不需要 /api/v1 前缀）
+app.include_router(ws_router)
 
 # 注册API路由
 app.include_router(api_router, prefix="/api/v1")
