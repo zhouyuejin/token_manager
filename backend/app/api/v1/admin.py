@@ -356,6 +356,22 @@ async def adjust_user_quota(
     
     db.commit()
     
+    # 额度增加时发送应用内通知
+    if quota_data.amount > 0 and user.quota_change_alert:
+        from app.services.notification_service import create_notification
+        from app.models.notification import NotificationType
+        try:
+            await create_notification(
+                db=db,
+                user_id=user.user_id,
+                notif_type=NotificationType.quota_increase,
+                title="额度已增加",
+                content=f"管理员为您增加了 {quota_data.amount} tokens，当前剩余 {user.quota - user.quota_used} tokens。",
+                metadata={"added": quota_data.amount, "quota_remain": user.quota - user.quota_used, "operator": admin.user_id}
+            )
+        except Exception:
+            pass  # 通知失败不影响主流程
+    
     # 发送额度变动通知
     change_type = "increase" if quota_data.amount > 0 else "decrease"
     asyncio.create_task(notify_quota_change(

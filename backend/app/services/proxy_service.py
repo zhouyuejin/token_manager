@@ -312,7 +312,7 @@ class ProxyService:
         
         self.db.add(usage_log)
     
-    def deduct_quota(
+    async def deduct_quota(
         self,
         user: User,
         api_key: ApiKey,
@@ -334,6 +334,39 @@ class ProxyService:
         api_key.last_used_at = datetime.now()
         
         self.db.commit()
+        
+        # 检查额度不足 (< 20%)
+        quota_remain = user.quota - user.quota_used
+        if user.quota > 0 and quota_remain / user.quota <= 0.2 and user.quota_low_alert:
+            from app.services.notification_service import create_notification
+            from app.models.notification import NotificationType
+            try:
+                await create_notification(
+                    db=self.db,
+                    user_id=user.user_id,
+                    notif_type=NotificationType.quota_low,
+                    title="额度不足警告",
+                    content=f"您的剩余额度已低于20%，当前剩余 {quota_remain} tokens，请及时充值。",
+                    metadata={"quota_remain": quota_remain, "quota_total": user.quota}
+                )
+            except Exception:
+                pass  # 通知失败不影响主流程
+        
+        # 检查单次扣减量大 (> 1000 tokens)
+        if total_tokens > 1000 and user.quota_change_alert:
+            from app.services.notification_service import create_notification
+            from app.models.notification import NotificationType
+            try:
+                await create_notification(
+                    db=self.db,
+                    user_id=user.user_id,
+                    notif_type=NotificationType.quota_decrease,
+                    title="额度已扣减",
+                    content=f"本次消费 {total_tokens} tokens，当前剩余 {quota_remain} tokens。",
+                    metadata={"deducted": total_tokens, "quota_remain": quota_remain}
+                )
+            except Exception:
+                pass  # 通知失败不影响主流程
 
 
 def create_proxy_service(db: Session) -> ProxyService:
