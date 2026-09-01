@@ -581,7 +581,7 @@ async def send_message(
         
         # 扣减额度
         if result["success"] and result["status_code"] == 200:
-            proxy_service.deduct_quota(current_user, api_key, tokens)
+            await proxy_service.deduct_quota(current_user, api_key, tokens)
         
         db.commit()
         
@@ -654,7 +654,7 @@ async def _stream_generator(
         )
         
         # 扣减额度
-        proxy_service.deduct_quota(current_user, api_key, tokens)
+        await proxy_service.deduct_quota(current_user, api_key, tokens)
         
         db.commit()
         

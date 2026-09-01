@@ -246,7 +246,7 @@ async def chat_completions(
         
         # 9. 如果成功，扣减额度
         if result["success"] and result["status_code"] == 200:
-            proxy_service.deduct_quota(user, api_key, tokens)
+            await proxy_service.deduct_quota(user, api_key, tokens)
         
         # 10. 返回响应
         if not result["success"]:
