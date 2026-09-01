@@ -29,7 +29,7 @@ async def create_notification(
         type=notif_type,
         title=title,
         content=content,
-        metadata=json.dumps(metadata) if metadata else None,
+        extra_data=json.dumps(metadata) if metadata else None,
         is_read=0,
     )
     db.add(notif)
