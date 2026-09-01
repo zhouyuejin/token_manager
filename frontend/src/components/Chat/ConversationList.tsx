@@ -113,7 +113,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const { modal } = App.useApp()
+  const { message, modal } = App.useApp()
 
   const fetchConversations = async () => {
     setLoading(true)
