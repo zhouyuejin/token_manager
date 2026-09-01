@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useMessage } from '../utils/message'
 import { 
-  Table, Button, Tag, Space, Modal, Form, Input, 
+  Table, Button, Tag, Space, Modal, Form, Input, Progress, 
   InputNumber, Popconfirm, Select 
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
@@ -162,7 +162,7 @@ const ApiKeysPage = () => {
       title: '日限额', 
       dataIndex: 'daily_limit', 
       key: 'daily_limit',
-      render: (val: number) => (
+      render: (val: number, record: ApiKey) => (
         <span style={{ 
           fontFamily: "'Space Grotesk', sans-serif", 
           color: '#CBD5E1' 
@@ -170,6 +170,34 @@ const ApiKeysPage = () => {
           {val > 0 ? val.toLocaleString() : '不限'}
         </span>
       )
+    },
+    { 
+      title: '日使用', 
+      dataIndex: 'daily_used', 
+      key: 'daily_used',
+      render: (val: number, record: ApiKey) => {
+        const percent = record.daily_limit > 0 ? (val / record.daily_limit) * 100 : 0
+        const isWarning = percent > 80
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ 
+              fontFamily: "'Space Grotesk', sans-serif", 
+              color: isWarning ? '#F59E0B' : '#10B981' 
+            }}>
+              {val.toLocaleString()}
+            </span>
+            {record.daily_limit > 0 && (
+              <Progress 
+                percent={Math.min(percent, 100)} 
+                size="small" 
+                showInfo={false}
+                strokeColor={isWarning ? '#F59E0B' : '#10B981'}
+                style={{ width: 60, margin: 0 }}
+              />
+            )}
+          </div>
+        )
+      }
     },
     { 
       title: '月限额', 
@@ -183,6 +211,34 @@ const ApiKeysPage = () => {
           {val > 0 ? val.toLocaleString() : '不限'}
         </span>
       )
+    },
+    { 
+      title: '本月使用', 
+      dataIndex: 'monthly_used', 
+      key: 'monthly_used',
+      render: (val: number, record: ApiKey) => {
+        const percent = record.monthly_limit > 0 ? (val / record.monthly_limit) * 100 : 0
+        const isWarning = percent > 80
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ 
+              fontFamily: "'Space Grotesk', sans-serif", 
+              color: isWarning ? '#F59E0B' : '#10B981' 
+            }}>
+              {val.toLocaleString()}
+            </span>
+            {record.monthly_limit > 0 && (
+              <Progress 
+                percent={Math.min(percent, 100)} 
+                size="small" 
+                showInfo={false}
+                strokeColor={isWarning ? '#F59E0B' : '#10B981'}
+                style={{ width: 60, margin: 0 }}
+              />
+            )}
+          </div>
+        )
+      }
     },
     { 
       title: '创建时间', 

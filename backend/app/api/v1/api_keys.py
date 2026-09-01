@@ -35,17 +35,21 @@ def generate_api_key() -> str:
 def check_and_reset_daily(api_key: ApiKey, db: Session):
     """检查并重置每日用量"""
     today = datetime.now().date()
-    if api_key.daily_reset_at is None or api_key.daily_reset_at != today:
+    # 确保daily_reset_at是date类型进行比较
+    reset_date = api_key.daily_reset_at.date() if api_key.daily_reset_at else None
+    if reset_date is None or reset_date != today:
         api_key.daily_used = 0
-        api_key.daily_reset_at = today
+        api_key.daily_reset_at = datetime.now()
 
 
 def check_and_reset_monthly(api_key: ApiKey, db: Session):
     """检查并重置每月用量"""
     today = datetime.now().date()
-    if api_key.monthly_reset_at is None or api_key.monthly_reset_at.month != today.month:
+    # 确保monthly_reset_at是date类型进行比较
+    reset_date = api_key.monthly_reset_at.date() if api_key.monthly_reset_at else None
+    if reset_date is None or reset_date.month != today.month or reset_date.year != today.year:
         api_key.monthly_used = 0
-        api_key.monthly_reset_at = today
+        api_key.monthly_reset_at = datetime.now()
 
 
 def get_key_model_groups(api_key: ApiKey) -> List[str]:
