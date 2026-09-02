@@ -386,6 +386,7 @@ async def update_user(
         user.quota = user_data.quota
     
     db.commit()
+    ip_address = extract_client_ip(request)
     
     record_operation(
         db=db,
@@ -426,6 +427,7 @@ async def delete_user(
     
     db.delete(user)
     db.commit()
+    ip_address = extract_client_ip(request)
     
     record_operation(
         db=db,
