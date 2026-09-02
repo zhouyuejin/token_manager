@@ -139,6 +139,7 @@ const NotificationsPage = () => {
   const newSinceLastFetch = useMemo(() => {
     const lastId = lastFetchedFirstIdRef.current
     if (!lastId) return 0
+    if (!storeNotifications.some((n) => n.notif_id === lastId)) return 0
     let count = 0
     for (const n of storeNotifications) {
       if (n.notif_id === lastId) break
