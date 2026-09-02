@@ -65,6 +65,8 @@ export const useNotificationWebSocket = () => {
       }
 
       ws.onmessage = (event) => {
+        // 同样检查 ws 是否还是当前 ws：避免被弃用 WS 的 'connected' 帧覆盖 store
+        if (wsRef.current !== ws) return
         try {
           const data = JSON.parse(event.data)
           console.log('[WS] 收到消息:', data.type, data)
@@ -91,7 +93,8 @@ export const useNotificationWebSocket = () => {
       }
 
       ws.onclose = (e) => {
-        if (isCancelledRef.current) return
+        // 同 onerror：依赖 wsRef.current 自身而非会被重置的共享 ref
+        if (wsRef.current !== ws) return
         console.log('[WS] 通知 WebSocket 断开 code=' + e.code + ', reason=' + e.reason)
         
         // 如果是正常关闭，不重连
@@ -108,7 +111,10 @@ export const useNotificationWebSocket = () => {
       }
 
       ws.onerror = (e) => {
-        if (isCancelledRef.current) return
+        // 检查 ws 自身是否还是当前 ws：StrictMode 下 cleanup 会把 wsRef 清掉
+        // 之后才异步触发 onerror，此时共享的 isCancelledRef 已被第二次 effect
+        // 重置为 false，旧的 ws 不能依赖共享 ref 来判断自己是否被取消。
+        if (wsRef.current !== ws) return
         console.error('[WS] WebSocket 错误:', e)
       }
     }
