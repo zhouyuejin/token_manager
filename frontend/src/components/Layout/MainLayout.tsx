@@ -105,7 +105,9 @@ const MainLayout = () => {
   const isAdmin = user?.role === 'admin'
 
   const menuItems: MenuProps['items'] = [
-    { key: '/stats', icon: <DashboardOutlined />, label: '仪表盘' },
+    isAdmin
+      ? { key: '/admin/dashboard', icon: <DashboardOutlined />, label: '仪表盘' }
+      : { key: '/stats', icon: <DashboardOutlined />, label: '仪表盘' },
     { key: '/notifications', icon: <BellOutlined />, label: '消息通知' },
     { key: '/api-keys', icon: <KeyOutlined />, label: 'API Key' },
     { key: '/chat', icon: <MessageOutlined />, label: 'AI 对话' },
