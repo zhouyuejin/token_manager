@@ -5,7 +5,6 @@ import json
 import secrets
 from datetime import datetime
 from typing import Optional, List
-from loguru import logger
 
 from sqlalchemy.orm import Session
 from app.models.notification import Notification, NotificationType
@@ -37,22 +36,17 @@ async def create_notification(
     db.commit()
     db.refresh(notif)
     
-    logger.info(f"[通知] 创建通知 {notif_id} 给用户 {user_id}，类型: {notif_type.value}")
-    
     # WebSocket 实时推送
     try:
-        ws_result = await ws_manager.send_to_user(user_id, {
+        await ws_manager.send_to_user(user_id, {
             "type": "new_notification",
             "notif": notif.to_dict()
         })
-        if ws_result:
-            logger.info(f"[通知] WebSocket 推送成功 {notif_id} 给用户 {user_id}")
-        else:
-            logger.warning(f"[通知] WebSocket 推送失败 {notif_id} 给用户 {user_id}，用户可能未连接")
-    except Exception as e:
-        logger.error(f"[通知] WebSocket 推送异常 {notif_id} 给用户 {user_id}: {e}")
+    except Exception:
+        pass  # WebSocket 推送失败不影响通知创建
     
     return notif
+
 
 
 async def get_unread_count(user_id: str, db: Session) -> int:
