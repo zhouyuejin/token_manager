@@ -1,0 +1,1167 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Colors */
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-secondary: #3B82F6;
+  --color-accent: #EA580C;
+  --color-background: #0F172A;
+  --color-foreground: #F8FAFC;
+  --color-card: #111827;
+  --color-card-foreground: #F8FAFC;
+  --color-muted: #1E293B;
+  --color-muted-foreground: #CBD5E1;
+  --color-border: #334155;
+  --color-destructive: #DC2626;
+  --color-ring: #2563EB;
+  
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Effects */
+  --glass-bg: rgba(17, 24, 39, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 20px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-glow: 0 0 20px rgba(37, 99, 235, 0.3);
+  
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* Background pattern */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(ellipse at 20% 20%, var(--color-primary) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, var(--color-secondary) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, var(--color-accent) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+/* Glass card effect */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Animation utilities */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: var(--shadow-glow);
+  }
+  50% {
+    box-shadow: 0 0 30px var(--color-primary);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* Stagger children animation */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeInUp 0.4s ease forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+
+/* Ant Design overrides for dark theme */
+.ant-layout {
+  background: transparent !important;
+}
+
+.ant-layout-sider {
+  background: var(--sider-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border) !important;
+}
+
+.ant-layout-header {
+  background: var(--header-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border) !important;
+}
+
+.ant-menu {
+  background: transparent !important;
+  border-right: none !important;
+}
+
+.ant-menu-item,
+.ant-menu-submenu-title {
+  color: var(--color-muted-foreground) !important;
+  border-radius: var(--radius-md) !important;
+  margin: 4px 8px !important;
+}
+
+.ant-menu-item:hover,
+.ant-menu-submenu-title:hover {
+  background: var(--menu-hover-bg) !important;
+  color: var(--color-foreground) !important;
+}
+
+.ant-menu-item-selected {
+  background: var(--menu-selected-bg) !important;
+  color: var(--color-foreground) !important;
+}
+
+.ant-menu-item-selected::after {
+  display: none !important;
+}
+
+.ant-card {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-lg) !important;
+}
+
+.ant-card-head {
+  border-bottom: 1px solid var(--glass-border) !important;
+  color: var(--color-foreground) !important;
+}
+
+.ant-card-head-title {
+  color: var(--color-foreground) !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.ant-card-body {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-statistic-title {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-statistic-content {
+  color: var(--color-foreground) !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.ant-table {
+  background: transparent !important;
+}
+
+.ant-table-thead > tr > th {
+  background: var(--color-muted) !important;
+  color: var(--color-muted-foreground) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+}
+
+.ant-table-tbody > tr > td {
+  background: transparent !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+
+.ant-table-tbody > tr.ant-table-row:hover > td {
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+
+.ant-pagination-item {
+  background: var(--color-muted) !important;
+  border-color: var(--glass-border) !important;
+}
+
+.ant-pagination-item a {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-pagination-item-active {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.ant-pagination-item-active a {
+  color: white !important;
+}
+
+.ant-btn-primary {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%) !important;
+  border: none !important;
+  box-shadow: var(--shadow-glow) !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-weight: 500 !important;
+}
+
+.ant-btn-primary:hover {
+  background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-primary) 100%) !important;
+  box-shadow: 0 0 25px rgba(37, 99, 235, 0.5) !important;
+  transform: translateY(-1px);
+}
+
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--color-foreground) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+/* Input 搜索框高度修复 */
+.ant-input-affix-wrapper {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 11px !important;
+}
+
+.ant-input-affix-wrapper input {
+  height: 34px !important;
+  line-height: 34px !important;
+}
+
+/* Select 下拉框高度修复 - 与 Input 搜索框保持一致 */
+.ant-select-selector,
+.ant-select-selection,
+.ant-select-single .ant-select-selector,
+.ant-select:not(.ant-select-disabled) .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 11px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* 确保内部元素也使用相同高度 */
+.ant-select-selection-item,
+.ant-select-selection-placeholder {
+  line-height: 34px !important;
+}
+
+/* Input.Password 特殊处理 - 覆盖 ant-input-affix-wrapper */
+/* 使用更高优先级的选择器 */
+.ant-input-password.ant-input-password,
+.ant-input-password-wrapper.ant-input-password-wrapper,
+.ant-input-affix-wrapper.ant-input-password,
+.ant-input-affix-wrapper.ant-input-password-wrapper {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+  padding: 0 11px !important;
+}
+
+.ant-input-password input.ant-input-password-input,
+.ant-input-password-wrapper input,
+.ant-input-affix-wrapper input {
+  background: transparent !important;
+  color: var(--color-foreground) !important;
+  height: 36px !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.ant-input-password-icon,
+.ant-input-password-icon-active {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--color-foreground) !important;
+  border-radius: var(--radius-md) !important;
+  width: 100% !important;
+}
+
+.ant-input-number-input {
+  color: var(--color-foreground) !important;
+  background: transparent !important;
+}
+
+.ant-input::placeholder {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-input-number:hover,
+.ant-select-selector:hover,
+.ant-picker:hover {
+  border-color: var(--color-primary) !important;
+}
+
+.ant-input-password:hover,
+.ant-input-password-wrapper:hover {
+  border-color: var(--color-primary) !important;
+}
+
+.ant-input-number:hover {
+  border-color: var(--color-primary) !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused,
+.ant-input-number:focus,
+.ant-input-number-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+.ant-input-password:focus,
+.ant-input-password-focused,
+.ant-input-password-wrapper:focus,
+.ant-input-password-wrapper-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+.ant-input-number-focused {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+}
+
+.ant-select-dropdown,
+.ant-picker-dropdown {
+  background: var(--color-card) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+.ant-select-item {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-select-item-option-selected {
+  background: rgba(37, 99, 235, 0.2) !important;
+  color: var(--color-foreground) !important;
+}
+
+.ant-select-item-option-active {
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+
+.ant-tag {
+  border-radius: var(--radius-sm) !important;
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+.ant-dropdown-menu {
+  background: var(--color-card) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.ant-dropdown-menu-item {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: var(--color-foreground) !important;
+}
+
+.ant-avatar {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%) !important;
+}
+
+.ant-modal-content {
+  background: var(--color-card) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+.ant-modal-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+}
+
+.ant-modal-title {
+  color: var(--color-foreground) !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.ant-modal-close-x {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-form-item-label > label {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-checkbox-wrapper {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-message-notice-content {
+  background: var(--color-card) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--color-foreground) !important;
+}
+
+.ant-picker-panel-container {
+  background: var(--color-card) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+.ant-picker-header {
+  color: var(--color-foreground) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+}
+
+.ant-picker-content th,
+.ant-picker-content td {
+  color: var(--color-muted-foreground) !important;
+}
+
+.ant-picker-cell-in-view .ant-picker-cell-inner {
+  color: var(--color-foreground) !important;
+}
+
+.ant-picker-cell-selected .ant-picker-cell-inner {
+  background: var(--color-primary) !important;
+}
+
+/* Content area */
+.ant-content {
+  background: transparent !important;
+}
+
+.ant-layout-content {
+  background: transparent !important;
+}
+
+/* Logo styling in sidebar */
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.logo-text {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  margin-right: 12px;
+}
+
+/* ========================================
+   Dashboard Enhanced Styles - Tech Theme
+   ======================================== */
+
+/* Dashboard container */
+.dashboard-container {
+  max-width: 1600px;
+}
+
+/* Stat card hover effects */
+.stat-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+/* Pulse animation for status indicator */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Glow animation */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(37, 99, 235, 0.5);
+  }
+}
+
+/* Stagger animation improvements */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 480ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 560ms; }
+
+/* Header action button hover */
+.header-action:hover {
+  background: rgba(37, 99, 235, 0.2) !important;
+  border-color: rgba(37, 99, 235, 0.4) !important;
+  transform: scale(1.05);
+}
+
+/* User dropdown hover */
+.user-dropdown:hover {
+  background: rgba(37, 99, 235, 0.25) !important;
+  border-color: rgba(37, 99, 235, 0.5) !important;
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.2);
+}
+
+/* Table row hover effect */
+.ant-table-tbody > tr:hover > td {
+  background: rgba(37, 99, 235, 0.08) !important;
+}
+
+/* Card title decoration */
+.ant-card-head {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  min-height: auto !important;
+  padding: 16px 20px !important;
+}
+
+.ant-card-head-title {
+  padding: 0 !important;
+}
+
+/* Loading skeleton improvement */
+.ant-skeleton-content .ant-skeleton-title,
+.ant-skeleton-content .ant-skeleton-paragraph > li {
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.3) 25%, rgba(30, 41, 59, 0.5) 50%, rgba(30, 41, 59, 0.3) 75%) !important;
+  background-size: 200% 100% !important;
+  animation: skeleton-loading 1.5s infinite !important;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .ant-layout-content {
+    padding: 16px !important;
+  }
+  
+  .stat-card .ant-statistic-title {
+    font-size: 11px !important;
+  }
+  
+  .stat-card .ant-statistic-content-value {
+    font-size: 20px !important;
+  }
+}
+
+/* Smooth scrollbar */
+.dashboard-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-container::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.dashboard-container::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.3);
+  border-radius: 3px;
+}
+
+.dashboard-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+/* ========================================
+   Header & Layout Optimizations
+   ======================================== */
+
+/* Compact header styles */
+.ant-layout-header {
+  height: 48px !important;
+  line-height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 16px !important;
+}
+
+/* Sider optimization */
+.ant-layout-sider {
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+}
+
+.ant-layout-sider-collapsed {
+  width: 72px !important;
+  min-width: 72px !important;
+  max-width: 72px !important;
+}
+
+/* Logo container */
+.logo-container {
+  height: 56px !important;
+  display: flex;
+  align-items: center;
+}
+
+/* Menu item spacing */
+.ant-menu-item,
+.ant-menu-submenu-title {
+  height: 40px !important;
+  line-height: 40px !important;
+  margin: 2px 0 !important;
+}
+
+/* Content padding */
+.ant-layout-content {
+  padding: 16px !important;
+}
+
+/* Dropdown user info */
+.ant-dropdown-menu {
+  padding: 6px !important;
+  min-width: 160px !important;
+}
+
+.ant-dropdown-menu-item {
+  padding: 8px 12px !important;
+  border-radius: 6px !important;
+}
+
+/* Badge optimization */
+.ant-badge-count {
+  min-width: 16px !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  font-size: 10px !important;
+  padding: 0 4px !important;
+}
+
+/* ========================================
+   Fix: Prevent header/background overflow
+   ======================================== */
+
+/* Fix body overflow */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Layout overflow fix */
+.ant-layout {
+  overflow: hidden !important;
+  max-width: 100%;
+}
+
+/* Header full width */
+.ant-layout-header {
+  width: 100% !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
+}
+
+/* Fix any background element overflow */
+body::before {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+/* ========================================
+   Fix: ant-dropdown-trigger height overflow
+   ======================================== */
+
+/* Dropdown trigger fix */
+.ant-dropdown-trigger {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.ant-dropdown-trigger > * {
+  flex-shrink: 0;
+}
+
+/* Ensure header dropdown doesn't overflow */
+.ant-layout-header .ant-dropdown-trigger {
+  line-height: normal !important;
+  vertical-align: middle !important;
+}
+
+/* Avatar in dropdown trigger */
+.ant-dropdown-trigger .ant-avatar {
+  vertical-align: middle !important;
+}
+
+/* ========================================
+   Fix: Complete dropdown and header height
+   ======================================== */
+
+/* Header dropdown trigger - prevent height overflow */
+.ant-layout-header .ant-dropdown-trigger {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: auto !important;
+  line-height: normal !important;
+  padding: 0 !important;
+}
+
+/* Remove any extra height from inline styles */
+.ant-layout-header .ant-dropdown-trigger > div,
+.ant-layout-header .ant-dropdown-trigger > span {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+/* Ensure the inner div in header doesn't overflow */
+.ant-layout-header > * {
+  max-height: 48px;
+}
+
+/* Force box-sizing */
+.ant-dropdown-trigger,
+.ant-dropdown-trigger > div {
+  box-sizing: border-box !important;
+}
+
+/* ========================================
+   Beautiful Dropdown Menu Styles
+   ======================================== */
+
+/* Dropdown menu container */
+.ant-dropdown-menu {
+  background: rgba(17, 24, 39, 0.98) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 8px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Dropdown menu items */
+.ant-dropdown-menu-item {
+  color: rgba(248, 250, 252, 0.85) !important;
+  border-radius: 8px !important;
+  padding: 10px 12px !important;
+  margin: 2px 0 !important;
+  transition: all 0.2s ease !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background: rgba(37, 99, 235, 0.15) !important;
+  color: #F8FAFC !important;
+}
+
+/* Divider in dropdown */
+.ant-dropdown-menu-item-divider {
+  background: rgba(255, 255, 255, 0.08) !important;
+  margin: 8px 0 !important;
+}
+
+/* Disabled menu item */
+.ant-dropdown-menu-item-disabled {
+  opacity: 0.5 !important;
+}
+
+/* Danger menu item (logout) */
+.ant-dropdown-menu-item-danger {
+  color: #F87171 !important;
+}
+
+.ant-dropdown-menu-item-danger:hover {
+  background: rgba(220, 38, 38, 0.15) !important;
+  color: #F87171 !important;
+}
+
+/* Icons in dropdown */
+.ant-dropdown-menu-item .anticon {
+  font-size: 14px !important;
+}
+
+/* Profile section in dropdown */
+.ant-dropdown-menu-item[aria-disabled="true"]:hover {
+  background: transparent !important;
+  cursor: default !important;
+}
+
+/* ========================================
+   Modal Form Fixes - Remove extra borders
+   ======================================== */
+
+/* Modal form items - remove extra borders */
+.ant-modal .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.ant-modal .ant-form-item-label {
+  padding-bottom: 8px;
+}
+
+.ant-modal .ant-form-item-label > label {
+  color: #94A3B8 !important;
+  font-size: 14px;
+}
+
+/* Fix input number wrapper in forms */
+.ant-modal .ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.ant-modal .ant-input-number:hover,
+.ant-modal .ant-input-number:focus,
+.ant-modal .ant-input-number-focused {
+  border-color: var(--color-primary) !important;
+}
+
+
+/* Fix Input in modal */
+.ant-modal .ant-input {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px;
+}
+
+.ant-modal .ant-input:hover,
+.ant-modal .ant-input:focus {
+  border-color: var(--color-primary) !important;
+}
+
+/* Fix Input.Password in modal - 使用最高优先级选择器 */
+.ant-modal .ant-input-password.ant-input-password,
+.ant-modal .ant-input-password-wrapper.ant-input-password-wrapper,
+.ant-modal .ant-input-affix-wrapper.ant-input-password,
+.ant-modal .ant-input-affix-wrapper.ant-input-password-wrapper {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+  padding: 0 11px !important;
+  display: flex !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+
+/* 移除内层 input 的所有边框 */
+.ant-modal .ant-input-password input,
+.ant-modal .ant-input-password-wrapper input,
+.ant-modal .ant-input-affix-wrapper input {
+  background: transparent !important;
+  color: var(--color-foreground) !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 36px !important;
+  width: 100% !important;
+}
+
+/* 密码显示切换按钮 */
+.ant-modal .ant-input-password-icon,
+.ant-modal .ant-input-password-icon-active {
+  color: var(--color-muted-foreground) !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Remove potential extra borders from form elements */
+.ant-modal .ant-form-item-explain-error {
+  color: #F87171 !important;
+}
+
+/* Clean up any extra outlines */
+.ant-modal *:focus {
+  outline: none !important;
+}
+
+.ant-modal *:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+
+
+/* ========================================
+   ULTIMATE Input.Password Fix
+   使用所有可能的选择器确保覆盖
+   ======================================== */
+
+/* 使用 :where() 降低优先级阻力，同时用 !important */
+:where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+:where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Modal 内 */
+.ant-modal :where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+}
+
+.ant-modal :where(.ant-input-password, .ant-input-password-wrapper, .ant-input-affix-wrapper) input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: var(--color-foreground) !important;
+}
+
+
+/* ========================================
+   InputNumber 数字输入框修复
+   修复多余的线条和样式问题
+   ======================================== */
+
+/* InputNumber 容器 */
+.ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+/* InputNumber 内部输入框 - 移除多余边框 */
+.ant-input-number-input-wrap {
+  flex: 1;
+  height: 100%;
+}
+
+.ant-input-number-input {
+  color: var(--color-foreground) !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  height: 38px !important;
+  padding: 0 12px !important;
+}
+
+/* InputNumber 加减按钮容器 - 移除多余线条 */
+.ant-input-number-handler-wrap {
+  background: transparent !important;
+  border-left: none !important;
+}
+
+/* 加减按钮 - 统一样式 */
+.ant-input-number-handler {
+  border: none !important;
+  background: transparent !important;
+}
+
+.ant-input-number-handler-up-inner,
+.ant-input-number-handler-down-inner {
+  color: var(--color-muted-foreground) !important;
+}
+
+/* 悬停状态 */
+.ant-input-number-handler:hover .ant-input-number-handler-up-inner,
+.ant-input-number-handler:hover .ant-input-number-handler-down-inner {
+  color: var(--color-primary) !important;
+}
+
+/* 移除默认的 handler 边框 */
+.ant-input-number-handler-up {
+  border: none !important;
+  border-left: none !important;
+}
+
+.ant-input-number-handler-down {
+  border: none !important;
+  border-left: none !important;
+}
+
+/* Modal 内 InputNumber 修复 */
+.ant-modal .ant-input-number {
+  background: var(--color-muted) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--radius-md) !important;
+  height: 40px !important;
+}
+
+.ant-modal .ant-input-number-input-wrap {
+  flex: 1;
+}
+
+.ant-modal .ant-input-number-input {
+  color: var(--color-foreground) !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  height: 38px !important;
+}
+
+.ant-modal .ant-input-number-handler-wrap {
+  background: transparent !important;
+  border-left: none !important;
+}
+
+.ant-modal .ant-input-number-handler {
+  border: none !important;
+  background: transparent !important;
+}
+
