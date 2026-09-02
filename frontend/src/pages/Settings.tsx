@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Card, Form, Input, Button, Switch } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, BellOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
@@ -10,6 +11,7 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const message = useMessage()
+  const { token, isDark } = useThemeToken()
   const [notifySettings, setNotifySettings] = useState({
     quota_low_alert: true,
     quota_change_alert: true,
@@ -68,9 +70,9 @@ const SettingsPage = () => {
   }
 
   const cardStyle = {
-    background: 'rgba(17, 24, 39, 0.6)',
+    background: token.colorBgContainer,
     backdropFilter: 'blur(20px)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    border: `1px solid ${token.colorBorder}`,
     borderRadius: 16,
     marginBottom: 24,
   }
@@ -82,7 +84,7 @@ const SettingsPage = () => {
         fontFamily: "'Space Grotesk', sans-serif",
         fontSize: 24,
         fontWeight: 600,
-        color: '#F8FAFC',
+        color: token.colorText,
       }}>
         个人设置
       </h2>
@@ -90,7 +92,7 @@ const SettingsPage = () => {
       <Card 
         title={
           <span style={{ 
-            color: '#F8FAFC', 
+            color: token.colorText, 
             fontFamily: "'Space Grotesk', sans-serif",
             fontWeight: 600,
           }}>
@@ -102,61 +104,61 @@ const SettingsPage = () => {
       >
         <Form layout="vertical">
           <Form.Item 
-            label={<span style={{ color: '#94A3B8' }}>用户名</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>用户名</span>}
           >
             <Input 
               value={user?.username} 
               disabled 
               style={{
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
-                color: '#CBD5E1',
+                color: token.colorText,
               }}
-              prefix={<UserOutlined style={{ color: '#64748B' }} />}
+              prefix={<UserOutlined style={{ color: token.colorTextTertiary }} />}
             />
           </Form.Item>
           <Form.Item 
-            label={<span style={{ color: '#94A3B8' }}>邮箱</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>}
           >
             <Input 
               value={user?.email} 
               disabled 
               style={{
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
-                color: '#CBD5E1',
+                color: token.colorText,
               }}
-              prefix={<MailOutlined style={{ color: '#64748B' }} />}
+              prefix={<MailOutlined style={{ color: token.colorTextTertiary }} />}
             />
           </Form.Item>
           <Form.Item 
-            label={<span style={{ color: '#94A3B8' }}>用户ID</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>用户ID</span>}
           >
             <Input 
               value={user?.user_id} 
               disabled 
               style={{
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
-                color: '#CBD5E1',
+                color: token.colorText,
                 fontFamily: "'Space Grotesk', sans-serif",
               }}
             />
           </Form.Item>
           <Form.Item 
-            label={<span style={{ color: '#94A3B8' }}>注册时间</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>注册时间</span>}
           >
             <Input 
               value={user?.created_at ? new Date(user.created_at).toLocaleDateString() : '-'} 
               disabled 
               style={{
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
-                color: '#CBD5E1',
+                color: token.colorText,
               }}
             />
           </Form.Item>
@@ -166,7 +168,7 @@ const SettingsPage = () => {
       <Card 
         title={
           <span style={{ 
-            color: '#F8FAFC', 
+            color: token.colorText, 
             fontFamily: "'Space Grotesk', sans-serif",
             fontWeight: 600,
           }}>
@@ -179,50 +181,50 @@ const SettingsPage = () => {
         <Form layout="vertical" onFinish={onPasswordChange}>
           <Form.Item 
             name="old_password" 
-            label={<span style={{ color: '#94A3B8' }}>原密码</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>原密码</span>} 
             rules={[{ required: true, message: '请输入原密码' }]}
           >
             <Input.Password 
               placeholder="请输入原密码" 
               style={{
                 height: 44,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
               }}
-              prefix={<LockOutlined style={{ color: '#64748B' }} />}
+              prefix={<LockOutlined style={{ color: token.colorTextTertiary }} />}
             />
           </Form.Item>
           <Form.Item 
             name="new_password" 
-            label={<span style={{ color: '#94A3B8' }}>新密码</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>新密码</span>} 
             rules={[{ required: true, min: 8, message: '请输入至少8位的新密码' }]}
           >
             <Input.Password 
               placeholder="请输入新密码（至少8位）" 
               style={{
                 height: 44,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
               }}
-              prefix={<LockOutlined style={{ color: '#64748B' }} />}
+              prefix={<LockOutlined style={{ color: token.colorTextTertiary }} />}
             />
           </Form.Item>
           <Form.Item 
             name="confirm_password" 
-            label={<span style={{ color: '#94A3B8' }}>确认新密码</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>确认新密码</span>} 
             rules={[{ required: true, message: '请再次输入新密码' }]}
           >
             <Input.Password 
               placeholder="请再次输入新密码" 
               style={{
                 height: 44,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
               }}
-              prefix={<LockOutlined style={{ color: '#64748B' }} />}
+              prefix={<LockOutlined style={{ color: token.colorTextTertiary }} />}
             />
           </Form.Item>
           <Form.Item style={{ marginTop: 24 }}>
@@ -248,7 +250,7 @@ const SettingsPage = () => {
       <Card 
         title={
           <span style={{ 
-            color: '#F8FAFC', 
+            color: token.colorText, 
             fontFamily: "'Space Grotesk', sans-serif",
             fontWeight: 600,
           }}>
@@ -264,13 +266,13 @@ const SettingsPage = () => {
             justifyContent: 'space-between', 
             alignItems: 'center',
             padding: '16px 20px',
-            background: 'rgba(30, 41, 59, 0.5)',
+            background: token.colorBgContainer,
             borderRadius: 12,
             border: '1px solid rgba(255, 255, 255, 0.05)',
           }}>
             <div>
-              <div style={{ fontWeight: 500, color: '#F8FAFC' }}>额度不足通知</div>
-              <div style={{ color: '#64748B', fontSize: 13, marginTop: 4 }}>当额度低于20%时发送邮件通知</div>
+              <div style={{ fontWeight: 500, color: token.colorText }}>额度不足通知</div>
+              <div style={{ color: token.colorTextTertiary, fontSize: 13, marginTop: 4 }}>当额度低于20%时发送邮件通知</div>
             </div>
             <Switch 
               checked={notifySettings.quota_low_alert}
@@ -287,13 +289,13 @@ const SettingsPage = () => {
             justifyContent: 'space-between', 
             alignItems: 'center',
             padding: '16px 20px',
-            background: 'rgba(30, 41, 59, 0.5)',
+            background: token.colorBgContainer,
             borderRadius: 12,
             border: '1px solid rgba(255, 255, 255, 0.05)',
           }}>
             <div>
-              <div style={{ fontWeight: 500, color: '#F8FAFC' }}>额度变动通知</div>
-              <div style={{ color: '#64748B', fontSize: 13, marginTop: 4 }}>额度增加或减少时发送邮件通知</div>
+              <div style={{ fontWeight: 500, color: token.colorText }}>额度变动通知</div>
+              <div style={{ color: token.colorTextTertiary, fontSize: 13, marginTop: 4 }}>额度增加或减少时发送邮件通知</div>
             </div>
             <Switch 
               checked={notifySettings.quota_change_alert}
@@ -310,13 +312,13 @@ const SettingsPage = () => {
             justifyContent: 'space-between', 
             alignItems: 'center',
             padding: '16px 20px',
-            background: 'rgba(30, 41, 59, 0.5)',
+            background: token.colorBgContainer,
             borderRadius: 12,
             border: '1px solid rgba(255, 255, 255, 0.05)',
           }}>
             <div>
-              <div style={{ fontWeight: 500, color: '#F8FAFC' }}>每日用量报表</div>
-              <div style={{ color: '#64748B', fontSize: 13, marginTop: 4 }}>每天发送用量统计邮件</div>
+              <div style={{ fontWeight: 500, color: token.colorText }}>每日用量报表</div>
+              <div style={{ color: token.colorTextTertiary, fontSize: 13, marginTop: 4 }}>每天发送用量统计邮件</div>
             </div>
             <Switch 
               checked={notifySettings.daily_report}

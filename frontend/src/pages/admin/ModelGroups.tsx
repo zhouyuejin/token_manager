@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, Select, 
@@ -21,6 +22,7 @@ const ModelGroups: React.FC = () => {
   const [editingGroup, setEditingGroup] = useState<ModelGroup | null>(null)
   const [form] = Form.useForm()
   const message = useMessage()
+  const { token, isDark } = useThemeToken()
 
   useEffect(() => {
     fetchGroups()

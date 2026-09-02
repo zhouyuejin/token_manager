@@ -1,0 +1,35 @@
+/* 主题 CSS 变量 - 由 ThemeContext 自动注入 */
+
+/* 全局样式使用主题变量 */
+:root {
+  /* 主题过渡动画 */
+  --theme-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 应用主题过渡到所有可能改变颜色的元素 */
+body,
+body * {
+  transition: background-color 0.25s ease,
+              border-color 0.25s ease,
+              color 0.15s ease,
+              fill 0.15s ease,
+              stroke 0.15s ease;
+}
+
+/* 排除某些不需要过渡的元素 */
+.ant-btn,
+.ant-input,
+.ant-select-selector,
+.ant-dropdown-menu,
+.ant-tooltip,
+.ant-message-notice-content,
+.ant-notification-notice {
+  transition: none !important;
+}
+
+/* 恢复动画元素的过渡 */
+.ant-motion-collapse,
+.ant-motion-collapse-active,
+.ant-motion-collapse-legacy-collapse {
+  transition: none !important;
+}

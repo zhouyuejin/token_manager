@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, memo } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { List, Button, Empty, Spin, Avatar, Dropdown, App, message } from 'antd'
 import { PlusOutlined, DeleteOutlined, MoreOutlined, MessageOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
@@ -32,6 +33,7 @@ const ConversationItem = memo(function ConversationItem({
   onSelect,
   onDelete,
 }: ConversationItemProps) {
+  const { token } = useThemeToken()
   const menuItems: MenuProps['items'] = [
     {
       key: 'delete',
@@ -60,7 +62,7 @@ const ConversationItem = memo(function ConversationItem({
         <Avatar
           size={38}
           style={{
-            background: selected ? '#3B82F6' : '#424242',
+            background: selected ? token.colorPrimary : token.colorTextSecondary,
             flexShrink: 0,
           }}
           icon={<MessageOutlined />}
@@ -70,7 +72,7 @@ const ConversationItem = memo(function ConversationItem({
         <div style={{ marginLeft: '12px', flex: 1, minWidth: 0 }}>
           <div 
             style={{
-              color: selected ? '#e0e0e0' : '#a0a0a0',
+              color: token.colorText,
               fontWeight: selected ? 500 : 400,
               fontSize: '14px',
               whiteSpace: 'nowrap',
@@ -80,7 +82,7 @@ const ConversationItem = memo(function ConversationItem({
           >
             {title}
           </div>
-          <div style={{ color: '#666', fontSize: '12px', marginTop: '2px' }}>
+          <div style={{ color: token.colorTextSecondary, fontSize: '12px', marginTop: '2px' }}>
             {dayjs(conv.updated_at).fromNow()}
           </div>
         </div>
@@ -97,7 +99,7 @@ const ConversationItem = memo(function ConversationItem({
             icon={<MoreOutlined />}
             onClick={(e) => e.stopPropagation()}
             loading={deleting}
-            style={{ color: '#8b8b8b', flexShrink: 0, marginLeft: '8px' }}
+            style={{ color: token.colorTextSecondary, flexShrink: 0, marginLeft: '8px' }}
           />
         </Dropdown>
       </div>
@@ -110,6 +112,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
   onSelect,
   onNewChat,
 }) => {
+  const { token, isDark } = useThemeToken()
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -165,12 +168,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
       <div 
         style={{ 
           padding: '20px 16px 16px', 
-          borderBottom: '1px solid #303030',
-          background: 'linear-gradient(180deg, #222 0%, #1a1a1a 100%)',
+          borderBottom: `1px solid ${token.colorBorder}`,
+          background: token.colorBgContainer,
         }}
       >
         <span style={{ 
-          color: '#f0f0f0', 
+          color: token.colorText, 
           fontSize: '16px', 
           fontWeight: 600,
         }}>
@@ -179,7 +182,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
       </div>
 
       {/* 新建对话按钮 */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #303030' }}>
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${token.colorBorder}` }}>
         <Button
           type="primary"
           icon={<PlusOutlined />}

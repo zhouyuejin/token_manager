@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Layout, Button, message } from 'antd'
 import ConversationList from '../components/Chat/ConversationList'
 import MessageList from '../components/Chat/MessageList'
@@ -16,6 +17,7 @@ const { Sider } = Layout
 const SIDEBAR_WIDTH = 260
 
 const Chat: React.FC = () => {
+  const { token, isDark } = useThemeToken()
   const [_conversations, setConversations] = useState<ChatConversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -204,13 +206,13 @@ const Chat: React.FC = () => {
   }, [currentConversationId, loadMessages])
 
   return (
-    <Layout style={{ height: 'calc(100% + 40px)', margin: '-20px', background: '#1a1a1a' }}>
+    <Layout style={{ height: 'calc(100% + 40px)', margin: '-20px', background: token.colorBgLayout }}>
       <Sider
         width={SIDEBAR_WIDTH}
         collapsedWidth={0}
         style={{
-          background: '#1a1a1a',
-          borderRight: '1px solid #303030',
+          background: token.colorBgLayout,
+          borderRight: `1px solid ${token.colorBorder}`,
         }}
       >
         <ConversationList
@@ -220,19 +222,19 @@ const Chat: React.FC = () => {
         />
       </Sider>
 
-      <Layout style={{ background: '#1a1a1a' }}>
+      <Layout style={{ background: token.colorBgLayout }}>
         {/* 顶部标题区域 - 简洁优化 */}
         <div
           style={{
             height: '56px',
-            borderBottom: '1px solid #303030',
+            borderBottom: `1px solid ${token.colorBorder}`,
             display: 'flex',
             alignItems: 'center',
             padding: '0 20px',
-            background: '#1a1a1a',
+            background: token.colorBgLayout,
           }}
         >
-          <span style={{ color: '#e8e8e8', fontSize: '16px', fontWeight: 500 }}>
+          <span style={{ color: token.colorText, fontSize: '16px', fontWeight: 500 }}>
             AI 对话
           </span>
         </div>

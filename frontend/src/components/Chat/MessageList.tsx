@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Spin, Empty, Avatar } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons'
 import { ChatMessage } from '../../api/chat'
@@ -17,6 +18,7 @@ const MessageList: React.FC<MessageListProps> = ({
   streaming = false,
   onRegenerate,
 }) => {
+  const { token, isDark } = useThemeToken()
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 自动滚动到底部
@@ -101,8 +103,8 @@ const MessageList: React.FC<MessageListProps> = ({
                 maxWidth: '70%',
                 padding: '12px 16px',
                 borderRadius: '12px',
-                background: isUser ? '#3B82F6' : '#2a2a2a',
-                color: '#e0e0e0',
+                background: isUser ? token.colorPrimary : (isDark ? '#2a2a2a' : '#F1F5F9'),
+                color: isDark ? '#e0e0e0' : '#1E293B',
                 wordBreak: 'break-word',
                 whiteSpace: 'pre-wrap',
               }}

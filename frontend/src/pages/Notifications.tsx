@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { useSearchParams } from 'react-router-dom'
 import {
   Card,
@@ -55,6 +56,7 @@ const getTypeConfig = (type: string) =>
   NOTIFICATION_TYPE_CONFIG[type] ?? NOTIFICATION_TYPE_CONFIG.system
 
 const NotificationsPage = () => {
+  const { token, isDark } = useThemeToken()
   // Task 4 将挂载 /notifications 路由；这里直接消费 ?notif= 参数实现"点击下拉某条 → 自动打开详情"
   const [searchParams, setSearchParams] = useSearchParams()
   const focusId = searchParams.get('notif')
@@ -254,7 +256,7 @@ const NotificationsPage = () => {
       {/* 顶部筛选 + 操作 */}
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.6)',
+          background: token.colorBgContainer,
           border: '1px solid rgba(255, 255, 255, 0.06)',
           borderRadius: 12,
           marginBottom: 16,
@@ -285,7 +287,7 @@ const NotificationsPage = () => {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               allowClear
-              prefix={<SearchOutlined style={{ color: '#64748B' }} />}
+              prefix={<SearchOutlined style={{ color: token.colorTextTertiary }} />}
               style={{ width: 220 }}
             />
             <Button
@@ -326,13 +328,13 @@ const NotificationsPage = () => {
           closable
           onClose={() => setBannerDismissed(true)}
           message={
-            <span style={{ color: '#E2E8F0' }}>
-              已收到 <b style={{ color: '#3B82F6' }}>{newSinceLastFetch}</b> 条新通知
+            <span style={{ color: token.colorText }}>
+              已收到 <b style={{ color: token.colorPrimary }}>{newSinceLastFetch}</b> 条新通知
               <Button
                 type="link"
                 size="small"
                 onClick={refreshNow}
-                style={{ marginLeft: 8, padding: 0, color: '#3B82F6' }}
+                style={{ marginLeft: 8, padding: 0, color: token.colorPrimary }}
               >
                 刷新
               </Button>
@@ -350,7 +352,7 @@ const NotificationsPage = () => {
       {/* 列表 */}
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.6)',
+          background: token.colorBgContainer,
           border: '1px solid rgba(255, 255, 255, 0.06)',
           borderRadius: 12,
         }}
@@ -358,9 +360,9 @@ const NotificationsPage = () => {
       >
         {total === 0 && !loading ? (
           <Empty
-            image={<InboxOutlined style={{ fontSize: 64, color: '#475569' }} />}
+            image={<InboxOutlined style={{ fontSize: 64, color: token.colorTextTertiary }} />}
             styles={{ image: { height: 80 } }}
-            description={<span style={{ color: '#94A3B8' }}>暂无通知</span>}
+            description={<span style={{ color: token.colorTextSecondary }}>暂无通知</span>}
             style={{ padding: '40px 0' }}
           />
         ) : (
@@ -369,7 +371,7 @@ const NotificationsPage = () => {
               <div
                 style={{
                   padding: '14px 4px 8px',
-                  color: '#94A3B8',
+                  color: token.colorTextSecondary,
                   fontSize: 12,
                 }}
               >
@@ -383,7 +385,7 @@ const NotificationsPage = () => {
               split={false}
               locale={{
                 emptyText: (
-                  <span style={{ color: '#94A3B8', padding: 24, display: 'block' }}>
+                  <span style={{ color: token.colorTextSecondary, padding: 24, display: 'block' }}>
                     没有匹配的通知
                   </span>
                 ),
@@ -424,7 +426,7 @@ const NotificationsPage = () => {
                         width: 8,
                         height: 8,
                         borderRadius: '50%',
-                        background: notif.is_read ? 'transparent' : '#3B82F6',
+                        background: notif.is_read ? 'transparent' : token.colorPrimary,
                         boxShadow: notif.is_read
                           ? 'none'
                           : '0 0 6px rgba(59, 130, 246, 0.6)',
@@ -453,7 +455,7 @@ const NotificationsPage = () => {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
-                          color: notif.is_read ? '#94A3B8' : '#E2E8F0',
+                          color: notif.is_read ? token.colorTextTertiary : token.colorText,
                           fontWeight: notif.is_read ? 400 : 600,
                           fontSize: 14,
                           marginBottom: 4,
@@ -467,7 +469,7 @@ const NotificationsPage = () => {
                       {notif.content && (
                         <div
                           style={{
-                            color: '#64748B',
+                            color: token.colorTextTertiary,
                             fontSize: 12,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -481,7 +483,7 @@ const NotificationsPage = () => {
                     {/* 时间 */}
                     <div
                       style={{
-                        color: '#64748B',
+                        color: token.colorTextTertiary,
                         fontSize: 12,
                         fontFamily: "'Space Grotesk', monospace",
                         flexShrink: 0,
@@ -500,7 +502,7 @@ const NotificationsPage = () => {
                         type="link"
                         icon={<EyeOutlined />}
                         onClick={() => openDrawer(notif)}
-                        style={{ color: '#3B82F6', padding: '0 8px' }}
+                        style={{ color: token.colorPrimary, padding: '0 8px' }}
                       >
                         查看
                       </Button>
