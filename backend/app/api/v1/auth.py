@@ -2,6 +2,7 @@
 认证接口
 """
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -10,7 +11,12 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 
 from app.core.database import get_db
-from app.core.security import verify_password, get_password_hash, create_access_token, generate_user_id
+from app.core.config import settings
+from app.core.security import (
+    verify_password, get_password_hash, create_access_token,
+    generate_user_id, generate_refresh_token, hash_token,
+)
+from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole, UserStatus
 from app.models.login_log import LoginLog
 from app.utils.request import extract_client_ip, extract_user_agent
@@ -34,7 +40,17 @@ class UserLogin(BaseModel):
 
 class Token(BaseModel):
     access_token: str
-    token_type: str
+    token_type: str = "bearer"
+    refresh_token: str
+    expires_in: int  # access_token 剩余秒数
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None  # 不传则只登出前端
 
 
 class UserInfo(BaseModel):
@@ -134,7 +150,23 @@ async def login(request: Request,
 
         _create_login_log(db, username, user.user_id, ip_address, user_agent, "success")
 
-        return Token(access_token=access_token, token_type="bearer")
+        # 生成 refresh token 并入库
+        plain, h, token_id = generate_refresh_token()
+        refresh_row = RefreshToken(
+            token_id=token_id,
+            user_id=user.user_id,
+            token_hash=h,
+            expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+        db.add(refresh_row)
+        db.commit()
+
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            refresh_token=plain,
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
 
     except HTTPException:
         raise
@@ -165,3 +197,70 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         email=user.email,
         role=user.role.value
     )
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(request: RefreshRequest, db: Session = Depends(get_db)):
+    """
+    用 refresh_token 换新的 access_token（并 rotation）。
+    - refresh_token 过期 / 已撤销 / 不存在 → 401
+    - 成功：旧 token 标记 revoked；发新 access_token + 新 refresh_token
+    """
+    h = hash_token(request.refresh_token)
+    row = db.query(RefreshToken).filter(
+        RefreshToken.token_hash == h,
+        RefreshToken.revoked == False,  # noqa: E712
+    ).first()
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_token 无效")
+
+    now = datetime.utcnow()
+    if row.expires_at < now:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_token 已过期")
+
+    # 用户状态校验（被禁用的账号不允许续期）
+    user = db.query(User).filter(User.user_id == row.user_id).first()
+    if not user or user.status != UserStatus.active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账户不可用")
+
+    # rotation: 撤销旧 token
+    row.revoked = True
+    row.revoked_at = now
+    row.last_used_at = now
+
+    # 生成新的 access_token + refresh_token
+    new_access = create_access_token(data={"sub": user.user_id, "username": user.username})
+    plain, new_hash, new_token_id = generate_refresh_token()
+    new_row = RefreshToken(
+        token_id=new_token_id,
+        user_id=user.user_id,
+        token_hash=new_hash,
+        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    db.add(new_row)
+    db.commit()
+
+    logger.info(f"[Auth] 用户 {user.username} 刷新 token，旧 token_id={row.token_id} 已撤销")
+
+    return Token(
+        access_token=new_access,
+        token_type="bearer",
+        refresh_token=plain,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post("/logout", status_code=204)
+async def logout(request: LogoutRequest, db: Session = Depends(get_db)):
+    """
+    登出：撤销当前 refresh_token（如有）。前端应同时丢弃 access_token。
+    """
+    if request.refresh_token:
+        h = hash_token(request.refresh_token)
+        row = db.query(RefreshToken).filter(RefreshToken.token_hash == h).first()
+        if row and not row.revoked:
+            row.revoked = True
+            row.revoked_at = datetime.utcnow()
+            db.commit()
+    return None
