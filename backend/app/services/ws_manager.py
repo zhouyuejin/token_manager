@@ -3,7 +3,6 @@ WebSocket 连接管理器
 """
 from typing import Dict, Set
 from fastapi import WebSocket
-from loguru import logger
 
 
 class ConnectionManager:
@@ -19,22 +18,18 @@ class ConnectionManager:
         if user_id not in self.active_connections:
             self.active_connections[user_id] = set()
         self.active_connections[user_id].add(websocket)
-        logger.info(f"[WS] 用户 {user_id} 已连接，当前连接数: {len(self.active_connections[user_id])}")
     
     def disconnect(self, websocket: WebSocket, user_id: str) -> None:
         """注销连接，自动清理空用户"""
         if user_id in self.active_connections:
             self.active_connections[user_id].discard(websocket)
-            logger.info(f"[WS] 用户 {user_id} 断开连接，剩余连接数: {len(self.active_connections[user_id])}")
             # 清理空用户
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
-                logger.info(f"[WS] 用户 {user_id} 所有连接已关闭")
     
     async def send_to_user(self, user_id: str, message: dict) -> bool:
         """向用户所有连接推送，异常连接自动清理"""
         if user_id not in self.active_connections:
-            logger.warning(f"[WS] send_to_user 失败: 用户 {user_id} 不在 active_connections 中")
             return False
         
         disconnected = set()
@@ -44,14 +39,12 @@ class ConnectionManager:
                 await websocket.send_json(message)
                 sent_count += 1
             except Exception as e:
-                logger.warning(f"[WS] 发送消息到用户 {user_id} 失败: {e}")
                 disconnected.add(websocket)
         
         # 清理异常连接
         for ws in disconnected:
             self.disconnect(ws, user_id)
         
-        logger.info(f"[WS] 消息已发送给用户 {user_id}，成功: {sent_count}，失败: {len(disconnected)}")
         return True
     
     async def broadcast(self, message: dict) -> None:
