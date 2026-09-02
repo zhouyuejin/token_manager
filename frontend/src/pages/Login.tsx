@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Form, Button } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
@@ -7,10 +7,8 @@ import { useAuthStore } from '../store/auth'
 import { useMessage } from '../utils/message'
 import gsap from 'gsap'
 
-// 判断是否为开发环境
 const isDev = import.meta.env.DEV
 
-// 自定义输入框组件
 const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: any) => {
   const { token } = useThemeToken()
   return (
@@ -46,63 +44,337 @@ const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: an
       }}
     />
     <style>{`
-      .custom-input-wrap:hover {
-        background: rgba(30, 41, 59, 0.7) !important;
-      }
-      .custom-input-wrap:focus-within {
-        background: rgba(30, 41, 59, 0.8) !important;
-        border-color: rgba(99, 102, 241, 0.4) !important;
-      }
-      .custom-input-wrap input::placeholder {
-        color: #64748B !important;
-      }
+      .custom-input-wrap:hover { background: rgba(30, 41, 59, 0.7) !important; }
+      .custom-input-wrap:focus-within { background: rgba(30, 41, 59, 0.8) !important; border-color: rgba(99, 102, 241, 0.4) !important; }
+      .custom-input-wrap input::placeholder { color: #64748B !important; }
     `}</style>
   </div>
   )
 }
 
+// 单颗星星
+const TwinklingStar = ({ x, y, size, baseOpacity, twinkleDuration, twinkleDelay }: { 
+  x: number
+  y: number
+  size: number
+  baseOpacity: number
+  twinkleDuration: number
+  twinkleDelay: number
+}) => {
+  const starRef = useRef<HTMLDivElement>(null)
+  const tlRef = useRef<gsap.core.Timeline | null>(null)
+
+  useEffect(() => {
+    if (!starRef.current) return
+    const star = starRef.current
+    
+    gsap.set(star, { opacity: baseOpacity })
+
+    tlRef.current = gsap.timeline({ repeat: -1, delay: twinkleDelay })
+    
+    tlRef.current.to(star, {
+      opacity: Math.min(baseOpacity + 0.4, 0.9),
+      scale: 1.2,
+      duration: twinkleDuration * (0.8 + Math.random() * 0.4),
+      ease: 'sine.inOut',
+    })
+    .to(star, {
+      opacity: Math.max(baseOpacity - 0.2, 0.1),
+      scale: 0.9,
+      duration: twinkleDuration * (0.6 + Math.random() * 0.4),
+      ease: 'sine.inOut',
+    })
+    .to(star, {
+      opacity: baseOpacity,
+      scale: 1,
+      duration: twinkleDuration * (0.5 + Math.random() * 0.3),
+      ease: 'sine.inOut',
+    })
+
+    return () => {
+      if (tlRef.current) tlRef.current.kill()
+    }
+  }, [baseOpacity, twinkleDuration, twinkleDelay])
+
+  const isBig = size > 2
+
+  return (
+    <div
+      ref={starRef}
+      style={{
+        position: 'absolute',
+        left: `${x}%`,
+        top: `${y}%`,
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: '#fff',
+        boxShadow: isBig ? `0 0 ${size * 2}px rgba(255,255,255,0.8), 0 0 ${size * 4}px rgba(255,255,255,0.4)` : 'none',
+        willChange: 'opacity, transform',
+      }}
+    />
+  )
+}
+
+// 遥远的恒星
+const DistantStar = ({ x, y, color }: { x: number; y: number; color: string }) => {
+  const starRef = useRef<HTMLDivElement>(null)
+  const tlRef = useRef<gsap.core.Timeline | null>(null)
+
+  useEffect(() => {
+    if (!starRef.current) return
+    
+    tlRef.current = gsap.timeline({ repeat: -1 })
+    
+    tlRef.current.to(starRef.current, {
+      opacity: 0.3,
+      scale: 1.1,
+      duration: 3 + Math.random() * 2,
+      ease: 'sine.inOut',
+    })
+    .to(starRef.current, {
+      opacity: 0.8,
+      scale: 1,
+      duration: 3 + Math.random() * 2,
+      ease: 'sine.inOut',
+    })
+
+    return () => {
+      if (tlRef.current) tlRef.current.kill()
+    }
+  }, [])
+
+  return (
+    <div
+      ref={starRef}
+      style={{
+        position: 'absolute',
+        left: `${x}%`,
+        top: `${y}%`,
+        width: 4,
+        height: 4,
+        borderRadius: '50%',
+        background: color,
+        boxShadow: `0 0 20px ${color}, 0 0 40px ${color}, 0 0 60px rgba(255,255,255,0.3)`,
+        opacity: 0.6,
+      }}
+    />
+  )
+}
+
+// 缓慢飘动的星尘
+const Stardust = ({ x, y, size, speed, delay }: { x: number; y: number; size: number; speed: number; delay: number }) => {
+  const dustRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!dustRef.current) return
+
+    gsap.to(dustRef.current, {
+      y: '-=30',
+      x: '+=15',
+      opacity: 0.3,
+      duration: speed,
+      repeat: -1,
+      yoyo: true,
+      ease: 'sine.inOut',
+      delay: delay,
+    })
+
+  }, [speed, delay])
+
+  return (
+    <div
+      ref={dustRef}
+      style={{
+        position: 'absolute',
+        left: `${x}%`,
+        top: `${y}%`,
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: 'rgba(200, 220, 255, 0.3)',
+        filter: 'blur(1px)',
+        opacity: 0.5,
+      }}
+    />
+  )
+}
+
+// 星云光晕
+const Nebula = () => {
+  const nebula1Ref = useRef<HTMLDivElement>(null)
+  const nebula2Ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (nebula1Ref.current) {
+      gsap.to(nebula1Ref.current, {
+        opacity: 0.15,
+        scale: 1.05,
+        duration: 8,
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut',
+      })
+    }
+    if (nebula2Ref.current) {
+      gsap.to(nebula2Ref.current, {
+        opacity: 0.1,
+        scale: 1.1,
+        duration: 12,
+        repeat: -1,
+        yoyo: true,
+        ease: 'sine.inOut',
+        delay: 2,
+      })
+    }
+  }, [])
+
+  return (
+    <>
+      <div
+        ref={nebula1Ref}
+        style={{
+          position: 'absolute',
+          top: '5%',
+          left: '10%',
+          width: '40%',
+          height: '50%',
+          background: 'radial-gradient(ellipse at 30% 40%, rgba(138, 43, 226, 0.12) 0%, rgba(138, 43, 226, 0.05) 40%, transparent 70%)',
+          filter: 'blur(30px)',
+          opacity: 0.1,
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        ref={nebula2Ref}
+        style={{
+          position: 'absolute',
+          bottom: '10%',
+          right: '5%',
+          width: '50%',
+          height: '40%',
+          background: 'radial-gradient(ellipse at 70% 60%, rgba(65, 105, 225, 0.1) 0%, rgba(65, 105, 225, 0.04) 40%, transparent 70%)',
+          filter: 'blur(40px)',
+          opacity: 0.08,
+          pointerEvents: 'none',
+        }}
+      />
+    </>
+  )
+}
+
+// 地平线微光
+const HorizonGlow = () => {
+  const glowRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!glowRef.current) return
+    
+    gsap.to(glowRef.current, {
+      opacity: 0.4,
+      duration: 5,
+      repeat: -1,
+      yoyo: true,
+      ease: 'sine.inOut',
+    })
+  }, [])
+
+  return (
+    <div
+      ref={glowRef}
+      style={{
+        position: 'absolute',
+        bottom: '15%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '120%',
+        height: '200px',
+        background: 'radial-gradient(ellipse at center bottom, rgba(100, 120, 180, 0.08) 0%, transparent 70%)',
+        opacity: 0.2,
+        pointerEvents: 'none',
+      }}
+    />
+  )
+}
+
+// 星空背景
+const StarField = () => {
+  const stars = useMemo(() => {
+    return Array.from({ length: 150 }, (_, i) => {
+      const isBig = Math.random() > 0.92
+      const isMedium = Math.random() > 0.8
+      const size = isBig ? 2.5 + Math.random() * 1.5 : isMedium ? 1.5 + Math.random() * 0.8 : 0.5 + Math.random() * 1
+      
+      return {
+        id: i,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size,
+        baseOpacity: isBig ? 0.6 + Math.random() * 0.3 : isMedium ? 0.3 + Math.random() * 0.3 : 0.1 + Math.random() * 0.2,
+        twinkleDuration: 2 + Math.random() * 4,
+        twinkleDelay: Math.random() * 8,
+      }
+    })
+  }, [])
+
+  const distantStars = useMemo(() => [
+    { x: 15, y: 20, color: '#FFE4B5' },
+    { x: 75, y: 15, color: '#ADD8E6' },
+    { x: 35, y: 60, color: '#FFA07A' },
+    { x: 80, y: 55, color: '#98FB98' },
+    { x: 55, y: 10, color: '#E6E6FA' },
+  ], [])
+
+  const stardusts = useMemo(() => 
+    Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      size: 1 + Math.random() * 2,
+      speed: 8 + Math.random() * 12,
+      delay: Math.random() * 5,
+    }))
+  , [])
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+      {stars.map((star) => (
+        <TwinklingStar key={star.id} {...star} />
+      ))}
+      {distantStars.map((star, i) => (
+        <DistantStar key={`distant-${i}`} {...star} />
+      ))}
+      {stardusts.map((dust) => (
+        <Stardust key={`dust-${dust.id}`} {...dust} />
+      ))}
+    </div>
+  )
+}
+
 const Login = () => {
-  const { token, isDark } = useThemeToken()
+  const { token } = useThemeToken()
   const navigate = useNavigate()
   const { login, isLoading } = useAuthStore()
   const message = useMessage()
   
-  // 开发环境默认填充账号密码
   const [username, setUsername] = useState(isDev ? 'admin' : '')
   const [password, setPassword] = useState(isDev ? 'admin123' : '')
 
   useEffect(() => {
-    // Card entrance animation
     gsap.fromTo('.login-card', 
       { opacity: 0, y: 30, scale: 0.95 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'back.out(1.4)' }
+      { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: 'back.out(1.4)' }
     )
 
-    // Stagger input animations
     gsap.fromTo('.login-input-wrap',
       { opacity: 0, y: 20 },
       { opacity: 1, y: 0, duration: 0.5, stagger: 0.15, delay: 0.3, ease: 'power2.out' }
     )
 
-    // Button animation
     gsap.fromTo('#login-btn',
       { opacity: 0, y: 10 },
       { opacity: 1, y: 0, duration: 0.4, delay: 0.6, ease: 'power2.out' }
     )
-
-    // Floating particles
-    const particles = document.querySelectorAll('.particle')
-    particles.forEach((particle) => {
-      gsap.to(particle, {
-        y: 'random(-20, 20)',
-        x: 'random(-15, 15)',
-        opacity: 'random(0.3, 0.7)',
-        duration: 'random(3, 5)',
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      })
-    })
   }, [])
 
   const onFinish = async () => {
@@ -113,7 +385,6 @@ const Login = () => {
     try {
       await login({ username, password })
       message.success('登录成功')
-      // 延迟一下获取用户信息，确保 state 已更新
       setTimeout(() => {
         const userInfo = useAuthStore.getState().user
         if (userInfo?.role === 'admin') {
@@ -127,15 +398,6 @@ const Login = () => {
     }
   }
 
-  // Generate particles
-  const particles = [...Array(15)].map((_, i) => ({
-    id: i,
-    size: Math.random() * 3 + 2,
-    left: Math.random() * 100,
-    top: Math.random() * 100,
-    color: ['#3B82F6', '#8B5CF6', '#EA580C'][i % 3],
-  }))
-
   return (
     <div style={{ 
       minHeight: '100vh', 
@@ -144,101 +406,79 @@ const Login = () => {
       justifyContent: 'center',
       position: 'relative',
       overflow: 'hidden',
-      background: '#0a0e17',
+      background: '#010106',
     }}>
-      {/* Background Effects */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage: `
-          radial-gradient(ellipse at 20% 30%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
-          radial-gradient(ellipse at 80% 70%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
-          radial-gradient(ellipse at 50% 50%, rgba(234, 88, 12, 0.06) 0%, transparent 60%)
-        `,
+        background: 'radial-gradient(ellipse at 50% 30%, rgba(10,15,35,0.6) 0%, rgba(1,1,6,1) 70%)',
       }} />
 
-      {/* Grid */}
+      <Nebula />
+      <StarField />
+      <HorizonGlow />
+
       <div style={{
         position: 'absolute',
-        inset: 0,
-        backgroundImage: `
-          linear-gradient(rgba(59, 130, 246, 0.02) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(59, 130, 246, 0.02) 1px, transparent 1px)
-        `,
-        backgroundSize: '60px 60px',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '35%',
+        background: 'linear-gradient(to top, rgba(1,1,6,0.95) 0%, rgba(1,1,6,0.5) 30%, transparent 100%)',
+        pointerEvents: 'none',
       }} />
-
-      {/* Particles */}
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          className="particle"
-          style={{
-            position: 'absolute',
-            width: p.size,
-            height: p.size,
-            left: `${p.left}%`,
-            top: `${p.top}%`,
-            background: p.color,
-            borderRadius: '50%',
-            opacity: 0.5,
-            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-          }}
-        />
-      ))}
       
-      {/* Login Card */}
       <div 
         className="login-card"
         style={{ 
           position: 'relative',
-          zIndex: 1,
-          width: 380,
-          padding: 40,
-          background: 'rgba(15, 23, 42, 0.9)',
+          zIndex: 10,
+          width: 400,
+          padding: 44,
+          background: 'rgba(8, 12, 20, 0.85)',
           backdropFilter: 'blur(20px)',
-          borderRadius: 20,
+          borderRadius: 24,
           border: '1px solid rgba(255, 255, 255, 0.06)',
-          boxShadow: '0 25px 50px -20px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 25px 60px -20px rgba(0, 0, 0, 0.8)',
         }}
       >
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 36 }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 52,
-            height: 52,
-            background: 'linear-gradient(135deg, #2563EB 0%, #6366F1 100%)',
-            borderRadius: 14,
-            marginBottom: 16,
-            boxShadow: '0 8px 24px rgba(37, 99, 235, 0.3)',
+            width: 64,
+            height: 64,
+            background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+            borderRadius: 18,
+            marginBottom: 20,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.08)',
           }}>
             <span style={{
               fontFamily: "'Space Grotesk', sans-serif",
               fontWeight: 700,
-              fontSize: 22,
-              color: 'white',
+              fontSize: 26,
+              color: '#E2E8F0',
+              textShadow: '0 2px 8px rgba(0,0,0,0.5)',
             }}>T</span>
           </div>
           <h1 style={{ 
             fontFamily: "'Space Grotesk', sans-serif",
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: 600,
-            color: token.colorText,
-            marginBottom: 6,
-            letterSpacing: '-0.02em',
+            color: '#E2E8F0',
+            marginBottom: 8,
           }}>
             Token中转平台
           </h1>
-          <p style={{ color: token.colorTextTertiary, fontSize: 13 }}>
-            统一API入口，管理大模型调用
+          <p style={{ color: '#64748B', fontSize: 14 }}>
+            统一API入口 · 管理大模型调用
           </p>
         </div>
         
         <Form onFinish={onFinish} layout="vertical">
-          <div className="login-input-wrap" style={{ marginBottom: 16 }}>
+          <div className="login-input-wrap" style={{ marginBottom: 20 }}>
             <CustomInput
               prefix={<UserOutlined />}
               placeholder="请输入用户名"
@@ -247,7 +487,7 @@ const Login = () => {
             />
           </div>
 
-          <div className="login-input-wrap" style={{ marginBottom: 20 }}>
+          <div className="login-input-wrap" style={{ marginBottom: 24 }}>
             <CustomInput
               prefix={<LockOutlined />}
               placeholder="请输入密码"
@@ -257,7 +497,7 @@ const Login = () => {
             />
           </div>
 
-          <Form.Item style={{ marginBottom: 16 }}>
+          <Form.Item style={{ marginBottom: 20 }}>
             <Button 
               type="primary" 
               htmlType="submit" 
@@ -265,47 +505,44 @@ const Login = () => {
               block
               id="login-btn"
               style={{
-                height: 48,
-                borderRadius: 12,
+                height: 52,
+                borderRadius: 14,
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
-                fontSize: 15,
-                background: 'linear-gradient(135deg, #2563EB 0%, #6366F1 100%)',
-                border: 'none',
-                boxShadow: '0 4px 16px rgba(37, 99, 235, 0.3)',
+                fontSize: 16,
+                background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
               }}
               onMouseEnter={(e) => {
                 gsap.to(e.currentTarget, {
-                  boxShadow: '0 6px 24px rgba(37, 99, 235, 0.45)',
-                  duration: 0.2
+                  background: 'linear-gradient(135deg, #234b70 0%, #102540 100%)',
+                  boxShadow: '0 6px 28px rgba(0, 0, 0, 0.4)',
+                  duration: 0.25
                 })
               }}
               onMouseLeave={(e) => {
                 gsap.to(e.currentTarget, {
-                  boxShadow: '0 4px 16px rgba(37, 99, 235, 0.3)',
-                  duration: 0.2
+                  background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                  duration: 0.25
                 })
               }}
             >
-              登 录
+              <span style={{ position: 'relative', zIndex: 1, letterSpacing: '0.15em', color: '#E2E8F0' }}>登 录</span>
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 13 }} id="login-btn">
+          <div style={{ textAlign: 'center', color: '#475569', fontSize: 14 }}>
             还没有账号？{' '}
-            <Link 
-              to="/register" 
-              style={{
-                color: '#6366F1',
-                fontWeight: 500,
-                textDecoration: 'none',
-              }}
-            >
+            <Link to="/register" style={{ color: '#94A3B8', fontWeight: 500, textDecoration: 'none' }}>
               立即注册
             </Link>
           </div>
         </Form>
       </div>
+
+      <style>{`* { box-sizing: border-box; } body { margin: 0; padding: 0; }`}</style>
     </div>
   )
 }
