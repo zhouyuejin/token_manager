@@ -32,6 +32,11 @@ export const useNotificationWebSocket = () => {
       return
     }
 
+    // 重置取消标志：StrictMode 下 mount→unmount→mount，cleanup 会把
+    // isCancelledRef 置 true；如果不重置，第二次 effect 永远 return，
+    // WebSocket 永远不会创建。
+    isCancelledRef.current = false
+
     let currentWs: WebSocket | null = null
 
     const connect = () => {
