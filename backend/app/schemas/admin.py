@@ -192,17 +192,38 @@ class UserUsage(BaseModel):
     user_id: str
     username: str
     tokens: int
+    requests: int = 0
 
 
 class ProviderUsage(BaseModel):
     """供应商用量统计"""
     provider: str
     tokens: int
+    requests: int = 0
+
+
+class ModelUsageStats(BaseModel):
+    """模型用量统计"""
+    model: str
+    tokens: int
+    requests: int
+    cost: float = 0
+
+
+class DailyUsageStats(BaseModel):
+    """每日用量统计"""
+    date: str
+    tokens: int
+    requests: int
 
 
 class AdminStatsResponse(BaseModel):
     """管理员用量统计响应"""
     total_tokens: int = 0
     total_requests: int = 0
+    avg_latency_ms: float = 0
+    success_rate: float = 100.0
     by_user: List[UserUsage] = []
     by_provider: List[ProviderUsage] = []
+    by_model: List[ModelUsageStats] = []
+    by_day: List[DailyUsageStats] = []

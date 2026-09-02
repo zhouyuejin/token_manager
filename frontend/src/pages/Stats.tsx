@@ -22,7 +22,7 @@ const StatsPage = () => {
 
   useEffect(() => {
     fetchData()
-  }, [dateRange, isAdmin])
+  }, [dateRange])
 
   const fetchData = async () => {
     setLoading(true)
@@ -32,23 +32,8 @@ const StatsPage = () => {
         end_date: dateRange[1].format('YYYY-MM-DD'),
       }
       
-      let statsData: any
-      if (isAdmin) {
-        // 管理员获取所有数据
-        const [adminStats, myStats] = await Promise.all([
-          getAdminStats(statsParams),
-          getUsageStats(statsParams)
-        ])
-        // 合并数据：既有所有用户的统计，也有自己的详细统计
-        statsData = {
-          ...adminStats,
-          by_model: myStats.by_model,
-          by_day: myStats.by_day,
-        }
-      } else {
-        statsData = await getUsageStats(statsParams)
-      }
-      
+      // 获取个人用量统计
+      const statsData = await getUsageStats(statsParams)
       const keysData = await getApiKeys()
       setStats(statsData)
       setKeys(keysData.items || [])
