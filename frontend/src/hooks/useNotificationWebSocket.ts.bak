@@ -1,0 +1,103 @@
+import { useEffect, useRef } from 'react'
+import { notification } from 'antd'
+import { useAuthStore } from '../store/auth'
+import { useNotificationStore } from '../store/notification'
+
+// 直接通过后端 WebSocket 地址连接（绕过 Vite 代理）
+const getWsBaseUrl = () => {
+  // 通过 nginx 反向代理到后端
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws/notifications`
+}
+
+export const useNotificationWebSocket = () => {
+  const token = useAuthStore((s) => s.token)
+  const setUnreadCount = useNotificationStore((s) => s.setUnreadCount)
+  const addNotification = useNotificationStore((s) => s.addNotification)
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+
+    let isCancelled = false
+
+    const connect = () => {
+      if (isCancelled) return
+
+      if (wsRef.current) {
+        try { wsRef.current.close() } catch {}
+      }
+
+      const wsUrl = `${getWsBaseUrl()}?token=${token}`
+      console.log('[WS] 尝试连接:', wsUrl)
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        console.log('[WS] 通知 WebSocket 已连接')
+        if (reconnectTimer.current) {
+          clearTimeout(reconnectTimer.current)
+          reconnectTimer.current = undefined
+        }
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('[WS] 收到消息:', data.type, data)
+          switch (data.type) {
+            case 'connected':
+              setUnreadCount(data.unread_count)
+              break
+            case 'new_notification':
+              addNotification(data.notif)
+              setUnreadCount((prev: number) => prev + 1)
+              notification.info({
+                message: data.notif.title,
+                description: data.notif.content,
+                duration: 5,
+                placement: 'topRight',
+              })
+              break
+            case 'pong':
+              break
+          }
+        } catch (e) {
+          console.error('[WS] 解析消息失败:', e)
+        }
+      }
+
+      ws.onclose = (e) => {
+        if (isCancelled) return
+        console.log('[WS] 通知 WebSocket 断开 code=' + e.code + ', 5秒后重连')
+        if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+        reconnectTimer.current = setTimeout(connect, 5000)
+      }
+
+      ws.onerror = (e) => {
+        console.error('[WS] WebSocket 错误:', e)
+      }
+    }
+
+    connect()
+
+    const heartbeat = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'ping' }))
+      }
+    }, 30000)
+
+    return () => {
+      isCancelled = true
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+      clearInterval(heartbeat)
+      if (wsRef.current) {
+        try { wsRef.current.close() } catch {}
+        wsRef.current = null
+      }
+    }
+  }, [token])
+}

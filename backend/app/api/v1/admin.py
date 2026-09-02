@@ -1235,3 +1235,25 @@ async def sync_all_with_mappings(
         "total_mappings": total_mappings,
         "results": results
     }
+
+# ========== 测试通知端点 ==========
+
+@router.post("/_test/send-notification")
+async def test_send_notification(
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """测试通知发送"""
+    from app.services.notification_service import create_notification
+    from app.models.notification import NotificationType
+    
+    body = await request.json()
+    notif = await create_notification(
+        db=db,
+        user_id=admin.user_id,
+        notif_type=NotificationType.system,
+        title=body.get("title", "测试通知"),
+        content=body.get("content", "测试内容"),
+    )
+    return {"success": True, "notif_id": notif.notif_id}
