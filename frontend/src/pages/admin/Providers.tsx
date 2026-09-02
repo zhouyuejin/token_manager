@@ -366,12 +366,12 @@ const ProvidersPage = () => {
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item name="quota_hourly" label={<span style={{ color: token.colorTextSecondary }}>5小时额度</span>}>
-                  <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
+                  <InputNumber min={0} placeholder="0表示不限"  />
                 </Form.Item>
               </Col>
               <Col span={12}>
                 <Form.Item name="quota_weekly" label={<span style={{ color: token.colorTextSecondary }}>周额度</span>}>
-                  <InputNumber min={0} placeholder="0表示不限" style={{ width: '100%', height: 40 }} />
+                  <InputNumber min={0} placeholder="0表示不限"  />
                 </Form.Item>
               </Col>
             </Row>
@@ -388,7 +388,7 @@ const ProvidersPage = () => {
               </Col>
               <Col span={12}>
                 <Form.Item name="sync_interval" label={<span style={{ color: token.colorTextSecondary }}>同步间隔(分钟)</span>}>
-                  <InputNumber min={1} max={60} style={{ width: '100%', height: 40 }} />
+                  <InputNumber min={1} max={60}  />
                 </Form.Item>
               </Col>
             </Row>
@@ -492,12 +492,12 @@ const ProvidersPage = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="priority" label={<span style={{ color: token.colorTextSecondary }}>优先级</span>} initialValue={100}>
-                <InputNumber min={1} style={{ width: '100%', height: 40 }} />
+                <InputNumber min={1}  />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="timeout" label={<span style={{ color: token.colorTextSecondary }}>超时(秒)</span>} initialValue={60}>
-                <InputNumber min={10} max={300} style={{ width: '100%', height: 40 }} />
+                <InputNumber min={10} max={300}  />
               </Form.Item>
             </Col>
           </Row>
@@ -561,12 +561,12 @@ const ProvidersPage = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="priority" label={<span style={{ color: token.colorTextSecondary }}>优先级</span>}>
-                <InputNumber min={1} style={{ width: '100%', height: 40 }} />
+                <InputNumber min={1}  />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="timeout" label={<span style={{ color: token.colorTextSecondary }}>超时(秒)</span>}>
-                <InputNumber min={10} max={300} style={{ width: '100%', height: 40 }} />
+                <InputNumber min={10} max={300}  />
               </Form.Item>
             </Col>
           </Row>
