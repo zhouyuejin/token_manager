@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Form, Button } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
@@ -10,11 +11,13 @@ import gsap from 'gsap'
 const isDev = import.meta.env.DEV
 
 // 自定义输入框组件
-const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: any) => (
-  <div style={{
+const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: any) => {
+  const { token } = useThemeToken()
+  return (
+    <div style={{
     position: 'relative',
     height: 52,
-    background: 'rgba(30, 41, 59, 0.5)',
+    background: token.colorBgContainer,
     borderRadius: 14,
     display: 'flex',
     alignItems: 'center',
@@ -55,9 +58,11 @@ const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: an
       }
     `}</style>
   </div>
-)
+  )
+}
 
 const Login = () => {
+  const { token, isDark } = useThemeToken()
   const navigate = useNavigate()
   const { login, isLoading } = useAuthStore()
   const message = useMessage()
@@ -221,13 +226,13 @@ const Login = () => {
             fontFamily: "'Space Grotesk', sans-serif",
             fontSize: 22,
             fontWeight: 600,
-            color: '#F8FAFC',
+            color: token.colorText,
             marginBottom: 6,
             letterSpacing: '-0.02em',
           }}>
             Token中转平台
           </h1>
-          <p style={{ color: '#64748B', fontSize: 13 }}>
+          <p style={{ color: token.colorTextTertiary, fontSize: 13 }}>
             统一API入口，管理大模型调用
           </p>
         </div>
@@ -286,7 +291,7 @@ const Login = () => {
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', color: '#64748B', fontSize: 13 }} id="login-btn">
+          <div style={{ textAlign: 'center', color: token.colorTextTertiary, fontSize: 13 }} id="login-btn">
             还没有账号？{' '}
             <Link 
               to="/register" 

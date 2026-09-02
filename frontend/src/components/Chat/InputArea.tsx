@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Button, Upload, message } from 'antd'
 import { SendOutlined, AudioOutlined, PaperClipOutlined, LoadingOutlined } from '@ant-design/icons'
 import ModelSelector from './ModelSelector'
@@ -21,6 +22,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   modelConfig,
   onModelChange,
 }) => {
+  const { token, isDark } = useThemeToken()
   const [inputValue, setInputValue] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -69,8 +71,8 @@ const InputArea: React.FC<InputAreaProps> = ({
 
   return (
     <div style={{
-      borderTop: '1px solid #303030',
-      background: '#1a1a1a',
+      borderTop: `1px solid ${token.colorBorder}`,
+      background: token.colorBgContainer,
       padding: '12px 16px',
     }}>
       <div style={{ marginBottom: '12px' }}>
@@ -85,9 +87,9 @@ const InputArea: React.FC<InputAreaProps> = ({
         display: 'flex',
         alignItems: 'flex-end',
         gap: '8px',
-        background: '#262626',
+        background: token.colorBgElevated,
         borderRadius: '8px',
-        border: '1px solid #404040',
+        border: `1px solid ${token.colorBorder}`,
         padding: '8px 12px',
       }}>
         <Upload
@@ -102,7 +104,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             type="text"
             icon={<PaperClipOutlined />}
             disabled={disabled}
-            style={{ color: '#8b8b8b' }}
+            style={{ color: token.colorTextSecondary }}
           />
         </Upload>
 
@@ -119,7 +121,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             background: 'transparent',
             border: 'none',
             outline: 'none',
-            color: '#e0e0e0',
+            color: token.colorText,
             fontSize: '14px',
             lineHeight: '1.5',
             resize: 'none',
@@ -132,7 +134,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           type="text"
           icon={<AudioOutlined />}
           disabled={disabled}
-          style={{ color: '#8b8b8b' }}
+          style={{ color: token.colorTextSecondary }}
           title="语音输入（暂不支持）"
         />
 
@@ -144,7 +146,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           style={{
             background: inputValue.trim() || files.length > 0 
               ? 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)' 
-              : '#404040',
+              : token.colorBgElevated,
             border: 'none',
           }}
         />
@@ -190,7 +192,7 @@ const InputArea: React.FC<InputAreaProps> = ({
 
       <div style={{ 
         textAlign: 'center', 
-        color: '#666', 
+        color: token.colorTextSecondary, 
         fontSize: '12px',
         marginTop: '8px' 
       }}>

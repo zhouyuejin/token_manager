@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Card, Table, Input, Select, Button, Space, DatePicker } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -23,7 +24,9 @@ const TARGET_TYPE_OPTIONS = [
 ]
 
 const OperationLogsPage = () => {
-  const [loading, setLoading] = useState(false)
+    const { token, isDark } = useThemeToken()
+
+const [loading, setLoading] = useState(false)
   const [data, setData] = useState<OperationLog[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -96,7 +99,7 @@ const OperationLogsPage = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       render: (val: string) => (
-        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: token.colorTextSecondary, fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {dayjs.utc(val).local().format('YYYY-MM-DD HH:mm:ss')}
         </span>
       ),
@@ -106,7 +109,7 @@ const OperationLogsPage = () => {
       dataIndex: 'operator_name',
       key: 'operator_name',
       render: (val: string) => (
-        <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{val}</span>
+        <span style={{ color: token.colorText, fontWeight: 500 }}>{val}</span>
       ),
     },
     {
@@ -114,7 +117,7 @@ const OperationLogsPage = () => {
       dataIndex: 'action',
       key: 'action',
       render: (val: string) => (
-        <span style={{ color: '#F8FAFC' }}>{val}</span>
+        <span style={{ color: token.colorText }}>{val}</span>
       ),
     },
     {
@@ -122,7 +125,7 @@ const OperationLogsPage = () => {
       dataIndex: 'target_type',
       key: 'target_type',
       render: (val: string) => (
-        <span style={{ color: '#CBD5E1' }}>{val}</span>
+        <span style={{ color: token.colorText }}>{val}</span>
       ),
     },
     {
@@ -130,7 +133,7 @@ const OperationLogsPage = () => {
       dataIndex: 'target_id',
       key: 'target_id',
       render: (val: string) => (
-        <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {val}
         </span>
       ),
@@ -140,7 +143,7 @@ const OperationLogsPage = () => {
       dataIndex: 'ip_address',
       key: 'ip_address',
       render: (val: string) => (
-        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: token.colorTextSecondary, fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {val}
         </span>
       ),
@@ -156,7 +159,7 @@ const OperationLogsPage = () => {
             style={{
               maxHeight: 200,
               overflowY: 'auto',
-              background: 'rgba(15, 23, 42, 0.6)',
+              background: isDark ? 'rgba(15, 23, 42, 0.6)' : 'rgba(248, 250, 252, 0.8)',
               borderRadius: 6,
               padding: '4px 8px',
               border: '1px solid rgba(255,255,255,0.06)',
@@ -164,7 +167,7 @@ const OperationLogsPage = () => {
           >
             <span
               style={{
-                color: '#94A3B8',
+                color: token.colorTextSecondary,
                 fontFamily: "'Space Grotesk', monospace",
                 fontSize: 11,
                 whiteSpace: 'pre-wrap',
@@ -183,12 +186,12 @@ const OperationLogsPage = () => {
     <div>
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.6)',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
+          background: token.colorBgContainer,
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid rgba(0, 0, 0, 0.06)',
           borderRadius: 12,
           marginBottom: 16,
         }}
-        styles={{ body: { padding: '16px 20px' } }}
+        
       >
         <Space wrap size={12}>
           <Input
@@ -226,11 +229,11 @@ const OperationLogsPage = () => {
 
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.6)',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
+          background: token.colorBgContainer,
+          border: isDark ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid rgba(0, 0, 0, 0.06)',
           borderRadius: 12,
         }}
-        styles={{ body: { padding: '0 20px 20px' } }}
+        
       >
         <Table
           dataSource={data}

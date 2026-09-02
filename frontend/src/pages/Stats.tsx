@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Card, Row, Col, Statistic, DatePicker, Table, Button, Space, Tag } from 'antd'
 import { DownloadOutlined, ApiOutlined, ThunderboltOutlined, ClockCircleOutlined, CheckCircleOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsageStats, getAdminStats } from '../api/stats'
@@ -11,6 +12,7 @@ const { RangePicker } = DatePicker
 
 const StatsPage = () => {
   const { user } = useAuthStore()
+  const { token, isDark } = useThemeToken()
   const isAdmin = user?.role === 'admin'
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<any>(null)
@@ -68,14 +70,14 @@ const StatsPage = () => {
       title: '模型', 
       dataIndex: 'model', 
       key: 'model',
-      render: (text: string) => <span style={{ color: '#F8FAFC' }}>{text}</span>
+      render: (text: string) => <span style={{ color: token.colorText }}>{text}</span>
     },
     { 
       title: 'Token数', 
       dataIndex: 'tokens', 
       key: 'tokens', 
       render: (v: number) => (
-        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>
           {v?.toLocaleString()}
         </span>
       )
@@ -85,7 +87,7 @@ const StatsPage = () => {
       dataIndex: 'requests', 
       key: 'requests', 
       render: (v: number) => (
-        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>
           {v?.toLocaleString()}
         </span>
       )
@@ -110,14 +112,14 @@ const StatsPage = () => {
       title: '日期', 
       dataIndex: 'date', 
       key: 'date',
-      render: (text: string) => <span style={{ color: '#CBD5E1' }}>{text}</span>
+      render: (text: string) => <span style={{ color: token.colorText }}>{text}</span>
     },
     { 
       title: 'Token数', 
       dataIndex: 'tokens', 
       key: 'tokens', 
       render: (v: number) => (
-        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>
           {v?.toLocaleString()}
         </span>
       )
@@ -127,7 +129,7 @@ const StatsPage = () => {
       dataIndex: 'requests', 
       key: 'requests', 
       render: (v: number) => (
-        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>
           {v?.toLocaleString()}
         </span>
       )
@@ -137,17 +139,17 @@ const StatsPage = () => {
   // 管理员用 - 按用户统计列
   const userColumns = [
     { title: '用户', dataIndex: 'username', key: 'username',
-      render: (text: string, record: any) => <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{text || record.user_id}</span> },
+      render: (text: string, record: any) => <span style={{ color: token.colorText, fontWeight: 500 }}>{text || record.user_id}</span> },
     { title: 'Token数', dataIndex: 'tokens', key: 'tokens',
-      render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>{v?.toLocaleString()}</span> },
+      render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>{v?.toLocaleString()}</span> },
   ]
 
   // 管理员用 - 按供应商统计列
   const providerColumns = [
     { title: '供应商', dataIndex: 'provider', key: 'provider',
-      render: (text: string) => <span style={{ color: '#F8FAFC' }}>{text}</span> },
+      render: (text: string) => <span style={{ color: token.colorText }}>{text}</span> },
     { title: 'Token数', dataIndex: 'tokens', key: 'tokens',
-      render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: '#CBD5E1' }}>{v?.toLocaleString()}</span> },
+      render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>{v?.toLocaleString()}</span> },
   ]
 
   const keyColumns = [
@@ -156,7 +158,7 @@ const StatsPage = () => {
       dataIndex: 'name', 
       key: 'name',
       render: (text: string) => (
-        <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{text}</span>
+        <span style={{ color: token.colorText, fontWeight: 500 }}>{text}</span>
       )
     },
     { 
@@ -181,7 +183,7 @@ const StatsPage = () => {
       dataIndex: 'daily_used', 
       key: 'daily_used',
       render: (val: number) => (
-        <span style={{ color: '#CBD5E1', fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
+        <span style={{ color: token.colorText, fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
           {val?.toLocaleString() || '0'}
         </span>
       )
@@ -191,7 +193,7 @@ const StatsPage = () => {
       dataIndex: 'monthly_used', 
       key: 'monthly_used',
       render: (val: number) => (
-        <span style={{ color: '#CBD5E1', fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
+        <span style={{ color: token.colorText, fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
           {val?.toLocaleString() || '0'}
         </span>
       )
@@ -210,7 +212,7 @@ const StatsPage = () => {
           fontFamily: "'Space Grotesk', sans-serif",
           fontSize: 24,
           fontWeight: 600,
-          color: '#F8FAFC',
+          color: token.colorText,
           margin: 0,
         }}>
           仪表盘
@@ -224,8 +226,8 @@ const StatsPage = () => {
               }
             }}
             style={{
-              background: 'rgba(30, 41, 59, 0.8)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: token.colorBgContainer,
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 10,
             }}
           />
@@ -249,17 +251,17 @@ const StatsPage = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
           >
             <Statistic 
-              title={<span style={{ color: '#94A3B8' }}>总调用次数</span>} 
+              title={<span style={{ color: token.colorTextSecondary }}>总调用次数</span>} 
               value={stats?.total_requests || 0}
               valueStyle={{ 
-                color: '#F8FAFC', 
+                color: token.colorText, 
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}
@@ -270,17 +272,17 @@ const StatsPage = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
           >
             <Statistic 
-              title={<span style={{ color: '#94A3B8' }}>总Token数</span>} 
+              title={<span style={{ color: token.colorTextSecondary }}>总Token数</span>} 
               value={stats?.total_tokens || 0}
               valueStyle={{ 
-                color: '#F8FAFC', 
+                color: token.colorText, 
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}
@@ -291,18 +293,18 @@ const StatsPage = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
           >
             <Statistic 
-              title={<span style={{ color: '#94A3B8' }}>平均延迟</span>} 
+              title={<span style={{ color: token.colorTextSecondary }}>平均延迟</span>} 
               value={stats?.avg_latency_ms || 0}
               suffix="ms"
               valueStyle={{ 
-                color: '#F8FAFC', 
+                color: token.colorText, 
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}
@@ -313,18 +315,18 @@ const StatsPage = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
           >
             <Statistic 
-              title={<span style={{ color: '#94A3B8' }}>成功率</span>} 
+              title={<span style={{ color: token.colorTextSecondary }}>成功率</span>} 
               value={stats?.success_rate || 100}
               suffix="%"
               valueStyle={{ 
-                color: '#F8FAFC', 
+                color: token.colorText, 
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}
@@ -352,7 +354,7 @@ const StatsPage = () => {
                   borderRadius: 2,
                 }} />
                 <span style={{ 
-                  color: '#F8FAFC', 
+                  color: token.colorText, 
                   fontFamily: "'Space Grotesk', sans-serif",
                   fontWeight: 600,
                   fontSize: 15,
@@ -363,7 +365,7 @@ const StatsPage = () => {
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
@@ -377,7 +379,7 @@ const StatsPage = () => {
               <div key={item.model} style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                   <span style={{ 
-                    color: '#CBD5E1', 
+                    color: token.colorText, 
                     fontWeight: 500,
                     fontSize: 13,
                     display: 'flex',
@@ -394,7 +396,7 @@ const StatsPage = () => {
                     {item.model}
                   </span>
                   <span style={{ 
-                    color: '#F8FAFC', 
+                    color: token.colorText, 
                     fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                     fontWeight: 600,
                     fontSize: 13,
@@ -404,7 +406,7 @@ const StatsPage = () => {
                 </div>
                 <div style={{ 
                   height: 8, 
-                  background: 'rgba(30, 41, 59, 0.8)', 
+                  background: token.colorBgContainer, 
                   borderRadius: 4,
                   overflow: 'hidden',
                   position: 'relative',
@@ -453,7 +455,7 @@ const StatsPage = () => {
                   borderRadius: 2,
                 }} />
                 <span style={{ 
-                  color: '#F8FAFC', 
+                  color: token.colorText, 
                   fontFamily: "'Space Grotesk', sans-serif",
                   fontWeight: 600,
                   fontSize: 15,
@@ -464,7 +466,7 @@ const StatsPage = () => {
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
@@ -496,11 +498,11 @@ const StatsPage = () => {
               title={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <TeamOutlined style={{ color: '#3B82F6' }} />
-                  <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>按用户统计</span>
+                  <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>按用户统计</span>
                 </div>
               }
               loading={loading}
-              style={{ background: 'rgba(17, 24, 39, 0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 16 }}
+              style={{ background: token.colorBgContainer, backdropFilter: 'blur(20px)', border: `1px solid ${token.colorBorder}`, borderRadius: 16 }}
             >
               <Table dataSource={stats?.by_user || []} columns={userColumns} rowKey="user_id" pagination={false} size="small" />
             </Card>
@@ -510,11 +512,11 @@ const StatsPage = () => {
               title={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <ApiOutlined style={{ color: '#10B981' }} />
-                  <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>按供应商统计</span>
+                  <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>按供应商统计</span>
                 </div>
               }
               loading={loading}
-              style={{ background: 'rgba(17, 24, 39, 0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 16 }}
+              style={{ background: token.colorBgContainer, backdropFilter: 'blur(20px)', border: `1px solid ${token.colorBorder}`, borderRadius: 16 }}
             >
               <ReactECharts
               style={{ height: 300 }}
@@ -523,7 +525,7 @@ const StatsPage = () => {
                   trigger: 'axis',
                   backgroundColor: 'rgba(17, 24, 39, 0.9)',
                   borderColor: 'rgba(255, 255, 255, 0.1)',
-                  textStyle: { color: '#F8FAFC' },
+                  textStyle: { color: token.colorText },
                   axisPointer: { type: 'shadow' },
                   formatter: (params: any) => {
                     const item = params[0];
@@ -541,13 +543,13 @@ const StatsPage = () => {
                   type: 'value',
                   axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
                   splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
-                  axisLabel: { color: '#94A3B8' }
+                  axisLabel: { color: token.colorTextSecondary }
                 },
                 yAxis: {
                   type: 'category',
                   data: (stats?.by_provider || []).map((item: any) => item.provider),
                   axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
-                  axisLabel: { color: '#94A3B8', fontSize: 11 }
+                  axisLabel: { color: token.colorTextSecondary, fontSize: 11 }
                 },
                 series: [
                   {
@@ -581,7 +583,7 @@ const StatsPage = () => {
           <Card 
             title={
               <span style={{ 
-                color: '#F8FAFC', 
+                color: token.colorText, 
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}>
@@ -590,9 +592,9 @@ const StatsPage = () => {
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
             styles={{ body: { padding: '16px' } }}
@@ -604,7 +606,7 @@ const StatsPage = () => {
                   trigger: 'axis',
                   backgroundColor: 'rgba(17, 24, 39, 0.9)',
                   borderColor: 'rgba(255, 255, 255, 0.1)',
-                  textStyle: { color: '#F8FAFC' },
+                  textStyle: { color: token.colorText },
                   axisPointer: { type: 'shadow' },
                   formatter: (params: any) => {
                     const item = params[0];
@@ -626,15 +628,15 @@ const StatsPage = () => {
                   type: 'category',
                   data: (stats?.by_model || []).map((item: any) => item.model),
                   axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
-                  axisLabel: { color: '#94A3B8', fontSize: 11, rotate: 45 }
+                  axisLabel: { color: token.colorTextSecondary, fontSize: 11, rotate: 45 }
                 },
                 yAxis: {
                   type: 'value',
                   name: 'Cost ($)',
-                  nameTextStyle: { color: '#94A3B8', padding: [0, 0, 0, 10] },
+                  nameTextStyle: { color: token.colorTextSecondary, padding: [0, 0, 0, 10] },
                   axisLine: { show: false },
                   splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
-                  axisLabel: { color: '#94A3B8' }
+                  axisLabel: { color: token.colorTextSecondary }
                 },
                 series: [
                   {
@@ -666,7 +668,7 @@ const StatsPage = () => {
           <Card 
             title={
               <span style={{ 
-                color: '#F8FAFC', 
+                color: token.colorText, 
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
               }}>
@@ -675,9 +677,9 @@ const StatsPage = () => {
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
           >
@@ -688,12 +690,12 @@ const StatsPage = () => {
                   trigger: 'axis',
                   backgroundColor: 'rgba(17, 24, 39, 0.9)',
                   borderColor: 'rgba(255, 255, 255, 0.1)',
-                  textStyle: { color: '#F8FAFC' },
+                  textStyle: { color: token.colorText },
                   axisPointer: { type: 'shadow' }
                 },
                 legend: {
                   data: ['Token数', '请求数'],
-                  textStyle: { color: '#94A3B8' },
+                  textStyle: { color: token.colorTextSecondary },
                   top: 0
                 },
                 grid: {
@@ -707,24 +709,24 @@ const StatsPage = () => {
                   type: 'category',
                   data: (stats?.by_day || []).map((item: any) => item.date),
                   axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
-                  axisLabel: { color: '#94A3B8', fontSize: 11 }
+                  axisLabel: { color: token.colorTextSecondary, fontSize: 11 }
                 },
                 yAxis: [
                   {
                     type: 'value',
                     name: 'Token数',
-                    nameTextStyle: { color: '#94A3B8', padding: [0, 0, 0, 10] },
+                    nameTextStyle: { color: token.colorTextSecondary, padding: [0, 0, 0, 10] },
                     axisLine: { show: false },
                     splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },
-                    axisLabel: { color: '#94A3B8' }
+                    axisLabel: { color: token.colorTextSecondary }
                   },
                   {
                     type: 'value',
                     name: '请求数',
-                    nameTextStyle: { color: '#94A3B8', padding: [0, 0, 0, 10] },
+                    nameTextStyle: { color: token.colorTextSecondary, padding: [0, 0, 0, 10] },
                     axisLine: { show: false },
                     splitLine: { show: false },
-                    axisLabel: { color: '#94A3B8' }
+                    axisLabel: { color: token.colorTextSecondary }
                   }
                 ],
                 series: [

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Form, Input, Button } from 'antd'
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
@@ -6,6 +7,7 @@ import { register } from '../api/auth'
 import { useMessage } from '../utils/message'
 
 const Register = () => {
+  const { token, isDark } = useThemeToken()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const message = useMessage()
@@ -64,7 +66,7 @@ const Register = () => {
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderRadius: 24,
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        border: `1px solid ${token.colorBorder}`,
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
       }} className="animate-fade-in-up">
         {/* Logo */}
@@ -99,7 +101,7 @@ const Register = () => {
           }}>
             注册账号
           </h1>
-          <p style={{ color: '#94A3B8', fontSize: 14 }}>
+          <p style={{ color: token.colorTextSecondary, fontSize: 14 }}>
             创建账号，开始使用
           </p>
         </div>
@@ -120,12 +122,12 @@ const Register = () => {
             style={{ marginBottom: 20 }}
           >
             <Input 
-              prefix={<UserOutlined style={{ color: '#64748B' }} />} 
+              prefix={<UserOutlined style={{ color: token.colorTextTertiary }} />} 
               placeholder="用户名（4-20位字母数字）"
               style={{
                 height: 48,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 12,
               }}
             />
@@ -140,12 +142,12 @@ const Register = () => {
             style={{ marginBottom: 20 }}
           >
             <Input 
-              prefix={<MailOutlined style={{ color: '#64748B' }} />} 
+              prefix={<MailOutlined style={{ color: token.colorTextTertiary }} />} 
               placeholder="邮箱"
               style={{
                 height: 48,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 12,
               }}
             />
@@ -160,12 +162,12 @@ const Register = () => {
             style={{ marginBottom: 20 }}
           >
             <Input.Password 
-              prefix={<LockOutlined style={{ color: '#64748B' }} />} 
+              prefix={<LockOutlined style={{ color: token.colorTextTertiary }} />} 
               placeholder="密码（至少8位）"
               style={{
                 height: 48,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 12,
               }}
             />
@@ -188,12 +190,12 @@ const Register = () => {
             style={{ marginBottom: 32 }}
           >
             <Input.Password 
-              prefix={<LockOutlined style={{ color: '#64748B' }} />} 
+              prefix={<LockOutlined style={{ color: token.colorTextTertiary }} />} 
               placeholder="确认密码"
               style={{
                 height: 48,
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
                 borderRadius: 12,
               }}
             />
@@ -220,7 +222,7 @@ const Register = () => {
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', color: '#94A3B8' }}>
+          <div style={{ textAlign: 'center', color: token.colorTextSecondary }}>
             已有账号？{' '}
             <Link 
               to="/login" 

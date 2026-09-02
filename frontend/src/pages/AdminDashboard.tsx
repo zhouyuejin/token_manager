@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Row, Col, Card, Statistic, DatePicker, Typography, Empty } from 'antd'
 import { 
   UserOutlined, 
@@ -33,6 +34,7 @@ const CHART_COLORS = [
 ]
 
 const AdminDashboard: React.FC = () => {
+  const { token, isDark } = useThemeToken()
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [systemStats, setSystemStats] = useState<SystemStats>({})
@@ -72,7 +74,7 @@ const AdminDashboard: React.FC = () => {
   const totalCost = useMemo(() => {
     if (!stats?.by_model) return 0
     return stats.by_model.reduce((sum, item) => sum + (item.cost || 0), 0)
-  }, [stats])
+  }, [stats, isDark, token])
 
   // 获取模型显示名称
   const getModelDisplayName = (model: string, displayName?: string) => {
@@ -93,9 +95,9 @@ const AdminDashboard: React.FC = () => {
     return {
       tooltip: {
         trigger: 'item',
-        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#F8FAFC' },
+        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        textStyle: { color: token.colorText },
         formatter: (params: any) => {
           return `<div style="font-family: 'Space Grotesk', sans-serif;">
             <div style="font-weight: 600; margin-bottom: 4px;">${params.name}</div>
@@ -108,7 +110,7 @@ const AdminDashboard: React.FC = () => {
         orient: 'vertical',
         right: 10,
         top: 'center',
-        textStyle: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+        textStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
         itemWidth: 12,
         itemHeight: 12,
         itemGap: 8,
@@ -121,7 +123,7 @@ const AdminDashboard: React.FC = () => {
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
-            borderColor: 'rgba(17, 24, 39, 0.8)',
+            borderColor: isDark ? 'rgba(17, 24, 39, 0.8)' : 'rgba(255, 255, 255, 0.8)',
             borderWidth: 2
           },
           label: {
@@ -143,7 +145,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats])
+  }, [stats, isDark, token])
 
   // ========== 供应商分布饼图配置 ==========
   const providerPieOption = useMemo(() => {
@@ -159,9 +161,9 @@ const AdminDashboard: React.FC = () => {
     return {
       tooltip: {
         trigger: 'item',
-        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#F8FAFC' },
+        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        textStyle: { color: token.colorText },
         formatter: (params: any) => {
           return `<div style="font-family: 'Space Grotesk', sans-serif;">
             <div style="font-weight: 600; margin-bottom: 4px;">${params.name}</div>
@@ -174,7 +176,7 @@ const AdminDashboard: React.FC = () => {
         orient: 'vertical',
         right: 10,
         top: 'center',
-        textStyle: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+        textStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
         itemWidth: 12,
         itemHeight: 12,
         itemGap: 8,
@@ -187,7 +189,7 @@ const AdminDashboard: React.FC = () => {
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 6,
-            borderColor: 'rgba(17, 24, 39, 0.8)',
+            borderColor: isDark ? 'rgba(17, 24, 39, 0.8)' : 'rgba(255, 255, 255, 0.8)',
             borderWidth: 2
           },
           label: {
@@ -209,7 +211,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats])
+  }, [stats, isDark, token])
 
   // ========== 7日趋势折线图配置 ==========
   const trendLineOption = useMemo(() => {
@@ -224,9 +226,9 @@ const AdminDashboard: React.FC = () => {
     return {
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif" },
+        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        textStyle: { color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" },
         axisPointer: {
           type: 'cross',
           crossStyle: { color: '#999' }
@@ -234,7 +236,7 @@ const AdminDashboard: React.FC = () => {
       },
       legend: {
         data: ['Token数', '请求数'],
-        textStyle: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+        textStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
         top: 0,
         right: 0,
       },
@@ -249,24 +251,24 @@ const AdminDashboard: React.FC = () => {
         type: 'category',
         data: dates,
         axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
-        axisLabel: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+        axisLabel: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
         axisTick: { show: false }
       },
       yAxis: [
         {
           type: 'value',
           name: 'Token数',
-          nameTextStyle: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+          nameTextStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
           axisLine: { show: false },
-          axisLabel: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+          axisLabel: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
           splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
         },
         {
           type: 'value',
           name: '请求数',
-          nameTextStyle: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+          nameTextStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
           axisLine: { show: false },
-          axisLabel: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+          axisLabel: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
           splitLine: { show: false }
         }
       ],
@@ -314,7 +316,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats])
+  }, [stats, isDark, token])
 
   // ========== 模型使用分布配置 ==========
   const maxTokens = stats?.by_model?.reduce((max, item) => 
@@ -335,9 +337,9 @@ const AdminDashboard: React.FC = () => {
     return {
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif" },
+        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        textStyle: { color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" },
         formatter: (params: any) => {
           const item = params[0]
           return `<div style="font-family: 'Space Grotesk', sans-serif;">
@@ -358,7 +360,7 @@ const AdminDashboard: React.FC = () => {
         data: names,
         axisLine: { show: false },
         axisLabel: { 
-          color: '#CBD5E1', 
+          color: token.colorText, 
           fontFamily: "'Space Grotesk', sans-serif",
           fontSize: 11,
           rotate: names.length > 4 ? 20 : 0
@@ -368,10 +370,10 @@ const AdminDashboard: React.FC = () => {
       yAxis: {
         type: 'value',
         name: '成本 ($)',
-        nameTextStyle: { color: '#94A3B8', fontFamily: "'Space Grotesk', sans-serif" },
+        nameTextStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
         axisLine: { show: false },
         axisLabel: { 
-          color: '#94A3B8', 
+          color: token.colorTextSecondary, 
           fontFamily: "'Space Grotesk', sans-serif",
           formatter: (value: number) => `$${value.toFixed(3)}`
         },
@@ -401,14 +403,14 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats])
+  }, [stats, isDark, token])
 
   return (
-    <div style={{ padding: 24, background: '#0F172A', minHeight: '100vh' }}>
+    <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100vh' }}>
       {/* 页面标题 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ 
-          color: '#F8FAFC',
+          color: token.colorText,
           margin: 0,
           fontFamily: "'Space Grotesk', sans-serif",
           fontWeight: 600,
@@ -424,8 +426,8 @@ const AdminDashboard: React.FC = () => {
             }
           }}
           style={{
-            background: 'rgba(30, 41, 59, 0.8)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: token.colorBgContainer,
+            border: `1px solid ${token.colorBorder}`,
             borderRadius: 10,
           }}
         />
@@ -436,7 +438,7 @@ const AdminDashboard: React.FC = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)',
+              background: isDark ? 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)' : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
               border: '1px solid rgba(59, 130, 246, 0.3)',
               borderRadius: 16,
             }}
@@ -452,7 +454,7 @@ const AdminDashboard: React.FC = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)',
+              background: isDark ? 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)' : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
               border: '1px solid rgba(16, 185, 129, 0.3)',
               borderRadius: 16,
             }}
@@ -468,7 +470,7 @@ const AdminDashboard: React.FC = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)',
+              background: isDark ? 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)' : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
               border: '1px solid rgba(245, 158, 11, 0.3)',
               borderRadius: 16,
             }}
@@ -485,7 +487,7 @@ const AdminDashboard: React.FC = () => {
         <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
-              background: 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)',
+              background: isDark ? 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)' : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
               border: '1px solid rgba(34, 197, 94, 0.3)',
               borderRadius: 16,
             }}
@@ -508,14 +510,14 @@ const AdminDashboard: React.FC = () => {
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <BarChartOutlined style={{ color: '#8B5CF6' }} />
-                <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
+                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
                   模型使用分布
                 </span>
               </div>
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
@@ -528,14 +530,14 @@ const AdminDashboard: React.FC = () => {
             {stats?.by_model?.map((item, idx) => (
               <div key={item.model} style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ color: '#CBD5E1', fontWeight: 500, fontSize: 13 }}>
+                  <span style={{ color: token.colorText, fontWeight: 500, fontSize: 13 }}>
                     {getModelDisplayName(item.model, item.display_name)}
                   </span>
-                  <span style={{ color: '#F8FAFC', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: 13 }}>
+                  <span style={{ color: token.colorText, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: 13 }}>
                     {item.tokens?.toLocaleString()} tokens
                   </span>
                 </div>
-                <div style={{ height: 8, background: 'rgba(30, 41, 59, 0.8)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: 8, background: token.colorBgContainer, borderRadius: 4, overflow: 'hidden' }}>
                   <div style={{ 
                     height: '100%', 
                     width: `${(item.tokens / maxTokens) * 100}%`,
@@ -559,14 +561,14 @@ const AdminDashboard: React.FC = () => {
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <UserOutlined style={{ color: '#3B82F6' }} />
-                <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
+                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
                   用户用量分布
                 </span>
               </div>
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
@@ -596,14 +598,14 @@ const AdminDashboard: React.FC = () => {
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <CloudServerOutlined style={{ color: '#10B981' }} />
-                <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
+                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
                   供应商用量分布
                 </span>
               </div>
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
@@ -630,14 +632,14 @@ const AdminDashboard: React.FC = () => {
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <DollarOutlined style={{ color: '#F59E0B' }} />
-                <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
+                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
                   成本分布
                 </span>
               </div>
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
@@ -669,14 +671,14 @@ const AdminDashboard: React.FC = () => {
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <BarChartOutlined style={{ color: '#F59E0B' }} />
-                <span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
+                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
                   七日趋势
                 </span>
               </div>
             }
             loading={loading}
             style={{ 
-              background: 'rgba(17, 24, 39, 0.6)',
+              background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,

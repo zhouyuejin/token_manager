@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
@@ -24,6 +25,7 @@ const ModelsPage = () => {
   const [form] = Form.useForm()
   const [priceType, setPriceType] = useState<string>('token')
   const message = useMessage()
+  const { token, isDark } = useThemeToken()
 
   // 获取模型弹窗状态
   const [fetchModalVisible, setFetchModalVisible] = useState(false)
@@ -262,7 +264,7 @@ const ModelsPage = () => {
           fontFamily: "'Space Grotesk', sans-serif",
           fontSize: 24,
           fontWeight: 600,
-          color: '#F8FAFC',
+          color: token.colorText,
           margin: 0,
         }}>
           <AppstoreOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
@@ -289,9 +291,9 @@ const ModelsPage = () => {
 
       {/* 模型列表 */}
       <div style={{
-        background: 'rgba(17, 24, 39, 0.6)',
+        background: token.colorBgContainer,
         backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        border: `1px solid ${token.colorBorder}`,
         borderRadius: 16,
         overflow: 'hidden',
       }}>
@@ -306,7 +308,7 @@ const ModelsPage = () => {
               render: (_: any, record: ModelMapping) => (
                 <div>
                   
-                  <div style={{ color: '#F8FAFC', fontWeight: 500 }}>{record.display_name}</div>
+                  <div style={{ color: token.colorText, fontWeight: 500 }}>{record.display_name}</div>
                 </div>
               )
             },
@@ -375,7 +377,7 @@ const ModelsPage = () => {
 
       {/* 创建/编辑弹窗 */}
       <Modal
-        title={<span style={{ color: '#F8FAFC' }}>{editModel ? '编辑模型' : '创建模型'}</span>}
+        title={<span style={{ color: token.colorText }}>{editModel ? '编辑模型' : '创建模型'}</span>}
         open={modalVisible}
         onCancel={() => { setModalVisible(false); setEditModel(null); form.resetFields(); }}
         footer={null}
@@ -401,7 +403,7 @@ const ModelsPage = () => {
                 label: <span><SettingOutlined /> 基本配置</span>,
                 children: (
                   <>
-                    <Form.Item name="provider_id" label={<span style={{ color: '#94A3B8' }}>供应商</span>} rules={[{ required: true, message: '请选择供应商' }]}>
+                    <Form.Item name="provider_id" label={<span style={{ color: token.colorTextSecondary }}>供应商</span>} rules={[{ required: true, message: '请选择供应商' }]}>
                       <Select placeholder="选择供应商">
                         {providers.map(p => (
                           <Select.Option key={p.provider_id} value={p.provider_id}>{p.name} ({p.type})</Select.Option>
@@ -409,23 +411,23 @@ const ModelsPage = () => {
                       </Select>
                     </Form.Item>
 
-                    <Form.Item name="provider_model" label={<span style={{ color: '#94A3B8' }}>上游模型ID</span>} rules={[{ required: true, message: '请输入上游模型ID' }]}>
+                    <Form.Item name="provider_model" label={<span style={{ color: token.colorTextSecondary }}>上游模型ID</span>} rules={[{ required: true, message: '请输入上游模型ID' }]}>
                       <Input placeholder="如: gpt-4o, claude-3-opus" />
                     </Form.Item>
 
-                    <Form.Item name="display_name" label={<span style={{ color: '#94A3B8' }}>显示名称</span>} rules={[{ required: true, message: '请输入显示名称' }]}>
+                    <Form.Item name="display_name" label={<span style={{ color: token.colorTextSecondary }}>显示名称</span>} rules={[{ required: true, message: '请输入显示名称' }]}>
                       <Input placeholder="如: GPT-4o" />
                     </Form.Item>
 
-                    <Form.Item name="description" label={<span style={{ color: '#94A3B8' }}>模型描述（可选）</span>}>
+                    <Form.Item name="description" label={<span style={{ color: token.colorTextSecondary }}>模型描述（可选）</span>}>
                       <Input.TextArea rows={2} placeholder="描述这个模型的用途和特点" />
                     </Form.Item>
 
-                    <Form.Item name="aliases" label={<span style={{ color: '#94A3B8' }}>别名（可选，多个用逗号分隔）</span>}>
+                    <Form.Item name="aliases" label={<span style={{ color: token.colorTextSecondary }}>别名（可选，多个用逗号分隔）</span>}>
                       <Input placeholder="如: gpt4, gpt-4o" />
                     </Form.Item>
 
-                    <Form.Item name="status" label={<span style={{ color: '#94A3B8' }}>状态</span>}>
+                    <Form.Item name="status" label={<span style={{ color: token.colorTextSecondary }}>状态</span>}>
                       <Radio.Group>
                         <Radio value="active">启用</Radio>
                         <Radio value="disabled">禁用</Radio>
@@ -439,7 +441,7 @@ const ModelsPage = () => {
                 label: <span><DollarOutlined /> 定价配置</span>,
                 children: (
                   <>
-                    <Form.Item name="price_type" label={<span style={{ color: '#94A3B8' }}>计费方式</span>}>
+                    <Form.Item name="price_type" label={<span style={{ color: token.colorTextSecondary }}>计费方式</span>}>
                       <Radio.Group onChange={(e) => setPriceType(e.target.value)}>
                         <Radio value="token">按Token计费</Radio>
                         <Radio value="request">按请求次数计费</Radio>
@@ -449,25 +451,25 @@ const ModelsPage = () => {
                     {priceType === 'token' ? (
                       <Row gutter={16}>
                         <Col span={12}>
-                          <Form.Item name="price_per_1k_input" label={<span style={{ color: '#94A3B8' }}>每千输入Token价格(元)</span>}>
+                          <Form.Item name="price_per_1k_input" label={<span style={{ color: token.colorTextSecondary }}>每千输入Token价格(元)</span>}>
                             <InputNumber min={0} step={0.0001} precision={4} style={{ width: '100%' }} placeholder="0.001" />
                           </Form.Item>
                         </Col>
                         <Col span={12}>
-                          <Form.Item name="price_per_1k_output" label={<span style={{ color: '#94A3B8' }}>每千输出Token价格(元)</span>}>
+                          <Form.Item name="price_per_1k_output" label={<span style={{ color: token.colorTextSecondary }}>每千输出Token价格(元)</span>}>
                             <InputNumber min={0} step={0.0001} precision={4} style={{ width: '100%' }} placeholder="0.002" />
                           </Form.Item>
                         </Col>
                       </Row>
                     ) : (
-                      <Form.Item name="price_per_request" label={<span style={{ color: '#94A3B8' }}>每次请求价格(元)</span>}>
+                      <Form.Item name="price_per_request" label={<span style={{ color: token.colorTextSecondary }}>每次请求价格(元)</span>}>
                         <InputNumber min={0} step={0.01} precision={2} style={{ width: '100%' }} placeholder="0.01" />
                       </Form.Item>
                     )}
 
                     <div style={{ padding: 16, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, marginTop: 16 }}>
                       <div style={{ color: '#3B82F6', fontSize: 13, marginBottom: 8 }}>💡 计费说明</div>
-                      <div style={{ color: '#94A3B8', fontSize: 12 }}>
+                      <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>
                         {priceType === 'token' 
                           ? '按Token计费：根据实际消耗的输入和输出token数量分别计费'
                           : '按请求计费：每次API调用收取固定费用，不区分输入输出'
@@ -493,14 +495,14 @@ const ModelsPage = () => {
 
       {/* 获取模型弹窗 */}
       <Modal
-        title={<span style={{ color: '#F8FAFC' }}><CloudDownloadOutlined style={{ marginRight: 8 }} />获取模型</span>}
+        title={<span style={{ color: token.colorText }}><CloudDownloadOutlined style={{ marginRight: 8 }} />获取模型</span>}
         open={fetchModalVisible}
         onCancel={() => { setFetchModalVisible(false); setSelectedProviderId(''); setUpstreamModels([]); setSelectedModels([]); }}
         footer={null}
         width={900}
       >
         <div style={{ marginBottom: 16 }}>
-          <span style={{ color: '#94A3B8', marginRight: 8 }}>选择供应商：</span>
+          <span style={{ color: token.colorTextSecondary, marginRight: 8 }}>选择供应商：</span>
           <Select 
             style={{ width: 300 }}
             placeholder="请选择供应商"
@@ -539,13 +541,13 @@ const ModelsPage = () => {
                   title: '模型ID', 
                   dataIndex: 'model_id', 
                   key: 'model_id',
-                  render: (text: string) => <span style={{ color: '#F8FAFC' }}>{text}</span>
+                  render: (text: string) => <span style={{ color: token.colorText }}>{text}</span>
                 },
                 { 
                   title: '模型名称', 
                   dataIndex: 'name', 
                   key: 'name',
-                  render: (text: string) => <span style={{ color: '#94A3B8' }}>{text || '-'}</span>
+                  render: (text: string) => <span style={{ color: token.colorTextSecondary }}>{text || '-'}</span>
                 },
               ]}
               rowKey="model_id"
@@ -562,7 +564,7 @@ const ModelsPage = () => {
             />
             
             <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ color: '#94A3B8' }}>
+              <div style={{ color: token.colorTextSecondary }}>
                 已选择 <span style={{ color: '#3B82F6', fontWeight: 600 }}>{selectedModels.length}</span> 个模型
               </div>
               <Space>
@@ -579,11 +581,11 @@ const ModelsPage = () => {
             </div>
           </>
         ) : selectedProviderId && !fetchLoading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>
+          <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
             该供应商暂无模型，请确保供应商配置正确
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8' }}>
+          <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
             请先选择供应商
           </div>
         )}

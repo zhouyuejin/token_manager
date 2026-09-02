@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Drawer, Collapse, Button, Tag } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -64,6 +65,7 @@ export default function NotificationDetailDrawer({
   onMarkAsRead,
   onDelete,
 }: NotificationDetailDrawerProps) {
+  const { token, isDark } = useThemeToken()
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [markLoading, setMarkLoading] = useState(false)
   // 记录已经自动标记过的 notif_id，防止 React StrictMode 在开发态双调用 effect
@@ -114,7 +116,7 @@ export default function NotificationDetailDrawer({
   return (
     <Drawer
       title={
-        <span style={{ color: '#E2E8F0', fontSize: 15, fontWeight: 600 }}>通知详情</span>
+        <span style={{ color: token.colorText, fontSize: 15, fontWeight: 600 }}>通知详情</span>
       }
       width={480}
       placement="right"
@@ -122,7 +124,7 @@ export default function NotificationDetailDrawer({
       onClose={onClose}
       destroyOnClose
       styles={{
-        wrapper: { background: 'rgba(17, 24, 39, 0.95)' },
+        wrapper: { background: token.colorBgElevated },
         body: { padding: '20px 24px 28px' },
         header: {
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
@@ -187,7 +189,7 @@ export default function NotificationDetailDrawer({
             )}
             <h2
               style={{
-                color: '#E2E8F0',
+                color: token.colorText,
                 fontSize: 18,
                 fontWeight: 600,
                 lineHeight: 1.5,
@@ -203,7 +205,7 @@ export default function NotificationDetailDrawer({
           {/* 元数据行：创建时间 · 已读 / 未读 */}
           <div
             style={{
-              color: '#64748B',
+              color: '#94A3B8',
               fontSize: 12,
               marginBottom: 16,
               fontFamily: "'Space Grotesk', monospace",
@@ -221,11 +223,11 @@ export default function NotificationDetailDrawer({
           {/* 内容 */}
           <div
             style={{
-              background: 'rgba(30, 41, 59, 0.5)',
+              background: token.colorBgContainer,
               border: '1px solid rgba(255, 255, 255, 0.06)',
               borderRadius: 8,
               padding: '12px 14px',
-              color: '#CBD5E1',
+              color: token.colorText,
               fontSize: 14,
               lineHeight: 1.7,
               marginBottom: 16,
@@ -238,7 +240,7 @@ export default function NotificationDetailDrawer({
             {notification.content ? (
               notification.content
             ) : (
-              <span style={{ color: '#64748B' }}>（无内容）</span>
+              <span style={{ color: '#94A3B8' }}>（无内容）</span>
             )}
           </div>
 
@@ -263,7 +265,7 @@ export default function NotificationDetailDrawer({
                   children: (
                     <div
                       style={{
-                        background: 'rgba(15, 23, 42, 0.6)',
+                        background: token.colorBgContainer,
                         borderRadius: 6,
                         padding: '8px 12px',
                         border: '1px solid rgba(255, 255, 255, 0.06)',

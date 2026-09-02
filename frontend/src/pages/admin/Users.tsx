@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
@@ -20,6 +21,7 @@ const UsersPage = () => {
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
   const message = useMessage()
+  const { token, isDark } = useThemeToken()
 
   useEffect(() => {
     fetchUsers()
@@ -114,13 +116,13 @@ const UsersPage = () => {
       title: '用户名', 
       dataIndex: 'username', 
       key: 'username',
-      render: (text: string) => <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{text}</span>
+      render: (text: string) => <span style={{ color: token.colorText, fontWeight: 500 }}>{text}</span>
     },
     { 
       title: '邮箱', 
       dataIndex: 'email', 
       key: 'email',
-      render: (text: string) => <span style={{ color: '#94A3B8' }}>{text}</span>
+      render: (text: string) => <span style={{ color: token.colorTextSecondary }}>{text}</span>
     },
     { 
       title: '角色', 
@@ -164,7 +166,7 @@ const UsersPage = () => {
         <Space>
           <span style={{ 
             fontFamily: "'Space Grotesk', sans-serif", 
-            color: '#CBD5E1' 
+            color: token.colorText 
           }}>
             {record.quota_used?.toLocaleString()} / {quota?.toLocaleString()}
           </span>
@@ -184,7 +186,7 @@ const UsersPage = () => {
       title: '创建时间', 
       dataIndex: 'created_at', 
       key: 'created_at',
-      render: (val: string) => <span style={{ color: '#94A3B8' }}>{dayjs.utc(val).local().format('YYYY-MM-DD')}</span>
+      render: (val: string) => <span style={{ color: token.colorTextSecondary }}>{dayjs.utc(val).local().format('YYYY-MM-DD')}</span>
     },
     { 
       title: '模型分组', 
@@ -252,7 +254,7 @@ const UsersPage = () => {
           fontFamily: "'Space Grotesk', sans-serif",
           fontSize: 24,
           fontWeight: 600,
-          color: '#F8FAFC',
+          color: token.colorText,
           margin: 0,
         }}>
           <TeamOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
@@ -274,9 +276,9 @@ const UsersPage = () => {
       </div>
 
       <div style={{
-        background: 'rgba(17, 24, 39, 0.6)',
+        background: token.colorBgContainer,
         backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        border: `1px solid ${token.colorBorder}`,
         borderRadius: 16,
         overflow: 'hidden',
       }}>
@@ -293,7 +295,7 @@ const UsersPage = () => {
         title={
           <span style={{ 
             fontFamily: "'Space Grotesk', sans-serif",
-            color: '#F8FAFC',
+            color: token.colorText,
           }}>
             新建用户
           </span>
@@ -308,7 +310,7 @@ const UsersPage = () => {
         <Form form={form} onFinish={handleCreate} layout="vertical">
           <Form.Item 
             name="username" 
-            label={<span style={{ color: '#94A3B8' }}>用户名</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>用户名</span>} 
             rules={[{ required: true }]}
           >
             <Input 
@@ -318,7 +320,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="email" 
-            label={<span style={{ color: '#94A3B8' }}>邮箱</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>} 
             rules={[{ required: true, type: 'email' }]}
           >
             <Input 
@@ -328,7 +330,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="password" 
-            label={<span style={{ color: '#94A3B8' }}>密码</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>密码</span>} 
             rules={[{ required: true, min: 8 }]}
           >
             <Input.Password 
@@ -338,7 +340,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="role" 
-            label={<span style={{ color: '#94A3B8' }}>角色</span>} 
+            label={<span style={{ color: token.colorTextSecondary }}>角色</span>} 
             initialValue="user"
           >
             <Select style={{ borderRadius: 10 }}>
@@ -348,7 +350,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="quota" 
-            label={<span style={{ color: '#94A3B8' }}>初始额度</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>初始额度</span>}
           >
             <InputNumber 
               min={0} 
@@ -358,7 +360,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="model_group_ids" 
-            label={<span style={{ color: '#94A3B8' }}>模型分组</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>模型分组</span>}
           >
             <Select 
               mode="multiple" 
@@ -401,7 +403,7 @@ const UsersPage = () => {
         title={
           <span style={{ 
             fontFamily: "'Space Grotesk', sans-serif",
-            color: '#F8FAFC',
+            color: token.colorText,
           }}>
             编辑用户
           </span>
@@ -416,7 +418,7 @@ const UsersPage = () => {
         <Form form={form} onFinish={handleUpdate} layout="vertical">
           <Form.Item 
             name="role" 
-            label={<span style={{ color: '#94A3B8' }}>角色</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>角色</span>}
           >
             <Select>
               <Select.Option value="user">用户</Select.Option>
@@ -425,7 +427,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="status" 
-            label={<span style={{ color: '#94A3B8' }}>状态</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>状态</span>}
           >
             <Select>
               <Select.Option value="active">启用</Select.Option>
@@ -434,7 +436,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="model_group_ids" 
-            label={<span style={{ color: '#94A3B8' }}>模型分组</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>模型分组</span>}
           >
             <Select 
               mode="multiple" 
@@ -477,7 +479,7 @@ const UsersPage = () => {
         title={
           <span style={{ 
             fontFamily: "'Space Grotesk', sans-serif",
-            color: '#F8FAFC',
+            color: token.colorText,
           }}>
             调整用户额度 - {quotaUser?.username}
           </span>
@@ -492,7 +494,7 @@ const UsersPage = () => {
         <Form form={quotaForm} onFinish={handleQuotaAdjust} layout="vertical">
           <Form.Item 
             name="amount" 
-            label={<span style={{ color: '#94A3B8' }}>调整额度（正数增加，负数减少）</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>调整额度（正数增加，负数减少）</span>}
             rules={[{ required: true, message: '请输入调整额度' }]}
           >
             <InputNumber 
@@ -502,7 +504,7 @@ const UsersPage = () => {
           </Form.Item>
           <Form.Item 
             name="reason" 
-            label={<span style={{ color: '#94A3B8' }}>调整原因</span>}
+            label={<span style={{ color: token.colorTextSecondary }}>调整原因</span>}
             rules={[{ required: true, message: '请输入调整原因' }]}
           >
             <Input.TextArea 
@@ -515,17 +517,17 @@ const UsersPage = () => {
             <div style={{ 
               marginBottom: 16, 
               padding: 16, 
-              background: 'rgba(30, 41, 59, 0.8)', 
+              background: token.colorBgContainer, 
               borderRadius: 10,
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: `1px solid ${token.colorBorder}`,
             }}>
-              <div style={{ color: '#94A3B8', marginBottom: 8 }}>
-                当前额度：<span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div style={{ color: token.colorTextSecondary, marginBottom: 8 }}>
+                当前额度：<span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" }}>
                   {quotaUser.quota?.toLocaleString()}
                 </span>
               </div>
-              <div style={{ color: '#94A3B8' }}>
-                已使用：<span style={{ color: '#F8FAFC', fontFamily: "'Space Grotesk', sans-serif" }}>
+              <div style={{ color: token.colorTextSecondary }}>
+                已使用：<span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" }}>
                   {quotaUser.quota_used?.toLocaleString()}
                 </span>
               </div>

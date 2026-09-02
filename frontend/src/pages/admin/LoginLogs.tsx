@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useThemeToken } from '@/theme/useThemeToken'
 import { Card, Table, Input, Select, Button, Space, Tag, DatePicker } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -26,7 +27,9 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const LoginLogsPage = () => {
-  const [loading, setLoading] = useState(false)
+    const { token, isDark } = useThemeToken()
+
+const [loading, setLoading] = useState(false)
   const [data, setData] = useState<LoginLog[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -95,7 +98,7 @@ const LoginLogsPage = () => {
       dataIndex: 'created_at',
       key: 'created_at',
       render: (val: string) => (
-        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: token.colorTextSecondary, fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {dayjs.utc(val).local().format('YYYY-MM-DD HH:mm:ss')}
         </span>
       ),
@@ -105,7 +108,7 @@ const LoginLogsPage = () => {
       dataIndex: 'username',
       key: 'username',
       render: (val: string) => (
-        <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{val}</span>
+        <span style={{ color: token.colorText, fontWeight: 500 }}>{val}</span>
       ),
     },
     {
@@ -132,7 +135,7 @@ const LoginLogsPage = () => {
       dataIndex: 'ip_address',
       key: 'ip_address',
       render: (val: string) => (
-        <span style={{ color: '#94A3B8', fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
+        <span style={{ color: token.colorTextSecondary, fontFamily: "'Space Grotesk', monospace", fontSize: 12 }}>
           {val}
         </span>
       ),
@@ -144,7 +147,7 @@ const LoginLogsPage = () => {
       render: (val: string) => (
         <span
           style={{
-            color: '#94A3B8',
+            color: token.colorTextSecondary,
             fontFamily: "'Space Grotesk', monospace",
             fontSize: 11,
           }}
@@ -167,12 +170,12 @@ const LoginLogsPage = () => {
     <div>
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.6)',
+          background: token.colorBgContainer,
           border: '1px solid rgba(255, 255, 255, 0.06)',
           borderRadius: 12,
           marginBottom: 16,
         }}
-        styles={{ body: { padding: '16px 20px' } }}
+        
       >
         <Space wrap size={12}>
           <Input
@@ -212,11 +215,11 @@ const LoginLogsPage = () => {
 
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.6)',
+          background: token.colorBgContainer,
           border: '1px solid rgba(255, 255, 255, 0.06)',
           borderRadius: 12,
         }}
-        styles={{ body: { padding: '0 20px 20px' } }}
+        
       >
         <Table
           dataSource={data}
