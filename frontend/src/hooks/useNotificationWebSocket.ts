@@ -1,74 +1,115 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { notification } from 'antd'
 import { useAuthStore } from '../store/auth'
 import { useNotificationStore } from '../store/notification'
 
+// 开发环境直连后端，生产环境通过 nginx
+const getWsBaseUrl = () => {
+  const isDev = import.meta.env.DEV
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  
+  if (isDev) {
+    // 开发环境直连后端 8000 端口，绕过 Vite 代理
+    return `ws://localhost:8000/ws/notifications`
+  }
+  // 生产环境通过 nginx 反向代理
+  return `${protocol}//${window.location.host}/ws/notifications`
+}
+
 export const useNotificationWebSocket = () => {
-  const { token } = useAuthStore()
-  const { setUnreadCount, addNotification } = useNotificationStore()
+  const token = useAuthStore((s) => s.token)
+  const setUnreadCount = useNotificationStore((s) => s.setUnreadCount)
+  const addNotification = useNotificationStore((s) => s.addNotification)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
-  const isMountedRef = useRef(true)
+  const reconnectAttempts = useRef(0)
+  // useRef 而非 let: React 18 StrictMode 在开发模式下会 mount→unmount→mount，
+  // 闭包内的 let 在第二次 effect 里看不到第一次 cleanup 设置的 true。
+  const isCancelledRef = useRef(false)
 
-  const connect = useCallback(() => {
-    if (!token) return
-    
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?token=${token}`
-    const ws = new WebSocket(wsUrl)
-
-    ws.onopen = () => {
-      if (!isMountedRef.current) return
-      console.log('[WS] 通知 WebSocket 已连接')
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+  useEffect(() => {
+    if (!token) {
+      return
     }
 
-    ws.onmessage = (event) => {
-      if (!isMountedRef.current) return
-      try {
-        const data = JSON.parse(event.data)
-        switch (data.type) {
-          case 'connected':
-            setUnreadCount(data.unread_count)
-            break
-          case 'new_notification':
-            addNotification(data.notif)
-            setUnreadCount((prev: number) => prev + 1)
-            notification.info({
-              message: data.notif.title,
-              description: data.notif.content,
-              duration: 5,
-              placement: 'topRight',
-            })
-            break
-          case 'pong':
-            break
+    let currentWs: WebSocket | null = null
+
+    const connect = () => {
+      if (isCancelledRef.current || !token) return
+
+      // 关闭已有连接
+      if (wsRef.current && wsRef.current !== currentWs) {
+        try { wsRef.current.close() } catch {}
+      }
+
+      const wsUrl = `${getWsBaseUrl()}?token=${token}`
+      console.log('[WS] 尝试连接:', wsUrl)
+      
+      const ws = new WebSocket(wsUrl)
+      currentWs = ws
+      wsRef.current = ws
+      reconnectAttempts.current++
+
+      ws.onopen = () => {
+        console.log('[WS] 通知 WebSocket 已连接')
+        reconnectAttempts.current = 0
+        if (reconnectTimer.current) {
+          clearTimeout(reconnectTimer.current)
+          reconnectTimer.current = undefined
         }
-      } catch {
-        // ignore parse errors
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('[WS] 收到消息:', data.type, data)
+          switch (data.type) {
+            case 'connected':
+              setUnreadCount(data.unread_count)
+              break
+            case 'new_notification':
+              addNotification(data.notif)
+              setUnreadCount((prev: number) => prev + 1)
+              notification.info({
+                message: data.notif.title,
+                description: data.notif.content,
+                duration: 5,
+                placement: 'topRight',
+              })
+              break
+            case 'pong':
+              break
+          }
+        } catch (e) {
+          console.error('[WS] 解析消息失败:', e)
+        }
+      }
+
+      ws.onclose = (e) => {
+        if (isCancelledRef.current) return
+        console.log('[WS] 通知 WebSocket 断开 code=' + e.code + ', reason=' + e.reason)
+        
+        // 如果是正常关闭，不重连
+        if (e.code === 1000) {
+          console.log('[WS] WebSocket 正常关闭，不重连')
+          return
+        }
+        
+        // 非正常关闭，指数退避重连
+        const delay = Math.min(5000 * Math.pow(1.5, reconnectAttempts.current - 1), 30000)
+        console.log(`[WS] ${delay}ms 后重连 (第 ${reconnectAttempts.current} 次尝试)`)
+        if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+        reconnectTimer.current = setTimeout(connect, delay)
+      }
+
+      ws.onerror = (e) => {
+        if (isCancelledRef.current) return
+        console.error('[WS] WebSocket 错误:', e)
       }
     }
 
-    ws.onclose = () => {
-      if (!isMountedRef.current) return
-      console.log('[WS] 通知 WebSocket 断开，5秒后重连')
-      reconnectTimer.current = setTimeout(() => {
-        if (isMountedRef.current) connect()
-      }, 5000)
-    }
-
-    ws.onerror = () => {
-      ws.close()
-    }
-
-    wsRef.current = ws
-  }, [token, setUnreadCount, addNotification])
-
-  useEffect(() => {
-    isMountedRef.current = true
     connect()
-    
-    // 心跳
+
     const heartbeat = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'ping' }))
@@ -76,10 +117,15 @@ export const useNotificationWebSocket = () => {
     }, 30000)
 
     return () => {
-      isMountedRef.current = false
+      isCancelledRef.current = true
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       clearInterval(heartbeat)
-      wsRef.current?.close()
+      if (wsRef.current) {
+        try { wsRef.current.close(1000, 'Component unmount') } catch {}
+        wsRef.current = null
+      }
+      // 重置：StrictMode 第二次 mount 不应继承前次失败计数
+      reconnectAttempts.current = 0
     }
-  }, [connect])
+  }, [token])
 }
