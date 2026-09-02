@@ -2,8 +2,12 @@
 WebSocket 端点
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from sqlalchemy.orm import Session
+
 from app.core.security import decode_access_token
+from app.core.database import SessionLocal
 from app.services.ws_manager import manager
+from app.services.notification_service import get_unread_count
 
 router = APIRouter()
 
@@ -28,13 +32,13 @@ async def websocket_notifications(websocket: WebSocket, token: str = Query(...))
     await manager.connect(websocket, user_id)
     
     try:
-        # 查询未读数（Task 2 中实现，Task 1 用 try/import 兼容处理）
+        # 查询未读数
         unread = 0
+        db: Session = SessionLocal()
         try:
-            from app.services.notification_service import get_unread_count
-            unread = await get_unread_count(user_id)
-        except ImportError:
-            pass
+            unread = await get_unread_count(user_id, db)
+        finally:
+            db.close()
         
         # 推送连接成功消息
         await websocket.send_json({
