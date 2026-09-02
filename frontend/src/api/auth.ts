@@ -9,14 +9,21 @@ export interface LoginParams {
 export interface LoginResult {
   access_token: string
   token_type: string
-  user: {
-    user_id: string
-    username: string
-    role: string
-  }
+  refresh_token: string
+  expires_in: number  // access_token 剩余秒数
 }
 
 export const login = (data: LoginParams) => post<LoginResult>('/auth/login', data)
+
+// refresh
+export interface RefreshParams { refresh_token: string }
+export interface RefreshResult extends LoginResult {}
+
+export const refresh = (data: RefreshParams) => post<RefreshResult>('/auth/refresh', data)
+
+// 登出（撤销服务端 refresh_token；前端同时丢弃 access_token）
+export const logoutServer = (refresh_token?: string) =>
+  post<void>('/auth/logout', refresh_token ? { refresh_token } : {})
 
 // 注册
 export interface RegisterParams {
