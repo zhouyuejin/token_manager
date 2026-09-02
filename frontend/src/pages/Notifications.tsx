@@ -3,7 +3,7 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useSearchParams } from 'react-router-dom'
 import {
   Card,
-  List,
+  Table,
   Tag,
   Button,
   Space,
@@ -57,6 +57,143 @@ const getTypeConfig = (type: string) =>
 
 const NotificationsPage = () => {
   const { token, isDark } = useThemeToken()
+
+  // 表格列定义
+  const columns = [
+    {
+      title: '状态',
+      dataIndex: 'is_read',
+      key: 'is_read',
+      width: 60,
+      render: (isRead: boolean) => (
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: isRead ? 'transparent' : token.colorPrimary,
+            boxShadow: isRead ? 'none' : '0 0 6px rgba(59, 130, 246, 0.6)',
+          }}
+        />
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'type',
+      key: 'type',
+      width: 110,
+      render: (type: string) => {
+        const cfg = getTypeConfig(type)
+        return (
+          <Tag
+            style={{
+              background: `${cfg.color}20`,
+              color: cfg.color,
+              border: `1px solid ${cfg.color}40`,
+              borderRadius: 6,
+              margin: 0,
+              fontSize: 12,
+              textAlign: 'center',
+            }}
+          >
+            {cfg.label}
+          </Tag>
+        )
+      },
+    },
+    {
+      title: '标题',
+      dataIndex: 'title',
+      key: 'title',
+      render: (title: string, record: Notification) => (
+        <div
+          style={{
+            color: record.is_read ? token.colorTextSecondary : token.colorText,
+            fontWeight: record.is_read ? 400 : 600,
+            fontSize: 14,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {title}
+        </div>
+      ),
+    },
+    {
+      title: '内容',
+      dataIndex: 'content',
+      key: 'content',
+      render: (content: string | null) => content ? (
+        <div
+          style={{
+            color: token.colorTextSecondary,
+            fontSize: 12,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {content}
+        </div>
+      ) : null,
+    },
+    {
+      title: '时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 170,
+      render: (createdAt: string) => (
+        <span
+          style={{
+            color: token.colorTextSecondary,
+            fontSize: 12,
+            fontFamily: "'Space Grotesk', monospace",
+          }}
+        >
+          {formatAbsoluteTime(createdAt)}
+        </span>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 140,
+      render: (_: unknown, record: Notification) => (
+        <Space size={4}>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={(e) => {
+              e.stopPropagation()
+              openDrawer(record)
+            }}
+            style={{ color: token.colorPrimary, padding: '0 8px' }}
+          >
+            查看
+          </Button>
+          <Popconfirm
+            title="删除通知"
+            description="确定删除此通知吗？"
+            onConfirm={(e) => handleRowDelete(record, e as React.MouseEvent)}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={(e) => e.stopPropagation()}
+              style={{ padding: '0 8px' }}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ]
   // Task 4 将挂载 /notifications 路由；这里直接消费 ?notif= 参数实现"点击下拉某条 → 自动打开详情"
   const [searchParams, setSearchParams] = useSearchParams()
   const focusId = searchParams.get('notif')
@@ -261,7 +398,7 @@ const NotificationsPage = () => {
           borderRadius: 12,
           marginBottom: 16,
         }}
-        styles={{ body: { padding: '16px 20px' } }}
+
       >
         <div
           style={{
@@ -287,7 +424,7 @@ const NotificationsPage = () => {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               allowClear
-              prefix={<SearchOutlined style={{ color: token.colorTextTertiary }} />}
+              prefix={<SearchOutlined style={{ color: token.colorTextSecondary }} />}
               style={{ width: 220 }}
             />
             <Button
@@ -356,11 +493,11 @@ const NotificationsPage = () => {
           border: '1px solid rgba(255, 255, 255, 0.06)',
           borderRadius: 12,
         }}
-        styles={{ body: { padding: '0 20px 20px' } }}
+
       >
         {total === 0 && !loading ? (
           <Empty
-            image={<InboxOutlined style={{ fontSize: 64, color: token.colorTextTertiary }} />}
+            image={<InboxOutlined style={{ fontSize: 64, color: token.colorTextSecondary }} />}
             styles={{ image: { height: 80 } }}
             description={<span style={{ color: token.colorTextSecondary }}>暂无通知</span>}
             style={{ padding: '40px 0' }}
@@ -378,155 +515,35 @@ const NotificationsPage = () => {
                 筛选后 {filteredNotifications.length} 条 / 共 {total} 条
               </div>
             )}
-            <List<Notification>
+            <Table<Notification>
               dataSource={filteredNotifications}
+              columns={columns}
               loading={loading}
-              rowKey={(n) => n.notif_id}
-              split={false}
+              rowKey={(record) => record.notif_id}
+              pagination={false}
               locale={{
                 emptyText: (
-                  <span style={{ color: token.colorTextSecondary, padding: 24, display: 'block' }}>
-                    没有匹配的通知
+                  <span style={{ color: token.colorTextSecondary }}>
+                    暂无通知
                   </span>
                 ),
               }}
-              renderItem={(notif) => {
-                const cfg = getTypeConfig(notif.type)
-                return (
-                  <div
-                    onClick={() => openDrawer(notif)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 16,
-                      padding: '12px 14px',
-                      borderRadius: 8,
-                      minHeight: 64,
-                      cursor: 'pointer',
-                      background: notif.is_read
-                        ? 'transparent'
-                        : 'rgba(59, 130, 246, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.04)',
-                      marginBottom: 8,
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = notif.is_read
-                        ? 'transparent'
-                        : 'rgba(59, 130, 246, 0.06)'
-                    }}
-                  >
-                    {/* 未读蓝点 */}
-                    <div
-                      aria-hidden
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: notif.is_read ? 'transparent' : token.colorPrimary,
-                        boxShadow: notif.is_read
-                          ? 'none'
-                          : '0 0 6px rgba(59, 130, 246, 0.6)',
-                        flexShrink: 0,
-                      }}
-                    />
-                    {/* 类型 */}
-                    <div style={{ width: 96, flexShrink: 0 }}>
-                      <Tag
-                        style={{
-                          background: `${cfg.color}20`,
-                          color: cfg.color,
-                          border: `1px solid ${cfg.color}40`,
-                          borderRadius: 6,
-                          margin: 0,
-                          fontSize: 12,
-                          width: '100%',
-                          textAlign: 'center',
-                          padding: '2px 6px',
-                        }}
-                      >
-                        {cfg.label}
-                      </Tag>
-                    </div>
-                    {/* 标题 + 摘要 */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          color: notif.is_read ? token.colorTextTertiary : token.colorText,
-                          fontWeight: notif.is_read ? 400 : 600,
-                          fontSize: 14,
-                          marginBottom: 4,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {notif.title}
-                      </div>
-                      {notif.content && (
-                        <div
-                          style={{
-                            color: token.colorTextTertiary,
-                            fontSize: 12,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {notif.content}
-                        </div>
-                      )}
-                    </div>
-                    {/* 时间 */}
-                    <div
-                      style={{
-                        color: token.colorTextTertiary,
-                        fontSize: 12,
-                        fontFamily: "'Space Grotesk', monospace",
-                        flexShrink: 0,
-                        width: 150,
-                        textAlign: 'right',
-                      }}
-                    >
-                      {formatAbsoluteTime(notif.created_at)}
-                    </div>
-                    {/* 操作 */}
-                    <div
-                      style={{ display: 'flex', gap: 4, flexShrink: 0 }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button
-                        type="link"
-                        icon={<EyeOutlined />}
-                        onClick={() => openDrawer(notif)}
-                        style={{ color: token.colorPrimary, padding: '0 8px' }}
-                      >
-                        查看
-                      </Button>
-                      <Button
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={(e) => handleRowDelete(notif, e)}
-                        style={{ padding: '0 8px' }}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  </div>
-                )
-              }}
+              onRow={(record) => ({
+                onClick: () => openDrawer(record),
+                style: {
+                  cursor: 'pointer',
+                  background: record.is_read
+                    ? 'transparent'
+                    : 'rgba(59, 130, 246, 0.06)',
+                },
+              })}
             />
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'flex-end',
                 marginTop: 16,
-              }}
-            >
+              }}>
               <Pagination
                 current={page}
                 pageSize={pageSize}

@@ -161,7 +161,7 @@ export default function NotificationDropdown({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
-                color: notif.is_read ? token.colorTextTertiary : token.colorText,
+                color: notif.is_read ? token.colorTextSecondary : token.colorText,
                 fontWeight: notif.is_read ? 400 : 500,
                 fontSize: 13,
                 marginBottom: 4,
@@ -175,7 +175,7 @@ export default function NotificationDropdown({
             {notif.content && (
               <div
                 style={{
-                  color: token.colorTextTertiary,
+                  color: token.colorTextSecondary,
                   fontSize: 12,
                   marginBottom: 4,
                   overflow: "hidden",
@@ -186,7 +186,7 @@ export default function NotificationDropdown({
                 {notif.content}
               </div>
             )}
-            <div style={{ color: token.colorTextTertiary, fontSize: 11 }}>
+            <div style={{ color: token.colorTextSecondary, fontSize: 11 }}>
               {formatRelativeTime(notif.created_at)}
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function NotificationDropdown({
           <DeleteOutlined
             onClick={(e) => handleDelete(notif.notif_id, e)}
             style={{
-              color: token.colorTextTertiary,
+              color: token.colorTextSecondary,
               fontSize: 12,
               cursor: "pointer",
               padding: 4,
@@ -272,7 +272,7 @@ export default function NotificationDropdown({
             style={{
               padding: "40px 20px",
               textAlign: "center",
-              color: token.colorTextTertiary,
+              color: token.colorTextSecondary,
             }}
           >
             <InboxOutlined
