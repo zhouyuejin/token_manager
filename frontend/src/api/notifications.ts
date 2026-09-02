@@ -29,3 +29,6 @@ export const markAsRead = (notifId: string) => put(`/notifications/${notifId}/re
 export const markAllAsRead = () => put('/notifications/read-all')
 
 export const deleteNotification = (notifId: string) => del(`/notifications/${notifId}`)
+
+export const deleteReadNotifications = () =>
+  del<{ message: string; deleted: number }>('/notifications')

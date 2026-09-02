@@ -19,6 +19,8 @@ interface NotificationState {
   markAsRead: (notifId: string) => void
   markAllAsRead: () => void
   removeNotification: (notifId: string) => void
+  replaceNotifications: (items: Notification[], unreadCount: number) => void
+  clearRead: () => void
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
@@ -59,4 +61,12 @@ export const useNotificationStore = create<NotificationState>((set) => ({
           notif && !notif.is_read ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
       }
     }),
+
+  replaceNotifications: (items, unreadCount) =>
+    set({ notifications: items, unreadCount }),
+
+  clearRead: () =>
+    set((state) => ({
+      notifications: state.notifications.filter((n) => !n.is_read),
+    })),
 }))
