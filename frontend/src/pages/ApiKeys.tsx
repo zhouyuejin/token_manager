@@ -329,7 +329,6 @@ const ApiKeysPage = () => {
           overflow: 'hidden',
         }}
       />
-
       {/* 创建Key弹窗 */}
       <Modal
         title={
@@ -446,7 +445,6 @@ const ApiKeysPage = () => {
               <InputNumber 
                 min={0} 
                 placeholder="0表示不限" 
-                style={{ width: '100%', height: 40 }}
               />
             </Form.Item>
             <Form.Item 
@@ -456,7 +454,6 @@ const ApiKeysPage = () => {
               <InputNumber 
                 min={0} 
                 placeholder="0表示不限" 
-                style={{ width: '100%', height: 40 }}
               />
             </Form.Item>
             <Form.Item 
@@ -465,9 +462,7 @@ const ApiKeysPage = () => {
             >
               <InputNumber 
                 min={1} 
-                max={100} 
-                
-                style={{ width: '100%', height: 40 }}
+                max={100}
               />
             </Form.Item>
           </Form>
@@ -519,7 +514,6 @@ const ApiKeysPage = () => {
             <InputNumber 
               min={0} 
               placeholder="0表示不限" 
-              style={{ width: '100%', height: 40 }}
             />
           </Form.Item>
           <Form.Item 
@@ -529,7 +523,6 @@ const ApiKeysPage = () => {
             <InputNumber 
               min={0} 
               placeholder="0表示不限" 
-              style={{ width: '100%', height: 40 }}
             />
           </Form.Item>
           <Form.Item 
@@ -539,7 +532,6 @@ const ApiKeysPage = () => {
             <InputNumber 
               min={1} 
               max={100} 
-              style={{ width: '100%', height: 40 }}
             />
           </Form.Item>
           <Form.Item style={{ marginTop: 24 }}>

@@ -354,7 +354,7 @@ const UsersPage = () => {
           >
             <InputNumber 
               min={0} 
-              style={{ width: '100%', height: 40 }} 
+               
               placeholder="请输入初始额度"
             />
           </Form.Item>
@@ -498,7 +498,7 @@ const UsersPage = () => {
             rules={[{ required: true, message: '请输入调整额度' }]}
           >
             <InputNumber 
-              style={{ width: '100%', height: 40 }} 
+               
               placeholder="如：10000 或 -5000"
             />
           </Form.Item>

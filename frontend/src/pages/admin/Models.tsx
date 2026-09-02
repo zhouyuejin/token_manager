@@ -452,18 +452,18 @@ const ModelsPage = () => {
                       <Row gutter={16}>
                         <Col span={12}>
                           <Form.Item name="price_per_1k_input" label={<span style={{ color: token.colorTextSecondary }}>每千输入Token价格(元)</span>}>
-                            <InputNumber min={0} step={0.0001} precision={4} style={{ width: '100%' }} placeholder="0.001" />
+                            <InputNumber min={0} step={0.0001} precision={4}  placeholder="0.001" />
                           </Form.Item>
                         </Col>
                         <Col span={12}>
                           <Form.Item name="price_per_1k_output" label={<span style={{ color: token.colorTextSecondary }}>每千输出Token价格(元)</span>}>
-                            <InputNumber min={0} step={0.0001} precision={4} style={{ width: '100%' }} placeholder="0.002" />
+                            <InputNumber min={0} step={0.0001} precision={4}  placeholder="0.002" />
                           </Form.Item>
                         </Col>
                       </Row>
                     ) : (
                       <Form.Item name="price_per_request" label={<span style={{ color: token.colorTextSecondary }}>每次请求价格(元)</span>}>
-                        <InputNumber min={0} step={0.01} precision={2} style={{ width: '100%' }} placeholder="0.01" />
+                        <InputNumber min={0} step={0.01} precision={2}  placeholder="0.01" />
                       </Form.Item>
                     )}
 
