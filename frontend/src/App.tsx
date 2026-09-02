@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import ApiKeys from './pages/ApiKeys'
 import Stats from './pages/Stats'
+import Notifications from './pages/Notifications'
 import Settings from './pages/Settings'
 import Chat from './pages/Chat'
 import AdminUsers from './pages/admin/Users'
@@ -38,6 +39,7 @@ function App() {
           <Route path="/" element={token ? <MainLayout /> : <Navigate to="/login" />}>
             <Route index element={<Navigate to="/stats" />} />
             <Route path="stats" element={<Stats />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="api-keys" element={<ApiKeys />} />
             <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<Settings />} />

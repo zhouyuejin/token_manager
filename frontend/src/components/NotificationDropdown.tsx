@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Dropdown, Badge, Skeleton } from 'antd'
 import { BellOutlined, DeleteOutlined, InboxOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -7,7 +8,6 @@ import 'dayjs/locale/zh-cn'
 import { useNotificationStore, Notification } from '../store/notification'
 import {
   getNotifications,
-  markAsRead,
   markAllAsRead,
   deleteNotification,
 } from '../api/notifications'
@@ -55,7 +55,8 @@ interface NotificationDropdownProps {
 export default function NotificationDropdown({ trigger }: NotificationDropdownProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { notifications, markAsRead: markAsReadStore, markAllAsRead: markAllAsReadStore, removeNotification } =
+  const navigate = useNavigate()
+  const { notifications, markAllAsRead: markAllAsReadStore, removeNotification } =
     useNotificationStore()
 
   // 打开时加载历史通知
@@ -78,17 +79,11 @@ export default function NotificationDropdown({ trigger }: NotificationDropdownPr
     }
   }
 
-  // 点击通知标记已读
-  const handleNotificationClick = async (notif: Notification, e: React.MouseEvent) => {
+  // 点击单条通知：关闭下拉，跳转 /notifications 并由页面解析 ?notif= 打开详情 drawer
+  const handleNotificationClick = (notif: Notification, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (notif.is_read) return
-
-    try {
-      await markAsRead(notif.notif_id)
-      markAsReadStore(notif.notif_id)
-    } catch (error) {
-      console.error('标记已读失败:', error)
-    }
+    setOpen(false)
+    navigate(`/notifications?notif=${notif.notif_id}`)
   }
 
   // 全部已读
@@ -291,8 +286,8 @@ export default function NotificationDropdown({ trigger }: NotificationDropdownPr
                     cursor: 'pointer',
                   }}
                   onClick={() => {
-                    // TODO: 跳转到通知中心页面
-                    console.log('查看全部通知')
+                    setOpen(false)
+                    navigate('/notifications')
                   }}
                 >
                   查看全部通知 &gt;

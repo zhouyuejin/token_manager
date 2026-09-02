@@ -38,6 +38,7 @@ const getPageTitle = (pathname: string): string => {
     '/api-keys': 'API Key 管理',
     '/chat': 'AI 对话',
     '/stats': '仪表盘',
+    '/notifications': '消息通知',
     '/admin/users': '用户管理',
     '/admin/providers': '供应商管理',
     '/admin/models': '模型管理',
@@ -105,6 +106,7 @@ const MainLayout = () => {
 
   const menuItems: MenuProps['items'] = [
     { key: '/stats', icon: <DashboardOutlined />, label: '仪表盘' },
+    { key: '/notifications', icon: <BellOutlined />, label: '消息通知' },
     { key: '/api-keys', icon: <KeyOutlined />, label: 'API Key' },
     { key: '/chat', icon: <MessageOutlined />, label: 'AI 对话' },
     ...(isAdmin
