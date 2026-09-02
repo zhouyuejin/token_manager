@@ -359,7 +359,7 @@ const NotificationsPage = () => {
         {total === 0 && !loading ? (
           <Empty
             image={<InboxOutlined style={{ fontSize: 64, color: '#475569' }} />}
-            imageStyle={{ height: 80 }}
+            styles={{ image: { height: 80 } }}
             description={<span style={{ color: '#94A3B8' }}>暂无通知</span>}
             style={{ padding: '40px 0' }}
           />
