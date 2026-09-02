@@ -308,6 +308,36 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-md) !important;
 }
 
+/* Input 搜索框高度修复 */
+.ant-input-affix-wrapper {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 11px !important;
+}
+
+.ant-input-affix-wrapper input {
+  height: 34px !important;
+  line-height: 34px !important;
+}
+
+/* Select 下拉框高度修复 - 与 Input 搜索框保持一致 */
+.ant-select-selector,
+.ant-select-selection,
+.ant-select-single .ant-select-selector,
+.ant-select:not(.ant-select-disabled) .ant-select-selector {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 11px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* 确保内部元素也使用相同高度 */
+.ant-select-selection-item,
+.ant-select-selection-placeholder {
+  line-height: 34px !important;
+}
+
 /* Input.Password 特殊处理 - 覆盖 ant-input-affix-wrapper */
 /* 使用更高优先级的选择器 */
 .ant-input-password.ant-input-password,
