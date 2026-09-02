@@ -383,21 +383,31 @@ const ApiKeysPage = () => {
                 ⚠️ 请立即复制并保存！此Key只显示一次，后续无法查看。
               </p>
             </div>
-            <Input 
-              value={newKey} 
-              readOnly 
-              style={{
-                fontFamily: "'Space Grotesk', monospace",
-                background: token.colorBgContainer,
-                border: `1px solid ${token.colorBorder}`,
-              }}
-              addonAfter={
-                <CopyOutlined 
-                  style={{ cursor: 'pointer', color: '#3B82F6' }} 
-                  onClick={() => copyKey(newKey)} 
-                />
-              }
-            />
+            <Space.Compact block>
+              <Input 
+                value={newKey} 
+                readOnly 
+                style={{
+                  fontFamily: "'Space Grotesk', monospace",
+                  background: token.colorBgContainer,
+                  border: `1px solid ${token.colorBorder}`,
+                  borderRight: 'none',
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0,
+                }}
+              />
+              <Button
+                type="text"
+                icon={<CopyOutlined style={{ color: '#3B82F6' }} />}
+                onClick={() => copyKey(newKey)}
+                style={{
+                  border: `1px solid ${token.colorBorder}`,
+                  borderLeft: 'none',
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                }}
+              />
+            </Space.Compact>
             <Button 
               type="primary" 
               block 
