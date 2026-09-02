@@ -15,6 +15,7 @@ export interface AdminProviderUsage {
 
 export interface AdminModelUsage {
   model: string
+  display_name?: string
   tokens: number
   requests: number
   cost: number

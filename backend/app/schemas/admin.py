@@ -205,6 +205,7 @@ class ProviderUsage(BaseModel):
 class ModelUsageStats(BaseModel):
     """模型用量统计"""
     model: str
+    display_name: Optional[str] = None
     tokens: int
     requests: int
     cost: float = 0

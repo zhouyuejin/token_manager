@@ -108,7 +108,15 @@ const Login = () => {
     try {
       await login({ username, password })
       message.success('登录成功')
-      navigate('/stats')
+      // 延迟一下获取用户信息，确保 state 已更新
+      setTimeout(() => {
+        const userInfo = useAuthStore.getState().user
+        if (userInfo?.role === 'admin') {
+          navigate('/admin/dashboard')
+        } else {
+          navigate('/stats')
+        }
+      }, 100)
     } catch (error) {
       // 错误已在请求拦截器中处理
     }

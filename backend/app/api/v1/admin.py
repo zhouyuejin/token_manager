@@ -165,15 +165,23 @@ async def get_admin_usage_stats(
     model_ids = [stat.model for stat in model_stats]
     model_info_map = {}
     if model_ids:
+        # 查询所有相关的模型映射（同时匹配 model_id 和 provider_model）
         model_mappings = db.query(
             ModelMapping.model_id,
+            ModelMapping.provider_model,
             ModelMapping.display_name,
             ModelMapping.price_per_1k_input,
             ModelMapping.price_per_1k_output
         ).filter(
-            ModelMapping.model_id.in_(model_ids)
+            (ModelMapping.model_id.in_(model_ids)) | 
+            (ModelMapping.provider_model.in_(model_ids))
         ).all()
-        model_info_map = {m.model_id: m for m in model_mappings}
+        
+        # 建立映射：支持 model_id 和 provider_model 两种匹配
+        for m in model_mappings:
+            model_info_map[m.model_id] = m
+            if m.provider_model:
+                model_info_map[m.provider_model] = m
     
     by_model = []
     if model_stats:
@@ -190,9 +198,10 @@ async def get_admin_usage_stats(
             
             by_model.append({
                 "model": stat.model,
+                "display_name": model_info.display_name if model_info else None,
                 "tokens": stat.tokens or 0,
                 "requests": stat.requests or 0,
-                "cost": round(cost, 2)
+                "cost": round(cost, 4)
             })
     
     # 按日统计
