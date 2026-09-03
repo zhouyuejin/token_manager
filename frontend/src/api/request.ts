@@ -70,6 +70,13 @@ request.interceptors.response.use(
     const status = error.response?.status
     const config = error.config as RetryableConfig | undefined
 
+    // /auth/login 自身的 401 = 凭证错误，不走 refresh、不踢下线，直接透传后端 detail
+    if (status === 401 && config?.url === '/auth/login') {
+      const data = error.response?.data as { detail?: string } | undefined
+      $message.error(data?.detail || '用户名或密码错误')
+      return Promise.reject(error)
+    }
+
     // 401：尝试 refresh + 重试
     if (status === 401 && config && !config._retried) {
       // /auth/refresh 自身 401 → refresh_token 也失效了，直接登出
