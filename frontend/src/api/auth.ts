@@ -1,4 +1,5 @@
 import { post, get } from './request'
+import { hashPassword } from '../utils/crypto'
 
 // 登录
 export interface LoginParams {
@@ -13,7 +14,16 @@ export interface LoginResult {
   expires_in: number  // access_token 剩余秒数
 }
 
-export const login = (data: LoginParams) => post<LoginResult>('/auth/login', data)
+/**
+ * 登录 - 密码在前端进行哈希后再传输
+ */
+export async function login(data: LoginParams): Promise<LoginResult> {
+  const hashedPassword = await hashPassword(data.password)
+  return post<LoginResult>('/auth/login', {
+    username: data.username,
+    password: hashedPassword
+  })
+}
 
 // refresh
 export interface RefreshParams { refresh_token: string }
@@ -32,7 +42,17 @@ export interface RegisterParams {
   password: string
 }
 
-export const register = (data: RegisterParams) => post('/auth/register', data)
+/**
+ * 注册 - 密码在前端进行哈希后再传输
+ */
+export async function register(data: RegisterParams): Promise<void> {
+  const hashedPassword = await hashPassword(data.password)
+  await post('/auth/register', {
+    username: data.username,
+    email: data.email,
+    password: hashedPassword
+  })
+}
 
 // 获取当前用户
 export interface UserInfo {

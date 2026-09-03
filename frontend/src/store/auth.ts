@@ -34,11 +34,7 @@ export const useAuthStore = create<AuthState>()(
       login: async (params) => {
         set({ isLoading: true })
         try {
-          const formData = new URLSearchParams()
-          formData.append('username', params.username)
-          formData.append('password', params.password)
-
-          const response = await loginApi(formData as unknown as LoginParams)
+          const response = await loginApi(params)
 
           set({ token: response.access_token, refreshToken: response.refresh_token })
 

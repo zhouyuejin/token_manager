@@ -118,54 +118,12 @@ def _create_login_log(db: Session, username: str, user_id: str | None,
 
 
 @router.post("/login", response_model=Token)
-async def login(request: Request, db: Session = Depends(get_db)):
-    """用户登录 - 密码已在前端进行 SHA256 哈希
-    
-    支持两种请求格式：
-    1. JSON: {"username": "xxx", "password": "xxx"}
-    2. Form: username=xxx&password=xxx
-    """
-    # 手动解析请求体，支持 JSON 和 form-urlencoded
-    content_type = request.headers.get("Content-Type", "")
-    username = ""
-    password = ""
-    
-    if "application/json" in content_type:
-        try:
-            body = await request.json()
-            username = body.get("username", "")
-            password = body.get("password", "")
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="无效的 JSON 格式"
-            )
-    elif "application/x-www-form-urlencoded" in content_type:
-        try:
-            form = await request.form()
-            username = form.get("username", "")
-            password = form.get("password", "")
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="无效的表单数据"
-            )
-    else:
-        # 尝试自动检测格式
-        try:
-            body = await request.json()
-            username = body.get("username", "")
-            password = body.get("password", "")
-        except Exception:
-            try:
-                form = await request.form()
-                username = form.get("username", "")
-                password = form.get("password", "")
-            except Exception:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="无法解析请求数据，请发送 JSON 或 form-urlencoded 格式"
-                )
+async def login(request: Request,
+                login_data: UserLogin,
+                db: Session = Depends(get_db)):
+    """用户登录 - 密码已在前端进行 SHA256 哈希"""
+    username = login_data.username
+    password = login_data.password
     ip_address = extract_client_ip(request)
     user_agent = extract_user_agent(request)
 

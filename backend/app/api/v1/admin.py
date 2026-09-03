@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_password_hash
+# password handled on frontend (SHA256)
 from app.models.user import User, UserRole, UserStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.provider_quota import ProviderQuota, QuotaType
@@ -310,7 +310,7 @@ async def create_user(
         user_id=f"usr_{secrets.token_hex(8)}",
         username=user_data.username,
         email=user_data.email,
-        password=get_password_hash(user_data.password),
+        password=user_data.password,  # already SHA256 hashed by frontend
         role=UserRole(user_data.role) if user_data.role else UserRole.user,
         quota=user_data.quota,
         status=UserStatus.active,
