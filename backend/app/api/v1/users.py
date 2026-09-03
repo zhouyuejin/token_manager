@@ -1,7 +1,7 @@
 """
 用户接口
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -9,6 +9,8 @@ from app.core.security import verify_password
 from app.models.user import User
 from app.dependencies import get_current_user
 from app.schemas.user import UserInfo, PasswordChange, NotificationSettings
+from app.services.operation_log_service import record_operation
+from app.utils.request import extract_client_ip
 
 router = APIRouter()
 
@@ -33,6 +35,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 @router.put("/me/password")
 async def change_password(
+    request: Request,
     password_data: PasswordChange,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -46,11 +49,20 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="原密码错误"
         )
-    
+
     # 更新密码（直接存储前端传递的哈希值）
     current_user.password = password_data.new_password
     db.commit()
-    
+
+    record_operation(
+        db=db,
+        operator=current_user,
+        action="change_password",
+        target_type="user",
+        target_id=current_user.user_id,
+        ip_address=extract_client_ip(request),
+    )
+
     return {"message": "密码修改成功"}
 
 
@@ -70,6 +82,7 @@ async def get_notification_settings(
 
 @router.put("/me/notification-settings", response_model=NotificationSettings)
 async def update_notification_settings(
+    request: Request,
     settings: NotificationSettings,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -81,7 +94,21 @@ async def update_notification_settings(
     current_user.quota_change_alert = settings.quota_change_alert
     current_user.daily_report = settings.daily_report
     db.commit()
-    
+
+    record_operation(
+        db=db,
+        operator=current_user,
+        action="update",
+        target_type="notification_settings",
+        target_id=current_user.user_id,
+        detail={
+            "quota_low_alert": settings.quota_low_alert,
+            "quota_change_alert": settings.quota_change_alert,
+            "daily_report": settings.daily_report,
+        },
+        ip_address=extract_client_ip(request),
+    )
+
     return NotificationSettings(
         quota_low_alert=current_user.quota_low_alert,
         quota_change_alert=current_user.quota_change_alert,

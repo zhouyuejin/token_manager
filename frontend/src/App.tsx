@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
-import { App as AntApp } from 'antd'
+import { App as AntApp, Spin } from 'antd'
 import { useAuthStore } from './store/auth'
 import MainLayout from './components/Layout/MainLayout'
 import Login from './pages/Login'
@@ -23,10 +23,24 @@ import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 function App() {
   const { token, checkAuth, user } = useAuthStore()
   const navigate = useNavigate()
+  // 区分"还没拉过用户信息"和"用户已加载但未必为管理员"，
+  // 避免刷新时因 user 尚未回填导致基于角色的路由提前误判并跳转。
+  const [authChecked, setAuthChecked] = useState(false)
 
   useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    let cancelled = false
+    if (token) {
+      // 拉取失败也会进入 finally，避免一直卡在 loading。
+      Promise.resolve(checkAuth()).finally(() => {
+        if (!cancelled) setAuthChecked(true)
+      })
+    } else {
+      setAuthChecked(true)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [token, checkAuth])
 
   // 登录后根据角色重定向
   useEffect(() => {
@@ -40,6 +54,15 @@ function App() {
 
   // 判断是否为管理员
   const isAdmin = user?.role === 'admin'
+
+  // 持有 token 但还未完成 checkAuth 时，避免基于角色的路由判断把页面误跳走。
+  if (token && !authChecked) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spin size="large" />
+      </div>
+    )
+  }
 
   return (
     <AntApp>
