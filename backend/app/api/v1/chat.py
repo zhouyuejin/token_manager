@@ -60,63 +60,35 @@ async def get_available_models(
 ):
     """
     获取用户可用模型列表
-    根据API Key关联的模型分组过滤模型
+    M1 fix: filter by effective groups (default ∪ user-group union), not
+    by api_key.model_groups alone. They can diverge when defaults change.
     """
-    # 获取用户的API Key
-    api_key = get_user_api_key(db, current_user.user_id)
-    
-    # 如果没有API Key，返回空列表（让用户可以进入对话页面）
-    if not api_key:
+    # M1: use ProxyService.get_effective_model_group_ids(user) — single source.
+    # This includes any active default groups the admin set, even if the
+    # user's API key didn't pre-list them at create time.
+    proxy_service = create_proxy_service(db)
+    effective_group_ids = proxy_service.get_effective_model_group_ids(current_user)
+
+    if not effective_group_ids:
         return AvailableModelsResponse(groups=[])
-    
-    # 获取API Key关联的模型分组
-    key_groups = api_key.model_groups
-    
-    if not key_groups:
-        # 没有关联分组，返回所有启用的模型（兼容旧Key）
-        mappings = db.query(ModelMapping).filter(
-            ModelMapping.status == "active"
-        ).all()
-        
-        if not mappings:
-            return AvailableModelsResponse(groups=[])
-        
-        # 只有一个默认分组
-        models = [
-            {
-                "model_id": mapping.model_id,
-                "display_name": mapping.display_name,
-                "provider_model": mapping.provider_model
-            }
-            for mapping in mappings
-        ]
-        
-        return AvailableModelsResponse(groups=[
-            ModelGroupInfo(
-                group_id="default",
-                name="默认模型",
-                providers=[],
-                models=models
-            )
-        ])
-    
-    # 获取分组关联的供应商和模型
-    group_ids = [g.group_id for g in key_groups]
+
+    # 获取生效分组及其关联的供应商和模型
     groups = db.query(ModelGroup).filter(
-        ModelGroup.group_id.in_(group_ids)
+        ModelGroup.group_id.in_(effective_group_ids),
+        ModelGroup.status == "active"
     ).all()
-    
+
     result_groups = []
     for group in groups:
         # 获取分组关联的供应商ID
         provider_ids = [p.provider_id for p in group.providers]
-        
+
         # 获取这些供应商的模型映射
         mappings = db.query(ModelMapping).filter(
             ModelMapping.status == "active",
             ModelMapping.provider_id.in_(provider_ids)
         ).all() if provider_ids else []
-        
+
         models = [
             {
                 "model_id": mapping.model_id,
@@ -125,7 +97,7 @@ async def get_available_models(
             }
             for mapping in mappings
         ]
-        
+
         # 获取供应商信息
         providers = [
             {
@@ -135,14 +107,14 @@ async def get_available_models(
             }
             for p in group.providers
         ]
-        
+
         result_groups.append(ModelGroupInfo(
             group_id=group.group_id,
             name=group.name,
             providers=providers,
             models=models
         ))
-    
+
     return AvailableModelsResponse(groups=result_groups)
 
 
@@ -425,20 +397,11 @@ async def send_message(
             detail="请先创建API Key"
         )
     
-    # 如果是第一条消息，自动生成标题
-    message_count = db.query(ChatMessage).filter(
-        ChatMessage.conversation_id == conversation_id
-    ).count()
-    
-    if message_count == 0 and message_request.messages:
-        first_user_message = next(
-            (m.content for m in message_request.messages if m.role == "user"),
-            None
-        )
-        if first_user_message:
-            conversation.title = generate_conversation_title(first_user_message)
-            db.commit()
-    
+    # I2 fix: fail-fast ordering — do all access/lookups BEFORE persisting
+    # the user message. Previously, we wrote the user_message + conversation
+    # title to the DB first, then ran the access gate. A 403 left dangling
+    # state: a conversation with a title and a user message but no AI reply.
+
     # 确定使用的模型
     model = message_request.model or conversation.model_id
     if not model:
@@ -453,7 +416,50 @@ async def send_message(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="没有可用的模型"
             )
-    
+
+    # 获取代理服务 — must be reachable before any DB writes below
+    proxy_service = create_proxy_service(db)
+
+    # 获取模型映射
+    model_mapping = proxy_service.get_model_mapping(model)
+    if not model_mapping:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的模型: {model}"
+        )
+
+    # 获取供应商
+    provider = proxy_service.get_provider(model_mapping.provider_id)
+    if not provider:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="供应商不可用"
+        )
+
+    # GC-1: 检查模型分组访问权限 (before any state mutation)
+    group_check = proxy_service.check_model_group_access(api_key, current_user, model)
+    if not group_check["allowed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=group_check["message"]
+        )
+
+    # === All pre-flight checks passed. Now persist the user-side state. ===
+
+    # 如果是第一条消息，自动生成标题
+    message_count = db.query(ChatMessage).filter(
+        ChatMessage.conversation_id == conversation_id
+    ).count()
+
+    if message_count == 0 and message_request.messages:
+        first_user_message = next(
+            (m.content for m in message_request.messages if m.role == "user"),
+            None
+        )
+        if first_user_message:
+            conversation.title = generate_conversation_title(first_user_message)
+            db.commit()
+
     # 保存用户消息
     user_message = ChatMessage(
         conversation_id=conversation_id,
@@ -464,34 +470,6 @@ async def send_message(
     db.add(user_message)
     db.commit()
     db.refresh(user_message)
-    
-    # 获取代理服务
-    proxy_service = create_proxy_service(db)
-    
-    # 获取模型映射
-    model_mapping = proxy_service.get_model_mapping(model)
-    if not model_mapping:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不支持的模型: {model}"
-        )
-    
-    # 获取供应商
-    provider = proxy_service.get_provider(model_mapping.provider_id)
-    if not provider:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="供应商不可用"
-        )
-    
-
-    # GC-1: 检查模型分组访问权限
-    group_check = proxy_service.check_model_group_access(api_key, current_user, model)
-    if not group_check["allowed"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=group_check["message"]
-        )
 
     # 构建请求数据
     messages_for_api = []

@@ -258,6 +258,15 @@ async def set_model_group_as_default(
             detail="模型分组不存在"
         )
 
+    # I4 fix: a disabled group cannot be made default — get_effective_model_group_ids
+    # filters by status=active, so silently flipping is_default=1 on a disabled
+    # group is a no-op that confuses admins.
+    if group.status != ModelGroupStatus.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="禁用的分组不能设为默认"
+        )
+
     group.is_default = 1
     db.commit()
 

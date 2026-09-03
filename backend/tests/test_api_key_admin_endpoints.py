@@ -58,7 +58,6 @@ def override_get_db():
         db.close()
 
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
@@ -81,12 +80,32 @@ for cls in [User, ModelGroup, Provider, ModelMapping, ApiKey]:
 
 @pytest.fixture(autouse=True)
 def setup_db():
+    # C1 fix: register dependency override PER TEST (not at module load),
+    # so multi-module pytest collection order cannot poison our session.
+    # Save & restore the prior override so other test modules (which still
+    # register their own override at module load) keep working after us.
+    _prev_override = app.dependency_overrides.get(get_db)
+
+    def _override():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override
+
     Base.metadata.create_all(bind=engine)
     _id_counters.clear()
     yield
     for table in reversed(Base.metadata.sorted_tables):
         TestingSessionLocal().execute(table.delete())
     _id_counters.clear()
+
+    if _prev_override is not None:
+        app.dependency_overrides[get_db] = _prev_override
+    else:
+        app.dependency_overrides.pop(get_db, None)
 
 
 # ========== Helper Functions ==========
@@ -628,3 +647,153 @@ class TestAdminModelGroupDefaultEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 404
+
+
+# ========== I1: admin_create_api_key falls back to effective groups ==========
+class TestAdminCreateApiKeyUsesEffectiveGroups:
+    """I1 fix: admin-omitted model_group_ids should fall back to the
+    target user's effective groups (default ∪ user-group union).
+    Regression test — previously, an admin-created key with no explicit
+    groups got zero groups and was locked out of every model.
+    """
+
+    def test_admin_create_key_with_no_groups_falls_back_to_default(self):
+        """Admin creates a key for a user with no extra groups while a
+        default group is set → the resulting key carries that default group.
+        """
+        target_user_id = None
+        db = TestingSessionLocal()
+        try:
+            # 1. Default group
+            default_group = ModelGroup(
+                group_id="grp_default_i1",
+                name="默认分组",
+                status=ModelGroupStatus.active,
+                is_default=1,
+            )
+            db.add(default_group)
+            # 2. Target user (no extra groups)
+            user = _create_user(db, "i1user", "i1user@example.com", model_group_ids=None)
+            # 3. Admin
+            admin = _create_admin(db, "i1admin", "i1admin@example.com")
+            db.commit()
+            target_user_id = user.user_id  # capture before session closes
+        finally:
+            db.close()
+
+        assert target_user_id is not None
+        token = _get_token("i1admin", "adminpass")
+        assert token is not None
+
+        # Admin creates a key for the user, omitting model_group_ids entirely.
+        response = client.post(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Admin-Created Default Key",
+                "user_id": target_user_id,
+                # NO model_group_ids — relies on effective groups fallback.
+            },
+        )
+        assert response.status_code == 200, response.text
+
+        key_id = response.json()["key_id"]
+
+        db = TestingSessionLocal()
+        try:
+            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
+            assert api_key is not None
+            group_ids = [g.group_id for g in api_key.model_groups]
+            assert "grp_default_i1" in group_ids, (
+                f"Expected default group in key's model_groups, got {group_ids}"
+            )
+        finally:
+            db.close()
+
+    def test_admin_create_key_with_explicit_groups_respects_admin_choice(self):
+        """Admin passes explicit non-empty list → that list is honored verbatim
+        (not merged with effective groups). Documents that the fallback only
+        fires when model_group_ids is empty/None, not when admin is explicit.
+        """
+        target_user_id = None
+        db = TestingSessionLocal()
+        try:
+            # Default group set, but admin picks a different group explicitly.
+            default_group = ModelGroup(
+                group_id="grp_default_explicit",
+                name="默认分组",
+                status=ModelGroupStatus.active,
+                is_default=1,
+            )
+            other_group = ModelGroup(
+                group_id="grp_admin_picked",
+                name="管理员指定分组",
+                status=ModelGroupStatus.active,
+                is_default=0,
+            )
+            db.add_all([default_group, other_group])
+            user = _create_user(db, "i1explicit", "i1explicit@example.com")
+            admin = _create_admin(db, "i1admin2", "i1admin2@example.com")
+            db.commit()
+            target_user_id = user.user_id
+        finally:
+            db.close()
+
+        token = _get_token("i1admin2", "adminpass")
+        response = client.post(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Admin-Picked Key",
+                "user_id": target_user_id,
+                "model_group_ids": ["grp_admin_picked"],
+            },
+        )
+        assert response.status_code == 200, response.text
+        key_id = response.json()["key_id"]
+
+        db = TestingSessionLocal()
+        try:
+            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
+            group_ids = sorted(g.group_id for g in api_key.model_groups)
+            assert group_ids == ["grp_admin_picked"], (
+                f"Expected only grp_admin_picked, got {group_ids}"
+            )
+        finally:
+            db.close()
+
+
+    def test_set_default_on_disabled_group_returns_400(self):
+        """I4 fix: setting a disabled group as default returns 400, not 200.
+        A silent success on a disabled group would be a confusing no-op
+        (get_effective_model_group_ids filters by status=active).
+        """
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db, "i4admin", "i4admin@example.com")
+            disabled_group = ModelGroup(
+                group_id="grp_disabled",
+                name="禁用分组",
+                status=ModelGroupStatus.disabled,  # disabled
+                is_default=0,
+            )
+            db.add(disabled_group)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _get_token("i4admin", "adminpass")
+        assert token is not None
+
+        response = client.post(
+            "/api/v1/admin/model-groups/grp_disabled/set-default",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 400, response.text
+        # Make sure the group's is_default didn't get flipped silently.
+        db = TestingSessionLocal()
+        try:
+            g = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_disabled").first()
+            assert g.is_default == 0, "Disabled group's is_default must NOT flip"
+        finally:
+            db.close()

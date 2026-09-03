@@ -9,6 +9,7 @@ API代理/网关服务，为公司内部提供统一访问大模型API的能力�
 - 用量统计与配额管理
 - 供应商配额同步（5小时用量、周用量）
 - 故障转移与熔断机制
+- 模型分组（每组关联若干供应商及其模型）；可标记分组为“默认”，用户访问模型时取“默认分组 ∪ 用户授权分组”的并集
 
 ## 技术栈
 
@@ -75,6 +76,11 @@ docker-compose exec backend bash
 # 初始化数据库（首次）
 python -c "from app.core.database import engine, Base; Base.metadata.create_all(bind=engine)"
 ```
+
+## 管理员注意
+
+- 必须将至少一个模型分组标记为「默认」(is_default=1 且 status=active)，否则所有用户将被拒绝访问任何模型（启动期会输出 warn 日志，AdminLayout 也会显示黄色横幅）。
+- 「设置默认」操作对禁用分组返回 400；请先把目标分组启用。
 
 ## 开发
 
