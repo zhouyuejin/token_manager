@@ -484,6 +484,15 @@ async def send_message(
             detail="供应商不可用"
         )
     
+
+    # GC-1: 检查模型分组访问权限
+    group_check = proxy_service.check_model_group_access(api_key, current_user, model)
+    if not group_check["allowed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=group_check["message"]
+        )
+
     # 构建请求数据
     messages_for_api = []
     

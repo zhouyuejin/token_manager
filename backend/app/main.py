@@ -30,6 +30,26 @@ async def lifespan(app: FastAPI):
     # 启动时
     logger.info("Token中转平台启动")
     
+    # GC-4(a): Startup warn when no active default model group
+    try:
+        from app.core.database import SessionLocal
+        from app.models.model_group import ModelGroup
+        db = SessionLocal()
+        try:
+            default_count = db.query(ModelGroup).filter(
+                ModelGroup.is_default == 1,
+                ModelGroup.status == "active"
+            ).count()
+            if default_count == 0:
+                logger.warning(
+                    "[Token中转平台] 没有设置默认模型分组(is_default=1 且 status=active)！"
+                    "请在管理后台创建并设置默认分组，以免用户无法正常使用API。"
+                )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"检查默认模型分组失败: {e}")
+    
     # 启动定时任务
     try:
         from app.tasks.daily_report import init_scheduler
