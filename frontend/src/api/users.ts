@@ -48,6 +48,8 @@ export async function createUser(data: CreateUserParams): Promise<void> {
 }
 
 export const updateUser = (userId: string, data: {
+  username?: string
+  email?: string
   quota?: number
   status?: string
   role?: string
