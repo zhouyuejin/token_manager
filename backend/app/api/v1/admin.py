@@ -365,13 +365,23 @@ async def update_user(
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
     # 不能编辑管理员用户
     if user.role == UserRole.admin:
         raise HTTPException(status_code=400, detail="不能编辑管理员用户")
-    
+
     import json
     changed = {}
+    if user_data.username is not None and user_data.username != user.username:
+        if db.query(User).filter(User.username == user_data.username, User.user_id != user_id).first():
+            raise HTTPException(status_code=400, detail="用户名已存在")
+        changed["username"] = user_data.username
+        user.username = user_data.username
+    if user_data.email is not None and user_data.email != user.email:
+        if db.query(User).filter(User.email == user_data.email, User.user_id != user_id).first():
+            raise HTTPException(status_code=400, detail="邮箱已被注册")
+        changed["email"] = user_data.email
+        user.email = user_data.email
     if user_data.role is not None:
         changed["role"] = user_data.role
         user.role = UserRole(user_data.role)

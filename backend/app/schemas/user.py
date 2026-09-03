@@ -1,7 +1,7 @@
 """
 用户相关Schema
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -9,7 +9,7 @@ from datetime import datetime
 class UserBase(BaseModel):
     """用户基础字段"""
     username: str
-    email: str
+    email: EmailStr
 
 
 class UserCreate(UserBase):
@@ -21,7 +21,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     """更新用户请求"""
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: Optional[str] = None
     model_group_ids: Optional[List[str]] = None
 

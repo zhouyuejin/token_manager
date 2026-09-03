@@ -1,7 +1,7 @@
 """
 管理后台相关Schema
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -11,7 +11,7 @@ from datetime import datetime
 class AdminUserCreate(BaseModel):
     """管理员创建用户请求"""
     username: str
-    email: str
+    email: EmailStr
     password: str = Field(..., min_length=8)
     role: str = "user"
     quota: int = 0
@@ -20,6 +20,8 @@ class AdminUserCreate(BaseModel):
 
 class AdminUserUpdate(BaseModel):
     """管理员更新用户请求"""
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
     role: Optional[str] = None
     status: Optional[str] = None
     quota: Optional[int] = None
