@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -18,6 +18,8 @@ from app.schemas.api_key import (
     ApiKeyCreate, ApiKeyUpdate, ApiKeyResponse,
     ApiKeyListResponse, ApiKeyStatusUpdate, ApiKeyCreatedResponse
 )
+from app.services.operation_log_service import record_operation
+from app.utils.request import extract_client_ip
 
 router = APIRouter()
 
@@ -99,6 +101,7 @@ async def list_api_keys(
 
 @router.post("", response_model=ApiKeyCreatedResponse)
 async def create_api_key(
+    request: Request,
     api_key_data: ApiKeyCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -109,7 +112,7 @@ async def create_api_key(
     # 生成Key ID和API Key
     key_id = generate_key_id()
     api_key = generate_api_key()
-    
+
     # 创建记录
     new_api_key = ApiKey(
         key_id=key_id,
@@ -123,24 +126,39 @@ async def create_api_key(
         monthly_reset_at=datetime.now().date(),
         status=ApiKeyStatus.active
     )
-    
+
     # 关联模型分组
     # 如果没有提供 model_group_ids（普通用户），则使用用户被分配的模型分组
     group_ids = api_key_data.model_group_ids
     if not group_ids:
         import json
         group_ids = json.loads(current_user.model_group_ids or '[]')
-    
+
     if group_ids:
         groups = db.query(ModelGroup).filter(
             ModelGroup.group_id.in_(group_ids)
         ).all()
         new_api_key.model_groups = groups
-    
+
     db.add(new_api_key)
     db.commit()
     db.refresh(new_api_key)
-    
+
+    record_operation(
+        db=db,
+        operator=current_user,
+        action="create",
+        target_type="api_key",
+        target_id=key_id,
+        detail={
+            "name": new_api_key.key_name,
+            "daily_limit": new_api_key.daily_limit,
+            "monthly_limit": new_api_key.monthly_limit,
+            "qps_limit": new_api_key.qps_limit,
+        },
+        ip_address=extract_client_ip(request),
+    )
+
     return ApiKeyCreatedResponse(
         key_id=new_api_key.key_id,
         api_key=new_api_key.api_key,
@@ -192,6 +210,7 @@ async def get_api_key(
 
 @router.put("/{key_id}")
 async def update_api_key(
+    request: Request,
     key_id: str,
     api_key_data: ApiKeyUpdate,
     current_user: User = Depends(get_current_user),
@@ -204,39 +223,58 @@ async def update_api_key(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
     ).first()
-    
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="API Key不存在"
         )
-    
-    # 更新字段
-    if api_key_data.name is not None:
+
+    # 仅记录真正发生变化的字段
+    changed = {}
+    if api_key_data.name is not None and api_key.key_name != api_key_data.name:
+        changed["name"] = api_key_data.name
         api_key.key_name = api_key_data.name
-    if api_key_data.daily_limit is not None:
+    if api_key_data.daily_limit is not None and api_key.daily_limit != api_key_data.daily_limit:
+        changed["daily_limit"] = api_key_data.daily_limit
         api_key.daily_limit = api_key_data.daily_limit
-    if api_key_data.monthly_limit is not None:
+    if api_key_data.monthly_limit is not None and api_key.monthly_limit != api_key_data.monthly_limit:
+        changed["monthly_limit"] = api_key_data.monthly_limit
         api_key.monthly_limit = api_key_data.monthly_limit
-    if api_key_data.qps_limit is not None:
+    if api_key_data.qps_limit is not None and api_key.qps_limit != api_key_data.qps_limit:
+        changed["qps_limit"] = api_key_data.qps_limit
         api_key.qps_limit = api_key_data.qps_limit
     if api_key_data.ip_whitelist is not None:
+        changed["ip_whitelist"] = api_key_data.ip_whitelist
         api_key.ip_whitelist = json.dumps(api_key_data.ip_whitelist)
-    
+
     # 更新模型分组关联
     if api_key_data.model_group_ids is not None:
+        changed["model_group_ids"] = api_key_data.model_group_ids
         groups = db.query(ModelGroup).filter(
             ModelGroup.group_id.in_(api_key_data.model_group_ids)
         ).all()
         api_key.model_groups = groups
-    
+
     db.commit()
-    
+
+    if changed:
+        record_operation(
+            db=db,
+            operator=current_user,
+            action="update",
+            target_type="api_key",
+            target_id=key_id,
+            detail=changed,
+            ip_address=extract_client_ip(request),
+        )
+
     return {"message": "更新成功"}
 
 
 @router.put("/{key_id}/status")
 async def update_api_key_status(
+    request: Request,
     key_id: str,
     status_data: ApiKeyStatusUpdate,
     current_user: User = Depends(get_current_user),
@@ -249,13 +287,13 @@ async def update_api_key_status(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
     ).first()
-    
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="API Key不存在"
         )
-    
+
     if status_data.status == "active":
         api_key.status = ApiKeyStatus.active
     elif status_data.status == "disabled":
@@ -265,14 +303,25 @@ async def update_api_key_status(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="无效的状态值"
         )
-    
+
     db.commit()
-    
+
+    record_operation(
+        db=db,
+        operator=current_user,
+        action="update_status",
+        target_type="api_key",
+        target_id=key_id,
+        detail={"status": status_data.status},
+        ip_address=extract_client_ip(request),
+    )
+
     return {"message": "状态更新成功"}
 
 
 @router.delete("/{key_id}")
 async def delete_api_key(
+    request: Request,
     key_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -284,16 +333,27 @@ async def delete_api_key(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
     ).first()
-    
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="API Key不存在"
         )
-    
+
+    deleted_name = api_key.key_name
     db.delete(api_key)
     db.commit()
-    
+
+    record_operation(
+        db=db,
+        operator=current_user,
+        action="delete",
+        target_type="api_key",
+        target_id=key_id,
+        detail={"name": deleted_name},
+        ip_address=extract_client_ip(request),
+    )
+
     return {"message": "删除成功"}
 
 
