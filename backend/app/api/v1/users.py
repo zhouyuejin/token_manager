@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import verify_password, get_password_hash
+from app.core.security import verify_password
 from app.models.user import User
 from app.dependencies import get_current_user
 from app.schemas.user import UserInfo, PasswordChange, NotificationSettings
@@ -38,17 +38,17 @@ async def change_password(
     db: Session = Depends(get_db)
 ):
     """
-    修改密码
+    修改密码 - 密码已在前端进行 SHA256 哈希
     """
-    # 验证旧密码
+    # 验证旧密码（前端传递的已经是哈希后的值）
     if not verify_password(password_data.old_password, current_user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="原密码错误"
         )
     
-    # 更新密码
-    current_user.password = get_password_hash(password_data.new_password)
+    # 更新密码（直接存储前端传递的哈希值）
+    current_user.password = password_data.new_password
     db.commit()
     
     return {"message": "密码修改成功"}

@@ -1,4 +1,5 @@
 import { get, post, put, del } from './request'
+import { hashPassword } from '../utils/crypto'
 
 export interface User {
   user_id: string
@@ -35,7 +36,16 @@ export const getUsers = (params?: {
   status?: string
 }) => get<{ total: number; items: User[] }>('/admin/users', { params })
 
-export const createUser = (data: CreateUserParams) => post('/admin/users', data)
+/**
+ * 创建用户 - 密码在前端进行 SHA256 哈希后再传输
+ */
+export async function createUser(data: CreateUserParams): Promise<void> {
+  const hashedPassword = await hashPassword(data.password)
+  await post('/admin/users', {
+    ...data,
+    password: hashedPassword
+  })
+}
 
 export const updateUser = (userId: string, data: {
   quota?: number
@@ -51,8 +61,13 @@ export const adjustQuota = (userId: string, data: {
   reason: string
 }) => post(`/admin/users/${userId}/quota`, data)
 
-export const resetPassword = (userId: string, newPassword: string) =>
-  post(`/admin/users/${userId}/reset-password`, { new_password: newPassword })
+/**
+ * 重置密码 - 密码在前端进行 SHA256 哈希后再传输
+ */
+export async function resetPassword(userId: string, newPassword: string): Promise<void> {
+  const hashedPassword = await hashPassword(newPassword)
+  await post(`/admin/users/${userId}/reset-password`, { new_password: hashedPassword })
+}
 
 // 通知设置相关API
 export const getNotificationSettings = () => 
