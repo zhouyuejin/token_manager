@@ -19,44 +19,46 @@ class ApiKeyBase(BaseModel):
     model_config = {'populate_by_name': True}
 
 
+# ---------- User-facing schemas ----------
+
 class ApiKeyCreate(BaseModel):
-    """创建API Key请求"""
+    """创建API Key请求（用户）"""
     name: str = Field(
-        validation_alias='key_name',  # 接收 name 或 key_name
-        serialization_alias='name'      # 返回 name
+        validation_alias='key_name',
+        serialization_alias='name'
     )
     daily_limit: int = 0
     monthly_limit: int = 0
     qps_limit: int = 10
-    model_group_ids: Optional[List[str]] = None
+    # NO model_group_ids — GC-2
 
     model_config = {'populate_by_name': True}
 
 
 class ApiKeyUpdate(BaseModel):
-    """更新API Key请求"""
+    """更新API Key请求（用户）"""
     name: Optional[str] = Field(
         default=None,
-        validation_alias='key_name',  # 接收 name 或 key_name
-        serialization_alias='name'      # 返回 name
+        validation_alias='key_name',
+        serialization_alias='name'
     )
     daily_limit: Optional[int] = None
     monthly_limit: Optional[int] = None
     qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
-    model_group_ids: Optional[List[str]] = None
+    # NO model_group_ids — GC-2
 
     model_config = {'populate_by_name': True}
 
 
 class ApiKeyResponse(BaseModel):
-    """API Key响应"""
+    """API Key响应（用户）"""
     key_id: str
     user_id: str
     api_key: str
     name: str = Field(
-        validation_alias='key_name',  # 接收时用 key_name
-        serialization_alias='name'      # 返回时用 name
+        validation_alias='key_name',
+        serialization_alias='name'
     )
     daily_limit: int
     daily_used: int
@@ -66,7 +68,7 @@ class ApiKeyResponse(BaseModel):
     status: str
     created_at: datetime
     last_used_at: Optional[datetime] = None
-    model_groups: List[str] = []
+    # NO model_groups — GC-2
 
     model_config = {'populate_by_name': True}
 
@@ -87,8 +89,69 @@ class ApiKeyCreatedResponse(BaseModel):
     key_id: str
     api_key: str
     name: str = Field(
-        validation_alias='key_name',  # 接收时用 key_name
-        serialization_alias='name'      # 返回时用 name
+        validation_alias='key_name',
+        serialization_alias='name'
     )
     
     model_config = {'populate_by_name': True}
+
+
+# ---------- Admin-facing schemas ----------
+
+class ApiKeyAdminCreate(BaseModel):
+    """创建API Key请求（管理员）"""
+    user_id: Optional[str] = None  # admin can create for another user
+    name: str = Field(
+        validation_alias='key_name',
+        serialization_alias='name'
+    )
+    daily_limit: int = 0
+    monthly_limit: int = 0
+    qps_limit: int = 10
+    model_group_ids: Optional[List[str]] = None
+
+    model_config = {'populate_by_name': True}
+
+
+class ApiKeyAdminUpdate(BaseModel):
+    """更新API Key请求（管理员）"""
+    name: Optional[str] = Field(
+        default=None,
+        validation_alias='key_name',
+        serialization_alias='name'
+    )
+    daily_limit: Optional[int] = None
+    monthly_limit: Optional[int] = None
+    qps_limit: Optional[int] = None
+    ip_whitelist: Optional[List[str]] = None
+    model_group_ids: Optional[List[str]] = None
+
+    model_config = {'populate_by_name': True}
+
+
+class ApiKeyAdminResponse(BaseModel):
+    """API Key响应（管理员）"""
+    key_id: str
+    user_id: str
+    api_key: str
+    name: str = Field(
+        validation_alias='key_name',
+        serialization_alias='name'
+    )
+    daily_limit: int
+    daily_used: int
+    monthly_limit: int
+    monthly_used: int
+    qps_limit: int
+    status: str
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    model_groups: List[str] = []  # admin sees groups
+
+    model_config = {'populate_by_name': True}
+
+
+class ApiKeyAdminListResponse(BaseModel):
+    """API Key列表响应（管理员）"""
+    total: int
+    items: List[ApiKeyAdminResponse]

@@ -170,19 +170,23 @@ async def chat_completions(
         except:
             pass  # 如果解析失败，跳过检查
     
-    # 4. 检查额度
-    # 估算token数量（简化处理）
+    # 4. 检查模型分组访问权限 (GC-1: single gate)
+    group_check = proxy_service.check_model_group_access(api_key, user, chat_request.model)
+    if not group_check["allowed"]:
+        raise HTTPException(status_code=403, detail=group_check["message"])
+
+    # 5. 检查额度
     estimated_tokens = 1000
     quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
         raise HTTPException(status_code=403, detail=quota_check["message"])
     
-    # 5. 构建请求数据
+    # 6. 构建请求数据
     request_data = chat_request.model_dump(exclude={"stream"})
     # 移除None值
     request_data = {k: v for k, v in request_data.items() if v is not None}
     
-    # 6. 转发请求
+    # 7. 转发请求
     if chat_request.stream:
         # 流式响应 - 使用包装器追踪延迟
         stream_generator, start_time = proxy_service.forward_stream_request(provider, model_mapping, request_data)
@@ -226,13 +230,13 @@ async def chat_completions(
         # 普通响应
         result = proxy_service.forward_request(provider, model_mapping, request_data)
         
-        # 7. 计算token数量
+        # 8. 计算token数量
         tokens = proxy_service.calculate_tokens(
             request_data,
             result["data"] if result["success"] else None
         )
         
-        # 8. 记录用量
+        # 9. 记录用量
         proxy_service.record_usage(
             user_id=user.user_id,
             key_id=api_key.key_id,
@@ -244,11 +248,11 @@ async def chat_completions(
             error_message=result["error"]
         )
         
-        # 9. 如果成功，扣减额度
+        # 10. 如果成功，扣减额度
         if result["success"] and result["status_code"] == 200:
             await proxy_service.deduct_quota(user, api_key, tokens)
         
-        # 10. 返回响应
+        # 11. 返回响应
         if not result["success"]:
             raise HTTPException(
                 status_code=result["status_code"],

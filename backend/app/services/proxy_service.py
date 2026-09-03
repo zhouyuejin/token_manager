@@ -5,13 +5,14 @@ import json
 import time
 import secrets
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 import httpx
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.api_key import ApiKey
 from app.models.provider import Provider
+from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.model_mapping import ModelMapping
 from app.models.usage_log import UsageLog
 
@@ -37,7 +38,86 @@ class ProxyService:
             User.status == "active"
         ).first()
         return user
-    
+
+    # ---- GC-1: single source of truth for model group access ----
+
+    def get_effective_model_group_ids(self, user: User) -> Set[str]:
+        """
+        返回该用户可用的有效模型分组ID集合。
+
+        effective = default_ids ∪ user_ids
+          default_ids = {g.group_id for g in ModelGroup where is_default=1 and status=active}
+          user_ids   = set(json.loads(user.model_group_ids or '[]'))
+        """
+        default_groups = self.db.query(ModelGroup).filter(
+            ModelGroup.is_default == 1,
+            ModelGroup.status == "active"
+        ).all()
+        default_ids = {g.group_id for g in default_groups}
+        user_ids: Set[str] = set(json.loads(user.model_group_ids or '[]'))
+        return default_ids | user_ids
+
+    def check_model_group_access(
+        self,
+        api_key: ApiKey,
+        user: User,
+        model_id: str
+    ) -> Dict[str, Any]:
+        """
+        检查 api_key+user 组合是否有权访问 model_id。
+
+        返回: {"allowed": True} 或
+             {"allowed": False, "reason": "...", "message": "当前 Key 未被授权访问该模型"}
+
+        GC-3: message 不暴露任何 group 名称或结构。
+        """
+        effective_group_ids = self.get_effective_model_group_ids(user)
+
+        if not effective_group_ids:
+            return {
+                "allowed": False,
+                "reason": "no_effective_groups",
+                "message": "当前 Key 未被授权访问该模型"
+            }
+
+        model_mapping = self.db.query(ModelMapping).filter(
+            ModelMapping.model_id == model_id,
+            ModelMapping.status == "active"
+        ).first()
+
+        if not model_mapping:
+            return {
+                "allowed": False,
+                "reason": "model_not_found",
+                "message": "当前 Key 未被授权访问该模型"
+            }
+
+        provider = self.db.query(Provider).filter(
+            Provider.provider_id == model_mapping.provider_id,
+            Provider.status == "active"
+        ).first()
+
+        if not provider:
+            return {
+                "allowed": False,
+                "reason": "provider_not_found",
+                "message": "当前 Key 未被授权访问该模型"
+            }
+
+        accessible_group_ids = {
+            g.group_id for g in provider.model_groups
+            if g.status == ModelGroupStatus.active
+        }
+
+        if not effective_group_ids & accessible_group_ids:
+            return {
+                "allowed": False,
+                "reason": "group_mismatch",
+                "message": "当前 Key 未被授权访问该模型"
+            }
+
+        return {"allowed": True}
+
     def check_quota(self, user: User, api_key: ApiKey, estimated_tokens: int = 1000) -> Dict[str, Any]:
         """检查额度是否充足"""
         # 检查用户额度
