@@ -416,8 +416,31 @@ const UsersPage = () => {
         footer={null}
       >
         <Form form={form} onFinish={handleUpdate} layout="vertical">
-          <Form.Item 
-            name="role" 
+          <Form.Item
+            name="username"
+            label={<span style={{ color: token.colorTextSecondary }}>用户名</span>}
+            rules={[{ required: true, message: '请输入用户名' }]}
+          >
+            <Input
+              placeholder="请输入用户名"
+              style={{ height: 40, borderRadius: 10 }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="email"
+            label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>}
+            rules={[
+              { required: true, message: '请输入邮箱' },
+              { type: 'email', message: '邮箱格式不正确' },
+            ]}
+          >
+            <Input
+              placeholder="请输入邮箱"
+              style={{ height: 40, borderRadius: 10 }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="role"
             label={<span style={{ color: token.colorTextSecondary }}>角色</span>}
           >
             <Select>
