@@ -3,17 +3,15 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, Progress, 
-  InputNumber, Popconfirm, Select 
+  InputNumber, Popconfirm 
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
 import { getApiKeys, createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
-import { getModelGroups, ModelGroup } from '../api/modelGroups'
 import dayjs from 'dayjs'
 
 const ApiKeysPage = () => {
   const [loading, setLoading] = useState(false)
   const [keys, setKeys] = useState<ApiKey[]>([])
-  const [groups, setGroups] = useState<ModelGroup[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
@@ -25,7 +23,6 @@ const ApiKeysPage = () => {
 
   useEffect(() => {
     fetchKeys()
-    fetchGroups()
   }, [])
 
   const fetchKeys = async () => {
@@ -37,15 +34,6 @@ const ApiKeysPage = () => {
       console.error(error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchGroups = async () => {
-    try {
-      const data = await getModelGroups()
-      setGroups(data.items || [])
-    } catch (error) {
-      console.error(error)
     }
   }
 
@@ -67,7 +55,6 @@ const ApiKeysPage = () => {
       daily_limit: record.daily_limit,
       monthly_limit: record.monthly_limit,
       qps_limit: record.qps_limit,
-      model_group_ids: record.model_groups || []
     })
     setEditModalVisible(true)
   }
@@ -101,13 +88,6 @@ const ApiKeysPage = () => {
     message.success('已复制到剪贴板')
   }
 
-  const getGroupNames = (groupIds: string[]) => {
-    return groupIds.map(id => {
-      const group = groups.find(g => g.group_id === id)
-      return group?.name || id
-    }).join(', ')
-  }
-
   const columns = [
     { 
       title: 'Key名称', 
@@ -129,18 +109,6 @@ const ApiKeysPage = () => {
         }}>
           {key.substring(0, 10)}...{key.substring(key.length - 4)}
         </span>
-      )
-    },
-    { 
-      title: '模型分组', 
-      dataIndex: 'model_groups', 
-      key: 'model_groups',
-      render: (groupIds: string[]) => (
-        groupIds && groupIds.length > 0 ? (
-          <Tag color="blue">{getGroupNames(groupIds)}</Tag>
-        ) : (
-          <Tag>未分组</Tag>
-        )
       )
     },
     { 
@@ -329,6 +297,7 @@ const ApiKeysPage = () => {
           overflow: 'hidden',
         }}
       />
+
       {/* 创建Key弹窗 */}
       <Modal
         title={
@@ -445,8 +414,6 @@ const ApiKeysPage = () => {
                 }}
               />
             </Form.Item>
-            
-
 
             <Form.Item 
               name="daily_limit" 
@@ -514,8 +481,6 @@ const ApiKeysPage = () => {
               }}
             />
           </Form.Item>
-          
-
 
           <Form.Item 
             name="daily_limit" 

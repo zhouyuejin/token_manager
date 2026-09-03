@@ -236,3 +236,54 @@ async def get_groups_by_provider(
         ))
     
     return ModelGroupListResponse(total=len(items), items=items)
+
+
+@router.post("/{group_id}/set-default")
+async def set_model_group_as_default(
+    group_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    将指定模型分组设为默认分组（管理员）。
+    多个分组可同时为默认分组（GC-6）。
+    """
+    group = db.query(ModelGroup).filter(
+        ModelGroup.group_id == group_id
+    ).first()
+
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="模型分组不存在"
+        )
+
+    group.is_default = 1
+    db.commit()
+
+    return {"message": "已设为默认分组"}
+
+
+@router.post("/{group_id}/unset-default")
+async def unset_model_group_default(
+    group_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    取消指定模型分组的默认分组状态（管理员）。
+    """
+    group = db.query(ModelGroup).filter(
+        ModelGroup.group_id == group_id
+    ).first()
+
+    if not group:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="模型分组不存在"
+        )
+
+    group.is_default = 0
+    db.commit()
+
+    return {"message": "已取消默认分组"}

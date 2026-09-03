@@ -3,12 +3,13 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, Select, 
-  Popconfirm, Card, Switch 
+  Popconfirm, Card, Switch, Alert 
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { 
   getModelGroups, createModelGroup, updateModelGroup, 
-  deleteModelGroup, ModelGroup 
+  deleteModelGroup, setModelGroupDefault, unsetModelGroupDefault,
+  ModelGroup 
 } from '../../api/modelGroups'
 import { getProviders, Provider } from '../../api/providers'
 
@@ -77,13 +78,34 @@ const ModelGroups: React.FC = () => {
     }
   }
 
+  const handleSetDefault = async (groupId: string) => {
+    try {
+      await setModelGroupDefault(groupId)
+      message.success('已设为默认分组')
+      fetchGroups()
+    } catch (error) {
+      message.error('设置失败')
+    }
+  }
+
+  const handleUnsetDefault = async (groupId: string) => {
+    try {
+      await unsetModelGroupDefault(groupId)
+      message.success('已取消默认分组')
+      fetchGroups()
+    } catch (error) {
+      message.error('取消失败')
+    }
+  }
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const setAsDefault = values.set_as_default === true
       const data = {
         name: values.name,
         description: values.description,
-        is_default: values.is_default ? 1 : 0,
+        is_default: (values.is_default || setAsDefault) ? 1 : 0,
         provider_ids: values.provider_ids || []
       }
 
@@ -108,6 +130,9 @@ const ModelGroups: React.FC = () => {
       return provider?.name || id
     }).join(', ')
   }
+
+  const hasActiveDefault = groups.some(g => g.is_default === 1 && g.status === 'active')
+  const noActiveDefault = !hasActiveDefault
 
   const columns = [
     {
@@ -161,33 +186,86 @@ const ModelGroups: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 200,
       fixed: 'right' as const,
-      render: (_: any, record: ModelGroup) => (
-        <Space size="small">
-          <Button 
-            type="link" 
-            icon={<EditOutlined />} 
-            onClick={() => handleEdit(record)}
-            style={{ padding: '4px 8px' }}
-          >
-            编辑
-          </Button>
-          <Popconfirm 
-            title="确认删除此分组？" 
-            onConfirm={() => handleDelete(record.group_id)}
-          >
-            <Button type="link" danger icon={<DeleteOutlined />} style={{ padding: '4px 8px' }}>
-              删除
+      render: (_: any, record: ModelGroup) => {
+        const isDefault = record.is_default === 1
+        const isActive = record.status === 'active'
+        const useDanger = noActiveDefault && !isDefault && isActive
+
+        return (
+          <Space size="small">
+            {isActive && (
+              isDefault ? (
+                <Popconfirm
+                  title="确认取消默认分组？"
+                  onConfirm={() => handleUnsetDefault(record.group_id)}
+                >
+                  <Button type="link" danger size="small" style={{ padding: '4px 8px' }}>
+                    取消默认
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Button
+                  type="link"
+                  size="small"
+                  danger={useDanger}
+                  onClick={() => handleSetDefault(record.group_id)}
+                  style={{ padding: '4px 8px' }}
+                >
+                  设为默认
+                </Button>
+              )
+            )}
+            <Button 
+              type="link" 
+              icon={<EditOutlined />} 
+              onClick={() => handleEdit(record)}
+              style={{ padding: '4px 8px' }}
+            >
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      )
+            <Popconfirm 
+              title="确认删除此分组？" 
+              onConfirm={() => handleDelete(record.group_id)}
+            >
+              <Button type="link" danger icon={<DeleteOutlined />} style={{ padding: '4px 8px' }}>
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        )
+      }
     }
   ]
 
   return (
     <div style={{ padding: '24px' }}>
+      {noActiveDefault && (
+        <Alert
+          type="error"
+          showIcon
+          message="当前没有已启用的默认模型分组，新用户将无法正常使用 API Key。"
+          description={
+            groups.length === 0 ? (
+              <Button
+                type="primary"
+                danger
+                onClick={handleCreate}
+                style={{ marginTop: 8 }}
+              >
+                立即创建分组
+              </Button>
+            ) : (
+              <span style={{ color: 'rgba(0,0,0,0.45)' }}>
+                请在下方列表中设置一个分组为默认分组，或创建一个新分组并设为默认。
+              </span>
+            )
+          }
+          style={{ marginBottom: 16, borderRadius: 8 }}
+        />
+      )}
+
       <Card 
         title="模型分组管理" 
         extra={
@@ -233,13 +311,25 @@ const ModelGroups: React.FC = () => {
             <TextArea rows={3} placeholder="分组描述" />
           </Form.Item>
 
-          <Form.Item
-            name="is_default"
-            label="设为默认分组"
-            valuePropName="checked"
-          >
-            <Switch checkedChildren="是" unCheckedChildren="否" />
-          </Form.Item>
+          {!editingGroup && (
+            <Form.Item
+              name="set_as_default"
+              label="创建后立即设为默认"
+              valuePropName="checked"
+            >
+              <Switch checkedChildren="是" unCheckedChildren="否" />
+            </Form.Item>
+          )}
+
+          {editingGroup && (
+            <Form.Item
+              name="is_default"
+              label="设为默认分组"
+              valuePropName="checked"
+            >
+              <Switch checkedChildren="是" unCheckedChildren="否" />
+            </Form.Item>
+          )}
 
           <Form.Item
             name="provider_ids"

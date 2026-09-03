@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom'
 import { App as AntApp, Spin } from 'antd'
 import { useAuthStore } from './store/auth'
 import MainLayout from './components/Layout/MainLayout'
@@ -15,6 +15,7 @@ import AdminUsers from './pages/admin/Users'
 import AdminProviders from './pages/admin/Providers'
 import AdminModels from './pages/admin/Models'
 import AdminModelGroups from './pages/admin/ModelGroups'
+import AdminLayout from './pages/admin/AdminLayout'
 import OperationLogs from './pages/admin/OperationLogs'
 import LoginLogs from './pages/admin/LoginLogs'
 import { MessageProvider } from './components/MessageProvider'
@@ -85,13 +86,15 @@ function App() {
             <Route path="settings" element={<Settings />} />
             
             {/* 管理员专属路由 */}
-            <Route path="admin/dashboard" element={isAdmin ? <AdminDashboard /> : <Navigate to="/stats" />} />
-            <Route path="admin/users" element={isAdmin ? <AdminUsers /> : <Navigate to="/stats" />} />
-            <Route path="admin/providers" element={isAdmin ? <AdminProviders /> : <Navigate to="/stats" />} />
-            <Route path="admin/models" element={isAdmin ? <AdminModels /> : <Navigate to="/stats" />} />
-            <Route path="admin/model-groups" element={isAdmin ? <AdminModelGroups /> : <Navigate to="/stats" />} />
-            <Route path="admin/logs/operations" element={isAdmin ? <OperationLogs /> : <Navigate to="/stats" />} />
-            <Route path="admin/logs/logins" element={isAdmin ? <LoginLogs /> : <Navigate to="/stats" />} />
+            <Route path="admin" element={isAdmin ? <AdminLayout><Outlet /></AdminLayout> : <Navigate to="/stats" />}>
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="providers" element={<AdminProviders />} />
+              <Route path="models" element={<AdminModels />} />
+              <Route path="model-groups" element={<AdminModelGroups />} />
+              <Route path="logs/operations" element={<OperationLogs />} />
+              <Route path="logs/logins" element={<LoginLogs />} />
+            </Route>
           </Route>
         </Routes>
       </MessageProvider>
