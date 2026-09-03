@@ -13,7 +13,6 @@ export interface ApiKey {
   status: string
   created_at: string
   last_used_at: string | null
-  model_groups: string[]  // 关联的模型分组ID列表
 }
 
 export interface CreateApiKeyParams {
@@ -22,7 +21,6 @@ export interface CreateApiKeyParams {
   monthly_limit?: number
   qps_limit?: number
   ip_whitelist?: string[]
-  model_group_ids?: string[]
 }
 
 export const getApiKeys = () => get<{ items: ApiKey[] }>('/api-keys')

@@ -28,3 +28,9 @@ export const updateModelGroup = (groupId: string, data: Partial<ModelGroup>) =>
 
 export const deleteModelGroup = (groupId: string) =>
   del(`/admin/model-groups/${groupId}`)
+
+export const setModelGroupDefault = (groupId: string) =>
+  post(`/admin/model-groups/${groupId}/set-default`, {})
+
+export const unsetModelGroupDefault = (groupId: string) =>
+  post(`/admin/model-groups/${groupId}/unset-default`, {})
