@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.core.database import Base, get_db
 from app.core.config import settings
-from app.core.security import get_password_hash, generate_user_id, hash_token
+from app.core.security import hash_password_sha256, generate_user_id, hash_token
 from app.models.user import User, UserRole, UserStatus
 from app.models.refresh_token import RefreshToken
 from app.api.v1 import auth as auth_module
@@ -88,7 +88,7 @@ def user_row():
         user_id=generate_user_id(),
         username="alice",
         email="alice@example.com",
-        password=get_password_hash("S3cretpwd"),
+        password=hash_password_sha256("S3cretpwd"),
         role=UserRole.user,
         status=UserStatus.active,
     )
@@ -101,7 +101,7 @@ def user_row():
 
 def _login(username="alice", password="S3cretpwd") -> dict:
     res = client.post("/api/v1/auth/login",
-        data={"username": username, "password": password},
+        data={"username": username, "password": hash_password_sha256(password)},
         headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert res.status_code == 200, res.text
     body = res.json()

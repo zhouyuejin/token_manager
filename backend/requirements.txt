@@ -12,9 +12,10 @@ alembic==1.13.0
 redis==5.0.1
 
 # Authentication
+# 自 feat(auth) 9e5d780 起，约定是"前端 SHA256(FRONTEND_SALT + plain) → 后端原样存 hex"。
+# 后端不做二次哈希，因此不再需要 bcrypt / passlib。Salt 见
+# frontend/src/utils/crypto.ts 与 backend/app/core/security.py:FRONTEND_SALT。
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.1.1
 
 # Validation
 pydantic==2.5.0

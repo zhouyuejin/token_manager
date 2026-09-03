@@ -19,7 +19,7 @@ from app.main import app
 from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.operation_log import OperationLog
-from app.core.security import get_password_hash
+from app.core.security import hash_password_sha256
 
 # SQLite in-memory 多 connection 互不可见；强制单 connection 共享表。
 engine = create_engine(
@@ -62,7 +62,7 @@ def _create_regular_user(db, username="alice", email="alice@example.com", passwo
         user_id=f"usr_{username}",
         username=username,
         email=email,
-        password=get_password_hash(password),
+        password=hash_password_sha256(password),
         role=UserRole.user,
         status=UserStatus.active,
         quota=1000,
@@ -80,7 +80,7 @@ def _get_user_token(username="alice", password="alicepass1"):
         db.close()
     response = client.post(
         "/api/v1/auth/login",
-        data={"username": username, "password": password},
+        data={"username": username, "password": hash_password_sha256(password)},
     )
     return response.json()["access_token"]
 
@@ -95,7 +95,7 @@ class TestChangePasswordLogs:
         response = client.put(
             "/api/v1/users/me/password",
             headers=headers,
-            json={"old_password": "alicepass1", "new_password": "alicepass2"},
+            json={"old_password": hash_password_sha256("alicepass1"), "new_password": hash_password_sha256("alicepass2")},
         )
         assert response.status_code == 200
 

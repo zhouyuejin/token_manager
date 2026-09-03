@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
-from app.core.security import get_password_hash
+from app.core.security import hash_password_sha256
 
 # 内存 SQLite 测试库
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -42,7 +42,7 @@ def _create_user(db, username, email, password="hashedpwd", status=UserStatus.ac
         user_id=generate_user_id(),
         username=username,
         email=email,
-        password=get_password_hash(password),
+        password=hash_password_sha256(password),
         role=UserRole.user,
         status=status,
     )
@@ -234,7 +234,7 @@ class TestLoginLogWriteFailure:
         with patch.object(LoginLog, "__init__", side_effect=Exception("DB write error")):
             response = client.post(
                 "/api/v1/auth/login",
-                data={"username": "dave", "password": "pwd123"},
+                data={"username": "dave", "password": hash_password_sha256("pwd123")},
             )
             assert response.status_code == 200
             assert "access_token" in response.json()

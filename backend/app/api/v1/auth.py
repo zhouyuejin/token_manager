@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import (
     decode_access_token,
-    verify_password, get_password_hash, hash_password_sha256, create_access_token,
+    verify_password, create_access_token,
     generate_user_id, generate_refresh_token, hash_token,
 )
 from app.models.refresh_token import RefreshToken

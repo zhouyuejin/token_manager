@@ -10,7 +10,7 @@ from app.main import app
 from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.operation_log import OperationLog
-from app.core.security import get_password_hash
+from app.core.security import hash_password_sha256
 
 # 内存 SQLite 测试库
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -43,7 +43,7 @@ def _create_admin(db, username="admin", email="admin@example.com", password="adm
         user_id=f"usr_{username}",
         username=username,
         email=email,
-        password=get_password_hash(password),
+        password=hash_password_sha256(password),
         role=UserRole.admin,
         status=UserStatus.active,
     )
@@ -58,7 +58,7 @@ def _create_regular_user(db, username="user1", email="user1@example.com"):
         user_id=f"usr_{username}",
         username=username,
         email=email,
-        password=get_password_hash("userpass1"),
+        password=hash_password_sha256("userpass1"),
         role=UserRole.user,
         status=UserStatus.active,
         quota=1000,
@@ -77,7 +77,7 @@ def _get_admin_token():
         db.close()
     response = client.post(
         "/api/v1/auth/login",
-        data={"username": "admin", "password": "adminpass"},
+        data={"username": "admin", "password": hash_password_sha256("adminpass")},
     )
     return response.json()["access_token"]
 
