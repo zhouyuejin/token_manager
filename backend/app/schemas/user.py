@@ -58,7 +58,9 @@ class UserInfo(BaseModel):
 class PasswordChange(BaseModel):
     """修改密码请求"""
     old_password: str
-    new_password: str = Field(..., min_length=8, max_length=32)
+    # 注：自 feat(auth) 9e5d780 起，密码已是前端 SHA256 hex（固定 64 字符），
+    # 长度上限对应放宽。min_length=8 保持原意（不允许过短 hex）。
+    new_password: str = Field(..., min_length=8, max_length=64)
 
 
 class NotificationSettings(BaseModel):

@@ -2,11 +2,11 @@
 
 -- 创建管理员用户 (密码: admin123)
 INSERT INTO users (user_id, username, email, password, role, quota, status) 
-VALUES ('usr_admin', 'admin', 'admin@example.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ePLF3S4f8F3W', 'admin', 100000000, 'active');
+VALUES ('usr_admin', 'admin', 'admin@example.com', 'f10d777793088354212c24aa082e8c06ed0c048837d1bb87096b04a25dc50eb5', 'admin', 100000000, 'active'); -- SHA256(FRONTEND_SALT||'admin123')
 
 -- 创建测试用户 (密码: user123)
 INSERT INTO users (user_id, username, email, password, role, quota, status) 
-VALUES ('usr_test', 'testuser', 'test@example.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ePLF3S4f8F3W', 'user', 1000000, 'active');
+VALUES ('usr_test', 'testuser', 'test@example.com', 'd51c051c47c4be47d3e9b231a8e04fff39b3c1402b91d732c554e966d3100556', 'user', 1000000, 'active'); -- SHA256(FRONTEND_SALT||'user123')
 
 -- 创建测试API Key
 INSERT INTO api_keys (key_id, user_id, api_key, key_name, daily_limit, monthly_limit, qps_limit, status)

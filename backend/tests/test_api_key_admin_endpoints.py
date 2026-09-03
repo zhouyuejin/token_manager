@@ -20,7 +20,7 @@ from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus, api_key_model_groups
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
-from app.core.security import get_password_hash
+from app.core.security import hash_password_sha256
 from app.services.proxy_service import ProxyService
 
 # ========== Test Setup (同 test_proxy_service_model_group.py 的模式) ==========
@@ -115,7 +115,7 @@ def _create_user(db, username="testuser", email="test@example.com", model_group_
         user_id=f"usr_{username}",
         username=username,
         email=email,
-        password=get_password_hash("password"),
+        password=hash_password_sha256("password"),
         role=UserRole.user,
         status=UserStatus.active,
         model_group_ids=model_group_ids,
@@ -132,7 +132,7 @@ def _create_admin(db, username="admin", email="admin@example.com"):
         user_id=f"usr_{username}",
         username=username,
         email=email,
-        password=get_password_hash("adminpass"),
+        password=hash_password_sha256("adminpass"),
         role=UserRole.admin,
         status=UserStatus.active,
     )
@@ -146,7 +146,7 @@ def _get_token(username, password):
     """获取用户token"""
     response = client.post(
         "/api/v1/auth/login",
-        data={"username": username, "password": password},
+        data={"username": username, "password": hash_password_sha256(password)},
     )
     if response.status_code == 200:
         return response.json().get("access_token")
