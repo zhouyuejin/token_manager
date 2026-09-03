@@ -13,7 +13,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.model_group import ModelGroup
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.schemas.api_key import (
     # User-facing
     ApiKeyCreate, ApiKeyUpdate, ApiKeyResponse,
@@ -356,16 +356,11 @@ def _get_key_model_groups(api_key: ApiKey) -> List[str]:
 @router.get("/admin/all", response_model=ApiKeyAdminListResponse)
 async def list_all_api_keys(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """
     获取所有API Key列表（管理员）
     """
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="权限不足"
-        )
     
     api_keys = db.query(ApiKey).all()
     
@@ -396,7 +391,7 @@ async def list_all_api_keys(
 async def admin_create_api_key(
     request: Request,
     api_key_data: ApiKeyAdminCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -404,11 +399,6 @@ async def admin_create_api_key(
     
     Admin-facing: accepts model_group_ids and optional user_id.
     """
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="权限不足"
-        )
     
     target_user_id = api_key_data.user_id or current_user.user_id
     key_id = generate_key_id()
@@ -427,8 +417,21 @@ async def admin_create_api_key(
         status=ApiKeyStatus.active
     )
 
-    group_ids = api_key_data.model_group_ids or []
-    _assign_key_groups(db, new_api_key, group_ids)
+    # I1 fix: when admin omits model_group_ids (or passes []), do NOT create a
+    # key with zero groups (which would deny all access). Fall back to the
+    # effective groups of the *target* user so any default-group state carries
+    # through. Admin can still pass an explicit list to override.
+    proxy_service = create_proxy_service(db)
+    target_user = db.query(User).filter(User.user_id == target_user_id).first()
+    if api_key_data.model_group_ids:
+        group_ids = api_key_data.model_group_ids
+        _assign_key_groups(db, new_api_key, group_ids)
+    elif target_user is not None:
+        group_ids = sorted(proxy_service.get_effective_model_group_ids(target_user))
+        _assign_key_groups(db, new_api_key, group_ids)
+    else:
+        group_ids = []
+        _assign_key_groups(db, new_api_key, [])
 
     db.add(new_api_key)
     db.commit()
@@ -458,15 +461,10 @@ async def admin_create_api_key(
 @router.get("/admin/{key_id}", response_model=ApiKeyAdminResponse)
 async def admin_get_api_key(
     key_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """获取单个API Key详情（管理员）"""
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="权限不足"
-        )
     
     api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
 
@@ -498,7 +496,7 @@ async def admin_update_api_key(
     request: Request,
     key_id: str,
     api_key_data: ApiKeyAdminUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -506,11 +504,6 @@ async def admin_update_api_key(
     
     Admin-facing: accepts model_group_ids.
     """
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="权限不足"
-        )
     
     api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
 
@@ -563,7 +556,7 @@ async def admin_set_key_model_groups(
     request: Request,
     key_id: str,
     group_ids_data: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
@@ -574,11 +567,6 @@ async def admin_set_key_model_groups(
       Body: {"model_group_ids": ["group_1", "group_2"]}
       Returns: {"message": "更新成功"}
     """
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="权限不足"
-        )
     
     api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
     if not api_key:
