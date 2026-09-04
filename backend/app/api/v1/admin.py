@@ -553,7 +553,6 @@ async def list_providers(
                 sync_interval=p.sync_interval or 300,
                 last_sync_at=p.last_sync_at,
                 quota_config=json.loads(p.quota_config) if p.quota_config else None,
-                enabled_models=json.loads(p.enabled_models) if p.enabled_models else None,
                 models=json.loads(p.models) if p.models else None
             )
             for p in providers
@@ -582,11 +581,52 @@ async def create_provider(
         quota_hourly=provider_data.quota_hourly,
         quota_weekly=provider_data.quota_weekly,
         quota_config=json.dumps(provider_data.quota_config.model_dump()) if provider_data.quota_config else None,
-        enabled_models=json.dumps(provider_data.enabled_models) if provider_data.enabled_models else None,
         status=ProviderStatus.active
     )
     
     db.add(provider)
+    db.flush()  # 获取 provider_id
+    
+    # 如果提供了 models，直接创建 ModelMapping 记录
+    models_list = []
+    if provider_data.models:
+        for model_input in provider_data.models:
+            # 自动生成 model_id: {provider_type}-{model_name}
+            model_id = f"{provider.type.value}-{model_input.model_name}"
+            
+            # 检查是否已存在（同一供应商的同一模型）
+            existing = db.query(ModelMapping).filter(
+                ModelMapping.provider_id == provider.provider_id,
+                ModelMapping.provider_model == model_input.model_name
+            ).first()
+            
+            if not existing:
+                # 检查 model_id 是否已被其他供应商占用
+                id_taken = db.query(ModelMapping).filter(
+                    ModelMapping.model_id == model_id,
+                    ModelMapping.provider_id != provider.provider_id
+                ).first()
+                if id_taken:
+                    # model_id 已被其他供应商占用，跳过（避免唯一约束冲突）
+                    continue
+                mapping = ModelMapping(
+                    model_id=model_id,
+                    provider_id=provider.provider_id,
+                    provider_model=model_input.model_name,
+                    display_name=model_input.display_name,
+                    status=ModelMappingStatus.active
+                )
+                db.add(mapping)
+            
+            models_list.append({
+                "model_id": model_id,
+                "model_name": model_input.model_name,
+                "display_name": model_input.display_name
+            })
+        
+        # 存储 models 到 Provider 表
+        provider.models = json.dumps(models_list)
+    
     db.commit()
     db.refresh(provider)
     
@@ -619,17 +659,18 @@ async def create_provider(
             "timeout": provider.timeout,
             "quota_hourly": provider.quota_hourly,
             "quota_weekly": provider.quota_weekly,
+            "models": [m["model_name"] for m in models_list] if models_list else [],
         },
         ip_address=ip_address,
     )
     
-    # 解析 enabled_models
-    enabled_models_list = []
-    if provider.enabled_models:
+    # 解析 models
+    provider_models = []
+    if provider.models:
         try:
-            enabled_models_list = json.loads(provider.enabled_models) if isinstance(provider.enabled_models, str) else provider.enabled_models
+            provider_models = json.loads(provider.models) if isinstance(provider.models, str) else provider.models
         except:
-            enabled_models_list = []
+            provider_models = []
     
     return ProviderResponse(
         provider_id=provider.provider_id,
@@ -641,7 +682,7 @@ async def create_provider(
         status=provider.status.value,
         health_status=provider.health_status.value if provider.health_status else "healthy",
         last_check_at=provider.last_check_at,
-        enabled_models=enabled_models_list,
+        models=provider_models,
         quota_hourly=provider.quota_hourly,
         quota_weekly=provider.quota_weekly,
         sync_enabled=bool(provider.sync_enabled) if provider.sync_enabled else False,
@@ -649,8 +690,6 @@ async def create_provider(
         last_sync_at=provider.last_sync_at,
         quota_config=json.loads(provider.quota_config) if provider.quota_config else None
     )
-
-
 @router.put("/providers/{provider_id}")
 async def update_provider(
     request: Request,
@@ -703,9 +742,49 @@ async def update_provider(
     if provider_data.quota_config is not None:
         changed["quota_config"] = provider_data.quota_config.model_dump()
         provider.quota_config = json.dumps(provider_data.quota_config.model_dump())
-    if provider_data.enabled_models is not None:
-        changed["enabled_models"] = provider_data.enabled_models
-        provider.enabled_models = json.dumps(provider_data.enabled_models) if provider_data.enabled_models else None
+    # 处理 models 更新
+    if provider_data.models is not None:
+        models_list = []
+        for model_input in provider_data.models:
+            # 自动生成 model_id: {provider_type}-{model_name}
+            model_id = f"{provider.type.value}-{model_input.model_name}"
+            
+            # 检查是否已存在（同一供应商的同一模型）
+            existing = db.query(ModelMapping).filter(
+                ModelMapping.provider_id == provider.provider_id,
+                ModelMapping.provider_model == model_input.model_name
+            ).first()
+            
+            if not existing:
+                # 检查 model_id 是否已被其他供应商占用
+                id_taken = db.query(ModelMapping).filter(
+                    ModelMapping.model_id == model_id,
+                    ModelMapping.provider_id != provider.provider_id
+                ).first()
+                if id_taken:
+                    # model_id 已被其他供应商占用，跳过（避免唯一约束冲突）
+                    continue
+                mapping = ModelMapping(
+                    model_id=model_id,
+                    provider_id=provider.provider_id,
+                    provider_model=model_input.model_name,
+                    display_name=model_input.display_name,
+                    status=ModelMappingStatus.active
+                )
+                db.add(mapping)
+            else:
+                # 更新已有的映射
+                existing.display_name = model_input.display_name
+                existing.provider_model = model_input.model_name
+            
+            models_list.append({
+                "model_id": model_id,
+                "model_name": model_input.model_name,
+                "display_name": model_input.display_name
+            })
+        
+        changed["models"] = [m["model_name"] for m in models_list]
+        provider.models = json.dumps(models_list)
     
     db.commit()
     
@@ -737,7 +816,6 @@ async def update_provider(
     
     return {"message": "更新成功"}
 
-
 @router.delete("/providers/{provider_id}")
 async def delete_provider(
     request: Request,
@@ -766,69 +844,6 @@ async def delete_provider(
     )
     
     return {"message": "删除成功"}
-
-@router.get("/providers/quotas")
-async def get_all_provider_quotas(
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin)
-):
-    """
-    获取所有供应商配额
-    """
-    providers = db.query(Provider).all()
-    
-    result = []
-    for p in providers:
-        # 从 provider_quotas 表获取实际用量
-        hourly_quota = db.query(ProviderQuota).filter(
-            ProviderQuota.provider_id == p.provider_id,
-            ProviderQuota.quota_type == QuotaType.hourly
-        ).first()
-        
-        weekly_quota = db.query(ProviderQuota).filter(
-            ProviderQuota.provider_id == p.provider_id,
-            ProviderQuota.quota_type == QuotaType.weekly
-        ).first()
-        
-        hourly_limit = hourly_quota.quota_limit if hourly_quota else p.quota_hourly
-        hourly_used = hourly_quota.quota_used if hourly_quota else 0
-        hourly_remain = hourly_quota.quota_remain if hourly_quota else p.quota_hourly
-        hourly_percent = float(hourly_quota.quota_percent) if hourly_quota and hourly_quota.quota_percent else 0
-        hourly_sync = hourly_quota.sync_at.isoformat() + "Z" if hourly_quota and hourly_quota.sync_at else None
-        import json
-        hourly_raw = json.loads(hourly_quota.raw_data) if hourly_quota and hourly_quota.raw_data else None
-        
-        weekly_limit = weekly_quota.quota_limit if weekly_quota else p.quota_weekly
-        weekly_used = weekly_quota.quota_used if weekly_quota else 0
-        weekly_remain = weekly_quota.quota_remain if weekly_quota else p.quota_weekly
-        weekly_percent = float(weekly_quota.quota_percent) if weekly_quota and weekly_quota.quota_percent else 0
-        weekly_sync = weekly_quota.sync_at.isoformat() + "Z" if weekly_quota and weekly_quota.sync_at else None
-        weekly_raw = json.loads(weekly_quota.raw_data) if weekly_quota and weekly_quota.raw_data else None
-        
-        result.append({
-            "provider_id": p.provider_id,
-            "provider_name": p.name,
-            "hourly": {
-                "limit": hourly_limit,
-                "used": hourly_used,
-                "remain": hourly_remain,
-                "percent": hourly_percent,
-                "reset_at": None,
-                "last_sync": hourly_sync,
-                "raw_data": hourly_raw
-            },
-            "weekly": {
-                "limit": weekly_limit,
-                "used": weekly_used,
-                "remain": weekly_remain,
-                "percent": weekly_percent,
-                "reset_at": None,
-                "last_sync": weekly_sync,
-                "raw_data": weekly_raw
-            }
-        })
-    
-    return {"items": result}
 
 @router.post("/providers/{provider_id}/quota/sync")
 async def sync_provider_quota(
@@ -862,7 +877,6 @@ async def sync_provider_quota(
     )
     
     return {"message": "同步成功", "provider_id": provider_id}
-
 
 @router.put("/providers/{provider_id}/quota")
 async def update_provider_quota(
@@ -945,6 +959,70 @@ async def update_provider_quota(
 
 # ========== 模型映射管理 ==========
 
+@router.get("/providers/quotas")
+async def get_all_provider_quotas(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """
+    获取所有供应商配额
+    """
+    providers = db.query(Provider).all()
+    
+    result = []
+    for p in providers:
+        # 从 provider_quotas 表获取实际用量
+        hourly_quota = db.query(ProviderQuota).filter(
+            ProviderQuota.provider_id == p.provider_id,
+            ProviderQuota.quota_type == QuotaType.hourly
+        ).first()
+        
+        weekly_quota = db.query(ProviderQuota).filter(
+            ProviderQuota.provider_id == p.provider_id,
+            ProviderQuota.quota_type == QuotaType.weekly
+        ).first()
+        
+        hourly_limit = hourly_quota.quota_limit if hourly_quota else p.quota_hourly
+        hourly_used = hourly_quota.quota_used if hourly_quota else 0
+        hourly_remain = hourly_quota.quota_remain if hourly_quota else p.quota_hourly
+        hourly_percent = float(hourly_quota.quota_percent) if hourly_quota and hourly_quota.quota_percent else 0
+        hourly_sync = hourly_quota.sync_at.isoformat() + "Z" if hourly_quota and hourly_quota.sync_at else None
+        import json
+        hourly_raw = json.loads(hourly_quota.raw_data) if hourly_quota and hourly_quota.raw_data else None
+        
+        weekly_limit = weekly_quota.quota_limit if weekly_quota else p.quota_weekly
+        weekly_used = weekly_quota.quota_used if weekly_quota else 0
+        weekly_remain = weekly_quota.quota_remain if weekly_quota else p.quota_weekly
+        weekly_percent = float(weekly_quota.quota_percent) if weekly_quota and weekly_quota.quota_percent else 0
+        weekly_sync = weekly_quota.sync_at.isoformat() + "Z" if weekly_quota and weekly_quota.sync_at else None
+        weekly_raw = json.loads(weekly_quota.raw_data) if weekly_quota and weekly_quota.raw_data else None
+        
+        result.append({
+            "provider_id": p.provider_id,
+            "provider_name": p.name,
+            "hourly": {
+                "limit": hourly_limit,
+                "used": hourly_used,
+                "remain": hourly_remain,
+                "percent": hourly_percent,
+                "reset_at": None,
+                "last_sync": hourly_sync,
+                "raw_data": hourly_raw
+            },
+            "weekly": {
+                "limit": weekly_limit,
+                "used": weekly_used,
+                "remain": weekly_remain,
+                "percent": weekly_percent,
+                "reset_at": None,
+                "last_sync": weekly_sync,
+                "raw_data": weekly_raw
+            }
+        })
+    
+    return {"items": result}
+
+
 @router.get("/models", response_model=ModelMappingListResponse)
 async def list_models(
     db: Session = Depends(get_db),
@@ -975,7 +1053,6 @@ async def list_models(
             for m in models
         ]
     )
-
 
 @router.post("/models", response_model=ModelMappingResponse)
 async def create_model_mapping(
@@ -1053,7 +1130,6 @@ async def create_model_mapping(
         created_at=mapping.created_at
     )
 
-
 @router.put("/models/{model_id}")
 async def update_model_mapping(
     request: Request,
@@ -1119,7 +1195,6 @@ async def update_model_mapping(
     )
     
     return {"message": "更新成功"}
-
 
 @router.delete("/models/{model_id}")
 async def delete_model_mapping(
@@ -1202,7 +1277,6 @@ async def get_provider_models(
         ]
     }
 
-
 @router.post("/providers/{provider_id}/models/sync")
 async def sync_provider_models(
     request: Request,
@@ -1238,7 +1312,6 @@ async def sync_provider_models(
     )
     
     return result
-
 
 @router.post("/providers/models/sync-all")
 async def sync_all_provider_models(
@@ -1305,7 +1378,6 @@ async def auto_create_model_mappings(
     )
     
     return result
-
 
 @router.post("/providers/models/sync-all-with-mappings")
 async def sync_all_with_mappings(

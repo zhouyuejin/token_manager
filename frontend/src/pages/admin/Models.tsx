@@ -12,8 +12,10 @@ import { getProviders, Provider, syncProviderModels } from '../../api/providers'
 // 上游模型类型
 interface UpstreamModel {
   model_id: string
-  name: string
-  owned_by: string
+  name?: string        // 旧格式
+  owned_by?: string    // 旧格式
+  model_name?: string  // 新格式
+  display_name?: string // 新格式
 }
 
 const ModelsPage = () => {

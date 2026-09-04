@@ -157,13 +157,14 @@ class ProxyService:
             ModelMapping.status == "active"
         ).all()
         
-        # 获取该供应商启用的模型列表
+        # 获取该供应商配置的模型列表
         enabled_model_ids = None
         if provider_id:
             provider = self.get_provider(provider_id)
-            if provider and provider.enabled_models:
+            if provider and provider.models:
                 try:
-                    enabled_model_ids = json.loads(provider.enabled_models) if isinstance(provider.enabled_models, str) else provider.enabled_models
+                    models_list = json.loads(provider.models) if isinstance(provider.models, str) else provider.models
+                    enabled_model_ids = [m.get('model_id') for m in models_list if isinstance(m, dict)]
                 except:
                     enabled_model_ids = None
         

@@ -167,7 +167,15 @@ const ProvidersPage = () => {
   // 创建供应商
   const handleCreate = async (values: any) => {
     try {
-      await createProvider(values)
+      // 处理 models 格式
+      const submitData = { ...values }
+      if (values.models && values.models.length > 0) {
+        submitData.models = values.models.map((m: any) => ({
+          model_name: m.model_name,
+          display_name: m.display_name
+        }))
+      }
+      await createProvider(submitData)
       message.success('创建成功')
       setCreateModalVisible(false)
       form.resetFields()
@@ -181,7 +189,25 @@ const ProvidersPage = () => {
   const handleUpdate = async (values: any) => {
     if (!selectedProvider) return
     try {
-      await updateProvider(selectedProvider.provider_id, values)
+      // 处理 models 格式
+      const submitData = { ...values }
+      if (values.models && values.models.length > 0) {
+        // 判断是 Select multiple（字符串数组）还是 Form.List（对象数组）
+        if (typeof values.models[0] === 'string') {
+          // Select multiple: model_id 数组，需要转换
+          submitData.models = values.models.map((model_id: string) => {
+            const model = allModels.find(m => m.model_id === model_id)
+            return { model_name: model?.provider_model || model_id, display_name: model?.display_name || model_id }
+          })
+        } else {
+          // Form.List: 对象数组
+          submitData.models = values.models.map((m: any) => ({
+            model_name: m.model_name,
+            display_name: m.display_name
+          }))
+        }
+      }
+      await updateProvider(selectedProvider.provider_id, submitData)
       message.success('更新成功')
       setEditModalVisible(false)
       setSelectedProvider(null)
@@ -230,9 +256,20 @@ const ProvidersPage = () => {
   // 打开编辑弹窗
   const openEditModal = (provider: Provider) => {
     setSelectedProvider(provider)
+    // 解析 models 数据
+    let modelsData: string[] = []
+    if (provider.models) {
+      try {
+        const parsed = typeof provider.models === 'string' ? JSON.parse(provider.models) : provider.models
+        // Select mode="multiple" 期望 model_id 字符串数组
+        modelsData = (parsed || []).map((m: any) => m.model_id).filter(Boolean)
+      } catch (e) {
+        modelsData = []
+      }
+    }
     form.setFieldsValue({
       ...provider,
-      enabled_models: provider.enabled_models || []
+      models: modelsData
     })
     setEditModalVisible(true)
   }
@@ -335,10 +372,10 @@ const ProvidersPage = () => {
             {
               title: '操作', key: 'action',
               render: (_: any, record: Provider) => (
-                <Space>
-                  <Button type="text" icon={<SettingOutlined />} onClick={() => openConfigModal(record)} style={{ color: '#10B981' }}>用量配置</Button>
-                  <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
-                  <Popconfirm title="确认删除此供应商？" onConfirm={() => handleDelete(record.provider_id)}>
+                <Space key={record.provider_id}>
+                  <Button type="text" icon={<SettingOutlined />} onClick={() => openConfigModal(record)} style={{ color: '#10B981' }} key="config">用量配置</Button>
+                  <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }} key="edit">编辑</Button>
+                  <Popconfirm title="确认删除此供应商？" onConfirm={() => handleDelete(record.provider_id)} key="delete">
                     <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
                   </Popconfirm>
                 </Space>
@@ -501,17 +538,44 @@ const ProvidersPage = () => {
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item name="enabled_models" label={<span style={{ color: token.colorTextSecondary }}>关联模型（可选）</span>}>
-            <Select mode="multiple" placeholder="选择该供应商可用的模型" allowClear>
-              {allModels.filter(m => m.status === 'active').map(m => (
-                <Select.Option key={m.model_id} value={m.model_id}>
-                  {m.display_name || m.model_id} ({m.provider_model})
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
+          <Form.List name="models">
+            { (fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }) => (
+                  <Row key={key} gutter={8} align="middle" style={{ marginBottom: 8 }}>
+                    <Col span={10}>
+                      <Form.Item
+                        name={[name, 'model_name']}
+                        rules={[{ required: true, message: '请输入模型名称' }]}
+                      >
+                        <Input placeholder="模型名称，如 gpt-4" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={10}>
+                      <Form.Item
+                        name={[name, 'display_name']}
+                        rules={[{ required: true, message: '请输入显示名称' }]}
+                      >
+                        <Input placeholder="显示名称，如 GPT-4" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={4}>
+                      <Button type="text" danger onClick={() => remove(name)} icon={<DeleteOutlined />}>
+                        删除
+                      </Button>
+                    </Col>
+                  </Row>
+                ))}
+                <Form.Item>
+                  <Button type="dashed" onClick={() => add({ model_name: "", display_name: "" })} block icon={<PlusOutlined />}>
+                    添加模型
+                  </Button>
+                </Form.Item>
+              </>
+            )}
+          </Form.List>
           <div style={{ padding: 12, background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ color: '#3B82F6', fontSize: 12 }}>💡 提示：创建供应商后可手动同步模型，然后在模型管理中添加定价</div>
+            <div style={{ color: '#3B82F6', fontSize: 12 }}>💡 提示：模型名称输入上游API的模型名，显示名称为用户可见的名称</div>
           </div>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
@@ -576,7 +640,7 @@ const ProvidersPage = () => {
               <Select.Option value="disabled">禁用</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="enabled_models" label={<span style={{ color: token.colorTextSecondary }}>关联模型</span>}>
+          <Form.Item name="models" label={<span style={{ color: token.colorTextSecondary }}>模型列表</span>}>
             <Select mode="multiple" placeholder="选择该供应商可用的模型" allowClear>
               {allModels.filter(m => m.status === 'active').map(m => (
                 <Select.Option key={m.model_id} value={m.model_id}>
