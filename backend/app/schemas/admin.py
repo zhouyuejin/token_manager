@@ -19,7 +19,7 @@ class AdminUserCreate(BaseModel):
 
 
 class AdminUserUpdate(BaseModel):
-    """管理员更新用户请求"""
+    """更新用户请求"""
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     role: Optional[str] = None
@@ -65,6 +65,12 @@ class QuotaConfig(BaseModel):
     extra_params: Optional[Dict[str, str]] = None  # 其他自定义参数
 
 
+class ModelInput(BaseModel):
+    """模型输入（创建供应商时直接配置）"""
+    model_name: str = Field(..., description="上游模型名称，如 gpt-4")
+    display_name: str = Field(..., description="显示名称，如 GPT-4")
+
+
 class ProviderCreate(BaseModel):
     """创建供应商请求"""
     name: str
@@ -78,7 +84,7 @@ class ProviderCreate(BaseModel):
     sync_enabled: bool = False
     sync_interval: int = 300  # 默认5分钟
     quota_config: Optional[QuotaConfig] = None
-    enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
+    models: Optional[List[ModelInput]] = Field(default=None, description="直接配置的模型列表")
 
 
 class ProviderUpdate(BaseModel):
@@ -95,7 +101,7 @@ class ProviderUpdate(BaseModel):
     sync_enabled: Optional[bool] = None
     sync_interval: Optional[int] = None
     quota_config: Optional[QuotaConfig] = None
-    enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
+    models: Optional[List[ModelInput]] = Field(default=None, description="直接配置的模型列表")
 
 
 class ProviderResponse(BaseModel):
@@ -115,8 +121,7 @@ class ProviderResponse(BaseModel):
     sync_interval: int = 300
     last_sync_at: Optional[datetime] = None
     quota_config: Optional[QuotaConfig] = None
-    enabled_models: Optional[List[str]] = None  # 启用的模型映射ID列表
-    models: Optional[List[dict]] = None  # 兼容旧字段
+    models: Optional[List[dict]] = None  # 模型列表
 
     class Config:
         from_attributes = True

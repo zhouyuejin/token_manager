@@ -161,11 +161,12 @@ async def chat_completions(
     if not provider:
         raise HTTPException(status_code=500, detail="供应商不可用")
     
-    # 3. 检查该模型是否在供应商的 enabled_models 列表中（如果配置了的话）
-    if provider.enabled_models:
+    # 3. 检查该模型是否在供应商的 models 列表中（如果配置了的话）
+    if provider.models:
         try:
-            enabled_models = json.loads(provider.enabled_models) if isinstance(provider.enabled_models, str) else provider.enabled_models
-            if model_mapping.model_id not in enabled_models:
+            provider_models = json.loads(provider.models) if isinstance(provider.models, str) else provider.models
+            provider_model_ids = [m.get('model_id') for m in provider_models if isinstance(m, dict)]
+            if model_mapping.model_id not in provider_model_ids:
                 raise HTTPException(status_code=403, detail=f"该模型未在此供应商上启用")
         except:
             pass  # 如果解析失败，跳过检查

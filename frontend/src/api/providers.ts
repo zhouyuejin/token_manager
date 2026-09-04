@@ -14,13 +14,18 @@ export interface Provider {
   quota_type: string
   quota_hourly: number
   quota_weekly: number
-  models: { model_id: string; name: string; owned_by: string }[]
+  // 模型列表（新格式：直接配置；旧格式：同步的模型）
+  models: { 
+    model_id: string
+    name?: string            // 旧格式
+    owned_by?: string        // 旧格式
+    model_name?: string      // 新格式
+    display_name?: string    // 新格式
+  }[]
   // 同步配置
   sync_enabled: boolean
   sync_interval: number  // 单位：秒
   last_sync_at: string
-  // 启用的模型映射ID列表
-  enabled_models?: string[]
   // 自定义用量查询配置（不同供应商查询方式不同）
   quota_config?: {
     // 查询的模型名称（某些供应商需要指定模型查询用量）
