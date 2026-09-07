@@ -45,6 +45,7 @@ class ModelMapping(Base):
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
+    # 与模型分组的多对多关系
     model_groups = relationship(
         "ModelGroup",
         secondary="model_group_model_mappings",

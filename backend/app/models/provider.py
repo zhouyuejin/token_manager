@@ -1,7 +1,10 @@
 """
 供应商模型
+
+Task 5: 删除 model_groups 关系。
+API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）。
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer, Text
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer, Text, Boolean, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -47,38 +50,31 @@ class Provider(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     provider_id = Column(String(32), unique=True, nullable=False, index=True)
-    name = Column(String(50), nullable=False)
-    type = Column(Enum(ProviderType), nullable=False)
-    endpoint = Column(String(255), nullable=False)
-    api_key = Column(String(255), nullable=False)
-    group_id = Column(String(64), nullable=True, comment="供应商Group ID，用于MiniMax等需要分组ID的API")
-    priority = Column(Integer, default=100)
-    timeout = Column(Integer, default=60)
-    status = Column(Enum(ProviderStatus), default=ProviderStatus.active)
-    health_status = Column(Enum(ProviderHealthStatus), default=ProviderHealthStatus.healthy)
-    last_check_at = Column(DateTime, nullable=True)
+    name = Column(String(50), nullable=False, comment="供应商名称")
+    type = Column(Enum(ProviderType), default=ProviderType.openai, nullable=False)
+    endpoint = Column(String(255), nullable=True, comment="API端点")
+    api_key = Column(String(255), nullable=False, comment="API Key")
+    priority = Column(Integer, default=0, comment="优先级（数值越大优先级越高）")
+    timeout = Column(Integer, default=60, comment="请求超时时间（秒）")
+    status = Column(Enum(ProviderStatus), default=ProviderStatus.active, nullable=False)
+    health_status = Column(Enum(ProviderHealthStatus), default=ProviderHealthStatus.healthy, nullable=False, comment="健康状态")
+    last_check_at = Column(DateTime, nullable=True, comment="最后检查时间")
     
-    # 配额配置
-    quota_type = Column(String(20), default="unlimited")
-    quota_hourly = Column(BigInteger, default=0)
-    quota_weekly = Column(BigInteger, default=0)
-    sync_enabled = Column(Integer, default=0)
-    sync_interval = Column(Integer, default=300)
-    last_sync_at = Column(DateTime, nullable=True)
+    # 用量配置
+    quota_type = Column(String(20), default="none", comment="配额类型: none/unlimited/limited")
+    quota_hourly = Column(BigInteger, default=0, comment="小时配额")
+    quota_weekly = Column(BigInteger, default=0, comment="周配额")
     
-    # 自定义用量查询配置（JSON格式存储）
-    # 用于不同供应商不同查询方式时传递自定义参数
-    # 结构: {"model_name": "xxx", "custom_api_path": "xxx", "extra_params": {...}}
-    quota_config = Column(Text, nullable=True)
+    # 同步配置
+    sync_enabled = Column(Boolean, default=False, comment="是否启用自动同步")
+    sync_interval = Column(Integer, default=300, comment="同步间隔（秒）")
+    last_sync_at = Column(DateTime, nullable=True, comment="最后同步时间")
     
-    # 直接配置的模型列表(JSON格式)
-    # 结构: [{"model_name": "gpt-4", "display_name": "GPT-4"}, ...]
-    # 创建供应商时直接配置，无需同步
-    models = Column(Text, nullable=True, comment="直接配置的模型列表(JSON数组)")
-    last_models_sync_at = Column(DateTime, nullable=True, comment="最后模型同步时间")
+    # 自定义用量查询配置
+    quota_config = Column(Text, nullable=True, comment="自定义用量查询配置JSON")
+    
+    # 模型列表配置（供应商直接配置，不依赖同步）
+    models = Column(Text, nullable=True, comment="模型列表JSON")
     
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    
-    # 关联模型分组
-    model_groups = relationship("ModelGroup", secondary="provider_model_groups", back_populates="providers")
