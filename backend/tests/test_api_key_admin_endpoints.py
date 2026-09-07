@@ -8,12 +8,9 @@
 """
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlalchemy import event
 
-from app.main import app
+from app.main import app as fastapi_app
 from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey, ApiKeyStatus
@@ -23,30 +20,19 @@ from app.models.model_mapping import ModelMapping, ModelMappingStatus
 from app.core.security import hash_password_sha256
 from app.services.proxy_service import ProxyService
 
-# ========== Test Setup (同 test_proxy_service_model_group.py 的模式) ==========
-import sqlalchemy
-from sqlalchemy import Integer, TypeDecorator
+# ========== Test Setup（与生产一致的 MySQL） ==========
+import os
+from sqlalchemy import create_engine, text
 
+import app.models  # noqa: F401, E402
+from app.core.database import Base, get_db
 
-class _BigIntegerCompat(TypeDecorator):
-    """SQLite -> Integer（自增），MySQL -> BigInteger。"""
-    impl = Integer
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name in ("mysql", "mariadb"):
-            return dialect.type_descriptor(sqlalchemy.BigInteger())
-        return dialect.type_descriptor(Integer())
-
-
-sqlalchemy.BigInteger = _BigIntegerCompat
-
-TEST_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "mysql+pymysql://token_user:token_password@mysql:3306/token_db_test?charset=utf8mb4",
 )
+engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+Base.metadata.create_all(bind=engine)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -58,33 +44,13 @@ def override_get_db():
         db.close()
 
 
-client = TestClient(app)
-
-
-_id_counters = {}
-
-
-def _bind_pk_assigner(model_cls):
-    @event.listens_for(model_cls, "before_insert", propagate=True)
-    def _assign_pk(mapper, connection, target):
-        if getattr(target, "id", None) is not None:
-            return
-        table = target.__tablename__
-        _id_counters[table] = _id_counters.get(table, 0) + 1
-        target.id = _id_counters[table]
-
-
-for cls in [User, ModelGroup, Provider, ModelMapping, ApiKey]:
-    _bind_pk_assigner(cls)
+client = TestClient(fastapi_app)
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    # C1 fix: register dependency override PER TEST (not at module load),
-    # so multi-module pytest collection order cannot poison our session.
-    # Save & restore the prior override so other test modules (which still
-    # register their own override at module load) keep working after us.
-    _prev_override = app.dependency_overrides.get(get_db)
+    """每个测试用 TRUNCATE 清理（MySQL）。"""
+    _prev_override = fastapi_app.dependency_overrides.get(get_db)
 
     def _override():
         db = TestingSessionLocal()
@@ -93,19 +59,24 @@ def setup_db():
         finally:
             db.close()
 
-    app.dependency_overrides[get_db] = _override
+    fastapi_app.dependency_overrides[get_db] = _override
 
-    Base.metadata.create_all(bind=engine)
-    _id_counters.clear()
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+            db.execute(text(f"TRUNCATE TABLE {table.name}"))
+            db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+        db.commit()
+    finally:
+        db.close()
+
     yield
-    for table in reversed(Base.metadata.sorted_tables):
-        TestingSessionLocal().execute(table.delete())
-    _id_counters.clear()
 
     if _prev_override is not None:
-        app.dependency_overrides[get_db] = _prev_override
+        fastapi_app.dependency_overrides[get_db] = _prev_override
     else:
-        app.dependency_overrides.pop(get_db, None)
+        fastapi_app.dependency_overrides.pop(get_db, None)
 
 
 # ========== Helper Functions ==========
@@ -584,24 +555,14 @@ class TestAdminModelGroupDefaultEndpoints:
         finally:
             db.close()
 
-    def test_multiple_default_groups_allowed(self):
-        """GC-6: 允许多个默认分组"""
+    def test_set_default_clears_previous_default(self):
+        """§2.2：连续 set-default 应只保留一个默认分组"""
         db = TestingSessionLocal()
         try:
             admin = _create_admin(db, "testadmin3", "testadmin3@example.com")
             
-            group1 = ModelGroup(
-                group_id="grp_d1",
-                name="默认分组1",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
-            group2 = ModelGroup(
-                group_id="grp_d2",
-                name="默认分组2",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
+            group1 = ModelGroup(group_id="grp_d1", name="默认分组1", status=ModelGroupStatus.active, is_default=0)
+            group2 = ModelGroup(group_id="grp_d2", name="默认分组2", status=ModelGroupStatus.active, is_default=0)
             db.add_all([group1, group2])
             db.commit()
         finally:
@@ -610,7 +571,6 @@ class TestAdminModelGroupDefaultEndpoints:
         token = _get_token("testadmin3", "adminpass")
         assert token is not None
 
-        # 设置两个分组为默认
         client.post(
             "/api/v1/admin/model-groups/grp_d1/set-default",
             headers={"Authorization": f"Bearer {token}"},
@@ -620,13 +580,12 @@ class TestAdminModelGroupDefaultEndpoints:
             headers={"Authorization": f"Bearer {token}"},
         )
 
-        # 验证两个都是默认
         db = TestingSessionLocal()
         try:
-            group1 = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_d1").first()
-            group2 = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_d2").first()
-            assert group1.is_default == 1
-            assert group2.is_default == 1
+            g1 = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_d1").one()
+            g2 = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_d2").one()
+            assert g1.is_default == 0
+            assert g2.is_default == 1
         finally:
             db.close()
 

@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.api_key import ApiKey
-from app.models.provider import Provider
+from app.models.provider import Provider, ProviderStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
-from app.models.model_mapping import ModelMapping
+from app.models.model_mapping import ModelMapping, ModelMappingStatus
 from app.models.usage_log import UsageLog
 
 
@@ -66,6 +66,10 @@ class ProxyService:
         """
         检查 api_key+user 组合是否有权访问 model_id。
 
+        权限判定（分组直接绑定模型）：
+          模型自身 status、其供应商 status 都必须 active；
+          且模型所绑定的 active 分组必须与用户有效分组有交集。
+
         返回: {"allowed": True} 或
              {"allowed": False, "reason": "...", "message": "当前 Key 未被授权访问该模型"}
 
@@ -73,16 +77,9 @@ class ProxyService:
         """
         effective_group_ids = self.get_effective_model_group_ids(user)
 
-        if not effective_group_ids:
-            return {
-                "allowed": False,
-                "reason": "no_effective_groups",
-                "message": "当前 Key 未被授权访问该模型"
-            }
-
         model_mapping = self.db.query(ModelMapping).filter(
             ModelMapping.model_id == model_id,
-            ModelMapping.status == "active"
+            ModelMapping.status == ModelMappingStatus.active
         ).first()
 
         if not model_mapping:
@@ -94,7 +91,7 @@ class ProxyService:
 
         provider = self.db.query(Provider).filter(
             Provider.provider_id == model_mapping.provider_id,
-            Provider.status == "active"
+            Provider.status == ProviderStatus.active
         ).first()
 
         if not provider:
@@ -104,12 +101,27 @@ class ProxyService:
                 "message": "当前 Key 未被授权访问该模型"
             }
 
-        accessible_group_ids = {
-            g.group_id for g in provider.model_groups
+        if not effective_group_ids:
+            return {
+                "allowed": False,
+                "reason": "no_effective_groups",
+                "message": "当前 Key 未被授权访问该模型"
+            }
+
+        # 模型 → 分组（直接绑定）
+        bound_active_group_ids = {
+            g.group_id for g in model_mapping.model_groups
             if g.status == ModelGroupStatus.active
         }
 
-        if not effective_group_ids & accessible_group_ids:
+        if not bound_active_group_ids:
+            return {
+                "allowed": False,
+                "reason": "model_not_bound",
+                "message": "当前 Key 未被授权访问该模型"
+            }
+
+        if not effective_group_ids & bound_active_group_ids:
             return {
                 "allowed": False,
                 "reason": "group_mismatch",

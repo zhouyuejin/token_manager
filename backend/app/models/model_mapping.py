@@ -2,6 +2,7 @@
 模型映射模型
 """
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Numeric
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -41,3 +42,9 @@ class ModelMapping(Base):
     status = Column(Enum(ModelMappingStatus), default=ModelMappingStatus.active, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    model_groups = relationship(
+        "ModelGroup",
+        secondary="model_group_model_mappings",
+        back_populates="model_mappings",
+    )

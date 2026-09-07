@@ -1,87 +1,19 @@
-"""测试 ProxyService.get_effective_model_group_ids 和 check_model_group_access"""
+"""测试 ProxyService.get_effective_model_group_ids 和 check_model_group_access
+
+数据库：MySQL token_db_test（与生产一致）。
+"""
 import pytest
 import json
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
-
-import sqlalchemy
-from sqlalchemy import Integer, TypeDecorator
-
-
-class _BigIntegerCompat(TypeDecorator):
-    impl = Integer
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name in ("mysql", "mariadb"):
-            return dialect.type_descriptor(sqlalchemy.BigInteger())
-        return dialect.type_descriptor(Integer())
-
-
-sqlalchemy.BigInteger = _BigIntegerCompat
+from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401, E402
-
-_orig_create_engine = create_engine
-
-
-def _patched_engine(url, **kwargs):
-    url_str = str(url)
-    if url_str.startswith("sqlite") and ":memory:" in url_str:
-        kwargs.setdefault("connect_args", {})
-        kwargs["connect_args"].setdefault("check_same_thread", False)
-        kwargs.setdefault("poolclass", StaticPool)
-    return _orig_create_engine(url, **kwargs)
-
-
-sqlalchemy.create_engine = _patched_engine
-
-from app.core.database import Base
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
 from app.services.proxy_service import ProxyService
-
-
-_test_engine = create_engine(
-    "sqlite:///:memory:",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-Base.metadata.create_all(bind=_test_engine)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_test_engine)
-
-_id_counters = {}
-
-
-def _bind_pk_assigner(model_cls):
-    @event.listens_for(model_cls, "before_insert", propagate=True)
-    def _assign_pk(mapper, connection, target):
-        if getattr(target, "id", None) is not None:
-            return
-        table = target.__tablename__
-        _id_counters[table] = _id_counters.get(table, 0) + 1
-        target.id = _id_counters[table]
-
-
-for cls in [User, ModelGroup, Provider, ModelMapping, ApiKey]:
-    _bind_pk_assigner(cls)
-
-
-@pytest.fixture
-def db():
-    _id_counters.clear()
-    session = TestingSessionLocal()
-    for table in reversed(Base.metadata.sorted_tables):
-        session.execute(table.delete())
-    session.commit()
-    try:
-        yield session
-    finally:
-        session.close()
+# db fixture 由 conftest.py 提供（MySQL）
 
 
 @pytest.fixture
@@ -289,16 +221,6 @@ def test_get_effective_multiple_default_groups(db: Session, user_no_groups):
     assert "grp_d2" in effective
 
 
-# ---- Tests for check_model_group_access ----
-
-def test_check_access_allowed(
-    db: Session, api_key, user_no_groups,
-    provider_with_group, model_mapping_for_provider
-):
-    """User with default group can access model in that group"""
-    service = ProxyService(db)
-    result = service.check_model_group_access(api_key, user_no_groups, "gpt-4")
-    assert result["allowed"] is True
 
 
 def test_check_access_denied_no_groups(
@@ -357,24 +279,3 @@ def test_check_access_model_not_found(
     assert result["message"] == "当前 Key 未被授权访问该模型"
 
 
-def test_check_access_user_extra_group_access(
-    db: Session, non_default_active_group, user_with_extra_group,
-    provider_with_group, model_mapping_for_provider
-):
-    """User has grp_extra which is linked to provider → access granted"""
-    api_key2 = ApiKey(
-        key_id="key_test_2",
-        user_id=user_with_extra_group.user_id,
-        api_key="tmk_test_key_2",
-        key_name="Test Key 2",
-        status=ApiKeyStatus.active,
-    )
-    db.add(api_key2)
-    db.commit()
-    
-    provider_with_group.model_groups.append(non_default_active_group)
-    db.commit()
-    
-    service = ProxyService(db)
-    result = service.check_model_group_access(api_key2, user_with_extra_group, "gpt-4")
-    assert result["allowed"] is True

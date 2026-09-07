@@ -9,11 +9,11 @@
 - DELETE /api-keys/{key_id}           -> action="delete", target_type="api_key"
 """
 import json
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.core.database import Base, get_db
@@ -25,16 +25,12 @@ from app.core.security import hash_password_sha256
 engine = create_engine(
     "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
+
 )
 
 # 内存 SQLite 测试库
-TEST_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "mysql+pymysql://token_user:token_password@mysql:3306/token_db_test?charset=utf8mb4")
+engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -54,7 +50,15 @@ client = TestClient(app)
 def setup_db():
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(__import__("sqlalchemy").text("SET FOREIGN_KEY_CHECKS=0"))
+            db.execute(__import__("sqlalchemy").text(f"TRUNCATE TABLE {table.name}"))
+            db.execute(__import__("sqlalchemy").text("SET FOREIGN_KEY_CHECKS=1"))
+        db.commit()
+    finally:
+        db.close()
 
 
 def _create_regular_user(db, username="alice", email="alice@example.com", password="alicepass1"):
