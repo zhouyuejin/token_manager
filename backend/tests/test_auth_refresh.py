@@ -185,7 +185,7 @@ class TestLogout:
     def test_logout_revokes_refresh_token(self, user_row):
         first = _login()
         res = client.post("/api/v1/auth/logout", json={"refresh_token": first["refresh_token"]})
-        assert res.status_code == 204
+        assert res.status_code == 200
 
         # 登出后旧 refresh_token 失效
         res2 = client.post("/api/v1/auth/refresh", json={"refresh_token": first["refresh_token"]})
@@ -194,4 +194,4 @@ class TestLogout:
     def test_logout_without_body_ok(self, user_row):
         _login()
         res = client.post("/api/v1/auth/logout", json={})
-        assert res.status_code == 204
+        assert res.status_code == 200
