@@ -4,6 +4,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 # ========== 用户管理 ==========
@@ -37,7 +38,7 @@ class AdminUserResponse(BaseModel):
     status: str
     quota: int
     quota_used: int
-    created_at: datetime
+    created_at: UtcDateTime
     model_group_ids: List[str] = Field(default_factory=list)
 
     class Config:
@@ -114,12 +115,12 @@ class ProviderResponse(BaseModel):
     timeout: int
     status: str
     health_status: str
-    last_check_at: Optional[datetime]
+    last_check_at: Optional[UtcDateTime]
     quota_hourly: int
     quota_weekly: int
     sync_enabled: bool = False
     sync_interval: int = 300
-    last_sync_at: Optional[datetime] = None
+    last_sync_at: Optional[UtcDateTime] = None
     quota_config: Optional[QuotaConfig] = None
     models: Optional[List[dict]] = None  # 模型列表
 
@@ -180,7 +181,7 @@ class ModelMappingResponse(BaseModel):
     price_per_1k_output: float = 0
     price_per_request: float = 0
     status: str
-    created_at: Optional[datetime] = None
+    created_at: Optional[UtcDateTime] = None
 
     class Config:
         from_attributes = True

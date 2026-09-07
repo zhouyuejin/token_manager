@@ -124,7 +124,7 @@ const MessageList: React.FC<MessageListProps> = ({
                   color: 'rgba(255,255,255,0.5)',
                 }}
               >
-                <span>{dayjs(msg.created_at).format('HH:mm')}</span>
+                <span>{dayjs.utc(msg.created_at).local().format('HH:mm')}</span>
                 
                 {!isUser && (
                   <div style={{ display: 'flex', gap: '8px' }}>

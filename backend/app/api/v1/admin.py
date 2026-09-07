@@ -5,7 +5,7 @@ import secrets
 import asyncio
 import json
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import func, and_
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
@@ -1270,8 +1270,8 @@ async def get_provider_models(
                 "display_name": m.display_name,
                 "provider_model": m.provider_model,
                 "status": m.status.value if m.status else "active",
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-                "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+                "created_at": m.created_at.replace(tzinfo=timezone.utc).isoformat() if m.created_at else None,
+                "updated_at": m.updated_at.replace(tzinfo=timezone.utc).isoformat() if m.updated_at else None,
             }
             for m in models
         ]

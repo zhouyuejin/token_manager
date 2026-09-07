@@ -35,8 +35,8 @@ def notification_to_response(notification: Notification) -> NotificationResponse
         content=notification.content,
         is_read=bool(notification.is_read),
         metadata=json.loads(notification.extra_data) if notification.extra_data else None,
-        created_at=notification.created_at.isoformat() if notification.created_at else None,
-        read_at=notification.read_at.isoformat() if notification.read_at else None,
+        created_at=notification.created_at,
+        read_at=notification.read_at,
     )
 
 
