@@ -340,7 +340,7 @@ class TestMultipleActionsAndTargetTypes:
                 "display_name": "TestModel",
                 "provider_id": provider_id,
                 "provider_model": "gpt-4",
-                "aliases": "test-gpt4",
+                "aliases": ["test-gpt4"],
             },
         )
         assert response.status_code == 200

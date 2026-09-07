@@ -266,7 +266,7 @@ class TestUpdateApiKeyStatusLogs:
             assert log.operator_name == "alice"
             assert log.ip_address is not None
             detail = json.loads(log.detail)
-            assert detail["status"] == "disabled"
+            assert detail["new"] == "disabled"
         finally:
             db.close()
 

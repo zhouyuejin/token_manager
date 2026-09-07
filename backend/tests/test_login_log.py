@@ -149,9 +149,6 @@ class TestIPExtraction:
         from fastapi import Request
 
         mock_request = MagicMock(spec=Request)
-        mock_request.headers = {"x-forwarded-for": "1.2.3.4, 5.6.7.8"}
-        mock_request.headers.get = mock_request.headers.get.__wrapped__
-        # 直接 mock headers.get
         mock_request.headers = MagicMock()
         mock_request.headers.get = lambda key: {
             "x-forwarded-for": "1.2.3.4, 5.6.7.8"

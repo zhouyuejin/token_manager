@@ -244,7 +244,7 @@ async def update_api_key_status(
         ip_address=extract_client_ip(request),
     )
 
-    return {"message": "状态更新成功"}
+    return {"status": status_data.status}
 
 
 @router.delete("/{key_id}")
