@@ -182,6 +182,8 @@ class ModelMappingResponse(BaseModel):
     price_per_request: float = 0
     status: str
     created_at: Optional[UtcDateTime] = None
+    # 所属分组（Task 6）
+    model_groups: List[str] = Field(default_factory=list, description="所属分组名称列表")
 
     class Config:
         from_attributes = True

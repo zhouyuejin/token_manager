@@ -352,6 +352,28 @@ const ModelsPage = () => {
                 </Tag>
               )
             },
+            { 
+              title: '所属分组', 
+              key: 'model_groups',
+              width: 200,
+              render: (_: any, record: ModelMapping) => {
+                const groups = record.model_groups || []
+                if (groups.length === 0) {
+                  return <Tag style={{ borderRadius: 6 }}>-</Tag>
+                }
+                // 最多显示2个，其余折叠
+                const visible = groups.slice(0, 2)
+                const remaining = groups.length - 2
+                return (
+                  <>
+                    {visible.map((name, i) => (
+                      <Tag key={i} color="purple" style={{ borderRadius: 6, marginBottom: 2 }}>{name}</Tag>
+                    ))}
+                    {remaining > 0 && <Tag style={{ borderRadius: 6 }}>+{remaining}</Tag>}
+                  </>
+                )
+              }
+            },
             {
               title: '操作',
               key: 'action',
