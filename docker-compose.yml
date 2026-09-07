@@ -64,6 +64,10 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-zhouyuejin1995@163.com}
       - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Token Manager}
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+      - http_proxy=
+      - https_proxy=
     depends_on:
       mysql:
         condition: service_healthy

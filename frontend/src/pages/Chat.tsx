@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Layout, Button, message } from 'antd'
+import { Layout, Button, App } from 'antd'
 import ConversationList from '../components/Chat/ConversationList'
 import MessageList from '../components/Chat/MessageList'
 import InputArea from '../components/Chat/InputArea'
@@ -18,6 +18,7 @@ const SIDEBAR_WIDTH = 260
 
 const Chat: React.FC = () => {
   const { token, isDark } = useThemeToken()
+  const { message } = App.useApp()
   const [_conversations, setConversations] = useState<ChatConversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -43,7 +44,7 @@ const Chat: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [message])
 
   // 选择对话
   const handleSelectConversation = async (conversationId: string) => {
