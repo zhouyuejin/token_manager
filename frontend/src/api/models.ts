@@ -14,11 +14,13 @@ export interface ModelMapping {
   price_per_request: number
   status: string
   created_at?: string
+  // Task 6: 所属分组
+  model_groups?: string[]
 }
 
 export const getModels = () => get<{ items: ModelMapping[] }>('/admin/models')
 
-export const createModel = (data: Omit<ModelMapping, 'model_id' | 'created_at'>) =>
+export const createModel = (data: Omit<ModelMapping, 'model_id' | 'created_at' | 'model_groups'>) =>
   post('/admin/models', data)
 
 export const updateModel = (modelId: string, data: Partial<ModelMapping>) =>

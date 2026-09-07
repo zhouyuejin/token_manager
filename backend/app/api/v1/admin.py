@@ -1034,6 +1034,7 @@ async def list_models(
 ):
     """
     模型映射列表（管理员）
+    返回每个模型所属的分组名称列表（Task 6）
     """
     models = db.query(ModelMapping).all()
     
@@ -1052,7 +1053,8 @@ async def list_models(
                 price_per_1k_output=float(m.price_per_1k_output) if m.price_per_1k_output else 0,
                 price_per_request=float(m.price_per_request) if m.price_per_request else 0,
                 status=m.status.value if m.status else "active",
-                created_at=m.created_at
+                created_at=m.created_at,
+                model_groups=[g.name for g in m.model_groups]  # Task 6: 返回分组名称
             )
             for m in models
         ]
