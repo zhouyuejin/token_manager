@@ -11,14 +11,14 @@ import {
   deleteModelGroup, setModelGroupDefault, unsetModelGroupDefault,
   ModelGroup 
 } from '../../api/modelGroups'
-import { getProviders, Provider } from '../../api/providers'
+import { getModels, ModelMapping } from '../../api/models'
 
 const { TextArea } = Input
 
 const ModelGroups: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<ModelGroup[]>([])
-  const [providers, setProviders] = useState<Provider[]>([])
+  const [models, setModels] = useState<ModelMapping[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [editingGroup, setEditingGroup] = useState<ModelGroup | null>(null)
   const [form] = Form.useForm()
@@ -27,7 +27,7 @@ const ModelGroups: React.FC = () => {
 
   useEffect(() => {
     fetchGroups()
-    fetchProviders()
+    fetchModels()
   }, [])
 
   const fetchGroups = async () => {
@@ -42,12 +42,12 @@ const ModelGroups: React.FC = () => {
     }
   }
 
-  const fetchProviders = async () => {
+  const fetchModels = async () => {
     try {
-      const res = await getProviders()
-      setProviders(res.items || [])
+      const res = await getModels()
+      setModels(res.items || [])
     } catch (error) {
-      console.error('获取供应商失败', error)
+      console.error('获取模型失败', error)
     }
   }
 
@@ -63,7 +63,7 @@ const ModelGroups: React.FC = () => {
       name: record.name,
       description: record.description,
       is_default: record.is_default === 1,
-      provider_ids: record.provider_ids
+      model_ids: record.model_ids
     })
     setModalVisible(true)
   }
@@ -73,8 +73,13 @@ const ModelGroups: React.FC = () => {
       await deleteModelGroup(groupId)
       message.success('删除成功')
       fetchGroups()
-    } catch (error) {
-      message.error('删除失败')
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail
+      if (typeof detail === 'string' && detail.includes('该分组已绑定')) {
+        message.error('该分组已绑定模型，请先解除绑定后再删除')
+      } else {
+        message.error('删除失败')
+      }
     }
   }
 
@@ -106,7 +111,7 @@ const ModelGroups: React.FC = () => {
         name: values.name,
         description: values.description,
         is_default: (values.is_default || setAsDefault) ? 1 : 0,
-        provider_ids: values.provider_ids || []
+        model_ids: values.model_ids || []
       }
 
       if (editingGroup) {
@@ -124,11 +129,11 @@ const ModelGroups: React.FC = () => {
     }
   }
 
-  const getProviderNames = (providerIds: string[]) => {
-    return providerIds.map(id => {
-      const provider = providers.find(p => p.provider_id === id)
-      return provider?.name || id
-    }).join(', ')
+  const getModelNames = (modelIds: string[]) => {
+    return modelIds.map(id => {
+      const model = models.find(m => m.model_id === id)
+      return model?.display_name || model?.model_id || id
+    })
   }
 
   const hasActiveDefault = groups.some(g => g.is_default === 1 && g.status === 'active')
@@ -155,13 +160,25 @@ const ModelGroups: React.FC = () => {
       width: 200
     },
     {
-      title: '关联供应商',
-      dataIndex: 'provider_ids',
-      key: 'provider_ids',
-      width: 200,
-      render: (ids: string[]) => (
-        <Tag color="blue">{getProviderNames(ids) || '未关联'}</Tag>
-      )
+      title: '关联模型',
+      dataIndex: 'model_ids',
+      key: 'model_ids',
+      width: 250,
+      render: (ids: string[]) => {
+        const names = getModelNames(ids)
+        if (!names.length) return <Tag>未关联</Tag>
+        // 最多显示3个，其余折叠
+        const visible = names.slice(0, 3)
+        const remaining = names.length - 3
+        return (
+          <>
+            {visible.map((name, i) => (
+              <Tag key={i} color="blue">{name}</Tag>
+            ))}
+            {remaining > 0 && <Tag>+{remaining}个</Tag>}
+          </>
+        )
+      }
     },
     {
       title: '默认分组',
@@ -293,7 +310,7 @@ const ModelGroups: React.FC = () => {
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         onOk={handleSubmit}
-        width={600}
+        width={700}
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -332,21 +349,32 @@ const ModelGroups: React.FC = () => {
           )}
 
           <Form.Item
-            name="provider_ids"
-            label="关联供应商"
+            name="model_ids"
+            label="关联模型"
+            tooltip="选择要绑定到该分组的模型。可同时选择多个模型。"
           >
             <Select
               mode="multiple"
-              placeholder="选择供应商"
+              placeholder="请选择模型"
+              showSearch
+              filterOption={(input, option) =>
+                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+              }
               optionLabelProp="label"
             >
-              {providers.map(p => (
+              {models.map(m => (
                 <Select.Option 
-                  key={p.provider_id} 
-                  value={p.provider_id}
-                  label={p.name}
+                  key={m.model_id} 
+                  value={m.model_id}
+                  label={m.display_name || m.model_id}
                 >
-                  {p.name} ({p.type})
+                  {m.display_name || m.model_id} 
+                  <span style={{ color: '#999', marginLeft: 8 }}>
+                    ({m.provider_id})
+                  </span>
+                  {m.status === 'disabled' && (
+                    <Tag color="red" style={{ marginLeft: 8 }}>禁用</Tag>
+                  )}
                 </Select.Option>
               ))}
             </Select>

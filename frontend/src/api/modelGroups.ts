@@ -6,7 +6,7 @@ export interface ModelGroup {
   description: string
   status: string
   is_default: number
-  provider_ids: string[]
+  model_ids: string[]  // §13 Task 5: provider_ids → model_ids
   created_at: string
 }
 
@@ -20,7 +20,7 @@ export const createModelGroup = (data: {
   name: string
   description?: string
   is_default?: number
-  provider_ids?: string[]
+  model_ids?: string[]  // §13 Task 5
 }) => post<ModelGroup>('/admin/model-groups', data)
 
 export const updateModelGroup = (groupId: string, data: Partial<ModelGroup>) =>
