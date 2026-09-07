@@ -30,6 +30,8 @@ class ModelMapping(Base):
     display_name = Column(String(50), nullable=True, comment="显示名称")
     description = Column(String(255), nullable=True, comment="模型描述")
     provider_id = Column(String(32), nullable=False, index=True, comment="关联供应商")
+
+    provider = relationship("Provider", primaryjoin="foreign(ModelMapping.provider_id) == Provider.provider_id", viewonly=True)
     provider_model = Column(String(50), nullable=False, comment="上游模型名")
     aliases = Column(Text, nullable=True, comment="别名(JSON数组)")
     

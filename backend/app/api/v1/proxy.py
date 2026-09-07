@@ -12,7 +12,10 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey
-from app.models.model_mapping import ModelMapping
+from app.models.model_group import ModelGroup, ModelGroupStatus
+from sqlalchemy.orm import selectinload
+from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.provider import Provider, ProviderStatus
 from app.services.proxy_service import ProxyService, create_proxy_service
 
 router = APIRouter()
@@ -43,70 +46,47 @@ class ChatCompletionRequest(BaseModel):
 @router.get("/models")
 async def list_models(request: Request, db: Session = Depends(get_db)):
     """
-    获取可用模型列表
-    M1 fix: filter by effective groups (default ∪ user-group union), not
-    by api_key.model_groups alone. They can diverge when defaults change.
+    OpenAI 风格可用模型列表（§13 Task 4）。
+
+    仅返回用户可访问的 active 模型（绑定到用户有效 active 分组中、供应商 active）。
+    无权限时返回空列表 —— 删除 fake gpt-4 / gpt-3.5-turbo fallback。
+    列表与 check_model_group_access 判定一致。
     """
-    # 获取当前请求的用户和API Key
     user: User = getattr(request.state, "user", None)
     api_key: ApiKey = getattr(request.state, "api_key", None)
 
-    mappings = []
+    if user is None or api_key is None:
+        return {"object": "list", "data": []}
 
-    if user is None:
-        # 没有用户上下文（认证失败/未鉴权）——返回所有活跃模型（OpenAI 风格 /v1/models 兼容）。
-        mappings = db.query(ModelMapping).filter(
-            ModelMapping.status == "active"
-        ).all()
-    else:
-        # M1: use ProxyService.get_effective_model_group_ids(user) — single source.
-        proxy_service = create_proxy_service(db)
-        effective_group_ids = proxy_service.get_effective_model_group_ids(user)
+    proxy_service = create_proxy_service(db)
+    effective_group_ids = proxy_service.get_effective_model_group_ids(user)
 
-        if not effective_group_ids:
-            mappings = []
-        else:
-            # 获取这些分组关联的供应商
-            from app.models.model_group import ModelGroup
+    if not effective_group_ids:
+        return {"object": "list", "data": []}
 
-            groups = db.query(ModelGroup).filter(
-                ModelGroup.group_id.in_(effective_group_ids),
-                ModelGroup.status == "active"
-            ).all()
-
-            # 收集所有关联的供应商 ID
-            provider_ids = set()
-            for group in groups:
-                for provider in group.providers:
-                    provider_ids.add(provider.provider_id)
-
-            # 只返回这些供应商的模型映射
-            if provider_ids:
-                mappings = db.query(ModelMapping).filter(
-                    ModelMapping.status == "active",
-                    ModelMapping.provider_id.in_(list(provider_ids))
-                ).all()
-            else:
-                mappings = []
+    accessible_models = (
+        db.query(ModelMapping)
+        .join(ModelMapping.model_groups)
+        .options(selectinload(ModelMapping.provider))
+        .filter(
+            ModelGroup.group_id.in_(effective_group_ids),
+            ModelGroup.status == ModelGroupStatus.active,
+            ModelMapping.status == ModelMappingStatus.active,
+        )
+        .all()
+    )
+    accessible = [m for m in accessible_models if m.provider and m.provider.status == ProviderStatus.active]
 
     models = [
         {
-            "id": mapping.model_id,
+            "id": m.model_id,
             "object": "model",
-            "owned_by": mapping.provider_id,
-            "display_name": mapping.display_name,
-            "provider_model": mapping.provider_model
+            "owned_by": m.provider_id,
+            "display_name": m.display_name,
+            "provider_model": m.provider_model,
         }
-        for mapping in mappings
+        for m in accessible
     ]
-
-    # 如果没有映射，返回默认模型
-    if not models:
-        models = [
-            {"id": "gpt-4", "object": "model", "owned_by": "openai"},
-            {"id": "gpt-3.5-turbo", "object": "model", "owned_by": "openai"},
-        ]
-
     return {"object": "list", "data": models}
 
 
