@@ -12,8 +12,9 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.chat import ChatConversation, ChatMessage
-from app.models.model_group import ModelGroup
-from app.models.model_mapping import ModelMapping
+from app.models.model_group import ModelGroup, ModelGroupStatus
+from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.provider import Provider, ProviderStatus
 from app.dependencies import get_current_user
 from app.schemas.chat import (
     ChatConversationCreate,
@@ -78,41 +79,40 @@ async def get_available_models(
         ModelGroup.status == "active"
     ).all()
 
+    # 该分组下"用户实际可访问"的模型：模型自身 active、供应商 active、且绑定此 active 分组
     result_groups = []
     for group in groups:
-        # 获取分组关联的供应商ID
-        provider_ids = [p.provider_id for p in group.providers]
-
-        # 获取这些供应商的模型映射
-        mappings = db.query(ModelMapping).filter(
-            ModelMapping.status == "active",
-            ModelMapping.provider_id.in_(provider_ids)
-        ).all() if provider_ids else []
+        mappings = [
+            m for m in group.model_mappings
+            if m.status == ModelMappingStatus.active
+            and m.provider is not None
+            and m.provider.status == ProviderStatus.active
+        ]
 
         models = [
             {
                 "model_id": mapping.model_id,
                 "display_name": mapping.display_name,
-                "provider_model": mapping.provider_model
+                "provider_model": mapping.provider_model,
             }
             for mapping in mappings
         ]
 
-        # 获取供应商信息
+        providers_map = {m.provider_id: m.provider for m in mappings}
         providers = [
             {
                 "provider_id": p.provider_id,
                 "name": p.name,
-                "type": p.type.value if hasattr(p.type, 'value') else str(p.type)
+                "type": p.type.value if hasattr(p.type, 'value') else str(p.type),
             }
-            for p in group.providers
+            for p in providers_map.values()
         ]
 
         result_groups.append(ModelGroupInfo(
             group_id=group.group_id,
             name=group.name,
             providers=providers,
-            models=models
+            models=models,
         ))
 
     return AvailableModelsResponse(groups=result_groups)
