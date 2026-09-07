@@ -30,6 +30,48 @@ async def lifespan(app: FastAPI):
     # 启动时
     logger.info("Token中转平台启动")
     
+    # 检查并创建初始管理员用户
+    try:
+        from app.core.database import SessionLocal
+        from app.models.user import User, UserRole, UserStatus
+        db = SessionLocal()
+        try:
+            admin_exists = db.query(User).filter(User.username == "admin").first()
+            if not admin_exists:
+                # SHA256(FRONTEND_SALT + "admin123")
+                admin_password = "f10d777793088354212c24aa082e8c06ed0c048837d1bb87096b04a25dc50eb5"
+                admin = User(
+                    user_id="usr_admin",
+                    username="admin",
+                    email="admin@example.com",
+                    password=admin_password,
+                    role=UserRole.admin,
+                    quota=100000000,
+                    status=UserStatus.active
+                )
+                db.add(admin)
+                
+                # 创建测试用户 (密码: user123)
+                test_password = "d51c051c47c4be47d3e9b231a8e04fff39b3c1402b91d732c554e966d3100556"
+                test_user = User(
+                    user_id="usr_test",
+                    username="testuser",
+                    email="test@example.com",
+                    password=test_password,
+                    role=UserRole.user,
+                    quota=1000000,
+                    status=UserStatus.active
+                )
+                db.add(test_user)
+                db.commit()
+                logger.info("初始用户创建成功: admin, testuser")
+            else:
+                logger.info("管理员用户已存在，跳过创建")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"检查/创建初始用户失败: {e}")
+    
     # GC-4(a): Startup warn when no active default model group
     try:
         from app.core.database import SessionLocal
