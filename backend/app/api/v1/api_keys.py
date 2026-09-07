@@ -1,5 +1,8 @@
 """
 API Key接口
+
+Task 5: 删除所有 model_group_ids / model_groups 相关代码。
+API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）。
 """
 import secrets
 import json
@@ -12,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey, ApiKeyStatus
-from app.models.model_group import ModelGroup
 from app.dependencies import get_current_user, require_admin
 from app.schemas.api_key import (
     # User-facing
@@ -57,18 +59,6 @@ def check_and_reset_monthly(api_key: ApiKey, db: Session):
         api_key.monthly_reset_at = datetime.now()
 
 
-def _assign_key_groups(db: Session, api_key: ApiKey, group_ids: List[str]):
-    """将模型分组关联到 API Key（内部使用）"""
-    if group_ids:
-        groups = db.query(ModelGroup).filter(
-            ModelGroup.group_id.in_(group_ids),
-            ModelGroup.status == "active"
-        ).all()
-        api_key.model_groups = groups
-    else:
-        api_key.model_groups = []
-
-
 # ========== 用户接口 ==========
 
 @router.get("", response_model=ApiKeyListResponse)
@@ -88,13 +78,12 @@ async def list_api_keys(
         check_and_reset_monthly(key, db)
     db.commit()
     
-    # User-facing response: no model_groups
     items = [
         ApiKeyResponse(
             key_id=key.key_id,
             user_id=key.user_id,
             api_key=key.api_key,
-            key_name=key.key_name,
+            name=key.key_name,
             daily_limit=key.daily_limit,
             daily_used=key.daily_used,
             monthly_limit=key.monthly_limit,
@@ -120,7 +109,7 @@ async def create_api_key(
     """
     创建新的API Key（用户）
     
-    GC-1: effective groups computed via ProxyService.get_effective_model_group_ids
+    权限由用户所属模型分组决定，不在 API Key 层独立配置。
     """
     key_id = generate_key_id()
     api_key = generate_api_key()
@@ -137,11 +126,6 @@ async def create_api_key(
         monthly_reset_at=datetime.now().date(),
         status=ApiKeyStatus.active
     )
-
-    # GC-1: use single source of truth for effective groups
-    proxy_service = create_proxy_service(db)
-    effective_group_ids = proxy_service.get_effective_model_group_ids(current_user)
-    _assign_key_groups(db, new_api_key, list(effective_group_ids))
 
     db.add(new_api_key)
     db.commit()
@@ -165,46 +149,7 @@ async def create_api_key(
     return ApiKeyCreatedResponse(
         key_id=new_api_key.key_id,
         api_key=new_api_key.api_key,
-        key_name=new_api_key.key_name
-    )
-
-
-@router.get("/{key_id}")
-async def get_api_key(
-    key_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """获取单个API Key详情（用户）"""
-    api_key = db.query(ApiKey).filter(
-        ApiKey.key_id == key_id,
-        ApiKey.user_id == current_user.user_id
-    ).first()
-
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API Key不存在"
-        )
-
-    check_and_reset_daily(api_key, db)
-    check_and_reset_monthly(api_key, db)
-    db.commit()
-
-    # User-facing: no model_groups
-    return ApiKeyResponse(
-        key_id=api_key.key_id,
-        user_id=api_key.user_id,
-        api_key=api_key.api_key,
-        key_name=api_key.key_name,
-        daily_limit=api_key.daily_limit,
-        daily_used=api_key.daily_used,
-        monthly_limit=api_key.monthly_limit,
-        monthly_used=api_key.monthly_used,
-        qps_limit=api_key.qps_limit,
-        status=api_key.status.value,
-        created_at=api_key.created_at,
-        last_used_at=api_key.last_used_at,
+        name=new_api_key.key_name,
     )
 
 
@@ -218,8 +163,6 @@ async def update_api_key(
 ):
     """
     更新API Key（用户）
-    
-    GC-2: no model_group_ids in user-facing update schema
     """
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
@@ -233,16 +176,16 @@ async def update_api_key(
         )
 
     changed = {}
-    if api_key_data.name is not None and api_key.key_name != api_key_data.name:
+    if api_key_data.name is not None:
         changed["name"] = api_key_data.name
         api_key.key_name = api_key_data.name
-    if api_key_data.daily_limit is not None and api_key.daily_limit != api_key_data.daily_limit:
+    if api_key_data.daily_limit is not None:
         changed["daily_limit"] = api_key_data.daily_limit
         api_key.daily_limit = api_key_data.daily_limit
-    if api_key_data.monthly_limit is not None and api_key.monthly_limit != api_key_data.monthly_limit:
+    if api_key_data.monthly_limit is not None:
         changed["monthly_limit"] = api_key_data.monthly_limit
         api_key.monthly_limit = api_key_data.monthly_limit
-    if api_key_data.qps_limit is not None and api_key.qps_limit != api_key_data.qps_limit:
+    if api_key_data.qps_limit is not None:
         changed["qps_limit"] = api_key_data.qps_limit
         api_key.qps_limit = api_key_data.qps_limit
     if api_key_data.ip_whitelist is not None:
@@ -265,7 +208,7 @@ async def update_api_key(
     return {"message": "更新成功"}
 
 
-@router.put("/{key_id}/status")
+@router.put("/{key_id}/status", response_model=ApiKeyStatusUpdate)
 async def update_api_key_status(
     request: Request,
     key_id: str,
@@ -273,7 +216,9 @@ async def update_api_key_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """启用/禁用API Key"""
+    """
+    启用/禁用API Key
+    """
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
@@ -285,16 +230,8 @@ async def update_api_key_status(
             detail="API Key不存在"
         )
 
-    if status_data.status == "active":
-        api_key.status = ApiKeyStatus.active
-    elif status_data.status == "disabled":
-        api_key.status = ApiKeyStatus.disabled
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="无效的状态值"
-        )
-
+    old_status = api_key.status.value
+    api_key.status = ApiKeyStatus(status_data.status)
     db.commit()
 
     record_operation(
@@ -303,7 +240,7 @@ async def update_api_key_status(
         action="update_status",
         target_type="api_key",
         target_id=key_id,
-        detail={"status": status_data.status},
+        detail={"old": old_status, "new": status_data.status},
         ip_address=extract_client_ip(request),
     )
 
@@ -317,7 +254,9 @@ async def delete_api_key(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """删除API Key"""
+    """
+    删除API Key
+    """
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
@@ -329,7 +268,6 @@ async def delete_api_key(
             detail="API Key不存在"
         )
 
-    deleted_name = api_key.key_name
     db.delete(api_key)
     db.commit()
 
@@ -339,7 +277,7 @@ async def delete_api_key(
         action="delete",
         target_type="api_key",
         target_id=key_id,
-        detail={"name": deleted_name},
+        detail={"name": api_key.key_name},
         ip_address=extract_client_ip(request),
     )
 
@@ -348,29 +286,28 @@ async def delete_api_key(
 
 # ========== 管理员接口 ==========
 
-def _get_key_model_groups(api_key: ApiKey) -> List[str]:
-    """获取API Key关联的模型分组ID列表（内部）"""
-    return [g.group_id for g in api_key.model_groups]
-
-
-@router.get("/admin/all", response_model=ApiKeyAdminListResponse)
-async def list_all_api_keys(
+@router.get("/admin", response_model=ApiKeyAdminListResponse)
+async def admin_list_api_keys(
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    user_id: Optional[str] = None
 ):
     """
     获取所有API Key列表（管理员）
+    可按 user_id 过滤
     """
+    query = db.query(ApiKey)
+    if user_id:
+        query = query.filter(ApiKey.user_id == user_id)
     
-    api_keys = db.query(ApiKey).all()
+    api_keys = query.all()
     
-    # Admin-facing: includes model_groups
     items = [
         ApiKeyAdminResponse(
             key_id=key.key_id,
             user_id=key.user_id,
             api_key=key.api_key,
-            key_name=key.key_name,
+            name=key.key_name,
             daily_limit=key.daily_limit,
             daily_used=key.daily_used,
             monthly_limit=key.monthly_limit,
@@ -379,7 +316,6 @@ async def list_all_api_keys(
             status=key.status.value,
             created_at=key.created_at,
             last_used_at=key.last_used_at,
-            model_groups=_get_key_model_groups(key)
         )
         for key in api_keys
     ]
@@ -387,7 +323,7 @@ async def list_all_api_keys(
     return ApiKeyAdminListResponse(total=len(items), items=items)
 
 
-@router.post("/admin")
+@router.post("/admin", response_model=ApiKeyCreatedResponse)
 async def admin_create_api_key(
     request: Request,
     api_key_data: ApiKeyAdminCreate,
@@ -395,14 +331,14 @@ async def admin_create_api_key(
     db: Session = Depends(get_db)
 ):
     """
-    创建API Key（管理员，可为其他用户创建）
-    
-    Admin-facing: accepts model_group_ids and optional user_id.
+    创建API Key（管理员）
+    权限由目标用户所属模型分组决定，不在 API Key 层独立配置。
     """
-    
-    target_user_id = api_key_data.user_id or current_user.user_id
     key_id = generate_key_id()
     api_key = generate_api_key()
+    
+    # 如果指定了 user_id，则为该用户创建；否则为管理员自己创建
+    target_user_id = api_key_data.user_id or current_user.user_id
 
     new_api_key = ApiKey(
         key_id=key_id,
@@ -417,22 +353,6 @@ async def admin_create_api_key(
         status=ApiKeyStatus.active
     )
 
-    # I1 fix: when admin omits model_group_ids (or passes []), do NOT create a
-    # key with zero groups (which would deny all access). Fall back to the
-    # effective groups of the *target* user so any default-group state carries
-    # through. Admin can still pass an explicit list to override.
-    proxy_service = create_proxy_service(db)
-    target_user = db.query(User).filter(User.user_id == target_user_id).first()
-    if api_key_data.model_group_ids:
-        group_ids = api_key_data.model_group_ids
-        _assign_key_groups(db, new_api_key, group_ids)
-    elif target_user is not None:
-        group_ids = sorted(proxy_service.get_effective_model_group_ids(target_user))
-        _assign_key_groups(db, new_api_key, group_ids)
-    else:
-        group_ids = []
-        _assign_key_groups(db, new_api_key, [])
-
     db.add(new_api_key)
     db.commit()
     db.refresh(new_api_key)
@@ -446,7 +366,6 @@ async def admin_create_api_key(
         detail={
             "name": new_api_key.key_name,
             "target_user_id": target_user_id,
-            "model_group_ids": group_ids,
         },
         ip_address=extract_client_ip(request),
     )
@@ -454,7 +373,7 @@ async def admin_create_api_key(
     return ApiKeyCreatedResponse(
         key_id=new_api_key.key_id,
         api_key=new_api_key.api_key,
-        key_name=new_api_key.key_name
+        name=new_api_key.key_name,
     )
 
 
@@ -478,7 +397,7 @@ async def admin_get_api_key(
         key_id=api_key.key_id,
         user_id=api_key.user_id,
         api_key=api_key.api_key,
-        key_name=api_key.key_name,
+        name=api_key.key_name,
         daily_limit=api_key.daily_limit,
         daily_used=api_key.daily_used,
         monthly_limit=api_key.monthly_limit,
@@ -487,7 +406,6 @@ async def admin_get_api_key(
         status=api_key.status.value,
         created_at=api_key.created_at,
         last_used_at=api_key.last_used_at,
-        model_groups=_get_key_model_groups(api_key)
     )
 
 
@@ -501,8 +419,6 @@ async def admin_update_api_key(
 ):
     """
     更新API Key（管理员）
-    
-    Admin-facing: accepts model_group_ids.
     """
     
     api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
@@ -530,11 +446,6 @@ async def admin_update_api_key(
         changed["ip_whitelist"] = api_key_data.ip_whitelist
         api_key.ip_whitelist = json.dumps(api_key_data.ip_whitelist)
 
-    # Admin can set model_group_ids
-    if api_key_data.model_group_ids is not None:
-        changed["model_group_ids"] = api_key_data.model_group_ids
-        _assign_key_groups(db, api_key, api_key_data.model_group_ids)
-
     db.commit()
 
     if changed:
@@ -551,42 +462,36 @@ async def admin_update_api_key(
     return {"message": "更新成功"}
 
 
-@router.post("/admin/{key_id}/set-default")
-async def admin_set_key_model_groups(
+@router.delete("/admin/{key_id}")
+async def admin_delete_api_key(
     request: Request,
     key_id: str,
-    group_ids_data: dict,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
-    管理员直接设置 API Key 的模型分组（覆盖）。
-    
-    Contract (for Task 2 frontend):
-      POST /api-keys/admin/{key_id}/set-default
-      Body: {"model_group_ids": ["group_1", "group_2"]}
-      Returns: {"message": "更新成功"}
+    删除API Key（管理员）
     """
     
     api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="API Key不存在"
         )
-    
-    group_ids = group_ids_data.get("model_group_ids", [])
-    _assign_key_groups(db, api_key, group_ids)
+
+    db.delete(api_key)
     db.commit()
-    
+
     record_operation(
         db=db,
         operator=current_user,
-        action="set_model_groups",
+        action="delete",
         target_type="api_key",
         target_id=key_id,
-        detail={"model_group_ids": group_ids},
+        detail={"name": api_key.key_name},
         ip_address=extract_client_ip(request),
     )
-    
-    return {"message": "更新成功"}
+
+    return {"message": "删除成功"}

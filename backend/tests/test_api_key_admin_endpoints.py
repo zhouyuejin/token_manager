@@ -1,11 +1,10 @@
 """
-测试 API Key 创建端点和 Admin Model Group 设置端点
+测试 API Key 端点与 Model Group 的集成
 
-覆盖场景:
-- Scenario 1: 默认分组存在，新用户创建 Key → Key 获得默认分组
-- Scenario 4: 无默认分组 + 用户无授权 → Key 无分组，访问被拒绝时返回通用错误
-- Scenario 6: Admin set-default / unset-default 端点，管理员专有，幂等性
+Task 5: API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）。
+Model Group 通过 model_ids 包含模型映射，不再通过 provider_ids。
 """
+import json
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -14,13 +13,12 @@ from app.main import app as fastapi_app
 from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey, ApiKeyStatus
-from app.models.model_group import ModelGroup, ModelGroupStatus, api_key_model_groups
+from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
 from app.core.security import hash_password_sha256
-from app.services.proxy_service import ProxyService
 
-# ========== Test Setup（与生产一致的 MySQL） ==========
+# ========== Test Setup ==========
 import os
 from sqlalchemy import create_engine, text
 
@@ -89,16 +87,14 @@ def _create_user(db, username="testuser", email="test@example.com", model_group_
         password=hash_password_sha256("password"),
         role=UserRole.user,
         status=UserStatus.active,
-        model_group_ids=model_group_ids,
+        model_group_ids=model_group_ids or "[]",
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
     return user
 
 
 def _create_admin(db, username="admin", email="admin@example.com"):
-    """创建管理员用户"""
+    """创建管理员"""
     admin = User(
         user_id=f"usr_{username}",
         username=username,
@@ -106,422 +102,75 @@ def _create_admin(db, username="admin", email="admin@example.com"):
         password=hash_password_sha256("adminpass"),
         role=UserRole.admin,
         status=UserStatus.active,
+        model_group_ids="[]",
     )
     db.add(admin)
-    db.commit()
-    db.refresh(admin)
     return admin
 
 
 def _get_token(username, password):
-    """获取用户token"""
+    """登录获取 token"""
+    hashed = hash_password_sha256(password)
     response = client.post(
         "/api/v1/auth/login",
-        data={"username": username, "password": hash_password_sha256(password)},
+        data={"username": username, "password": hashed},
     )
-    if response.status_code == 200:
-        return response.json().get("access_token")
-    return None
+    assert response.status_code == 200, f"Login failed: {response.json()}"
+    return response.json()["access_token"]
 
 
-# ========== Scenario 1: 默认分组存在，新用户创建 Key → Key 获得默认分组 ==========
-class TestApiKeyCreateWithDefaultGroup:
-    """Scenario 1: Default group set, new user creates key → key gets default group"""
-
-    def test_create_key_gets_default_group(self):
-        """用户创建 API Key 时，如果没有指定 model_group_ids，应自动获得默认分组"""
-        db = TestingSessionLocal()
-        try:
-            # 1. 创建默认分组
-            default_group = ModelGroup(
-                group_id="grp_default",
-                name="默认分组",
-                status=ModelGroupStatus.active,
-                is_default=1,
-            )
-            db.add(default_group)
-            
-            # 2. 关联供应商以便后续测试
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1/chat/completions",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-            )
-            provider.model_groups.append(default_group)
-            db.add(provider)
-            
-            # 3. 创建模型映射
-            model_mapping = ModelMapping(
-                model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
-            )
-            db.add(model_mapping)
-            
-            # 4. 创建普通用户（无 model_group_ids）
-            user = _create_user(db, "newuser", "newuser@example.com", model_group_ids=None)
-            
-            db.commit()
-        finally:
-            db.close()
-
-        # 5. 用户登录获取 token
-        token = _get_token("newuser", "password")
-        assert token is not None, "Failed to get user token"
-
-        # 6. 用户创建 API Key
-        response = client.post(
-            "/api/v1/api-keys",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "My Test Key"},
-        )
-        assert response.status_code == 200, f"Failed to create key: {response.json()}"
-        
-        key_data = response.json()
-        key_id = key_data["key_id"]
-        
-        # 7. 验证 Key 在数据库中有关联的默认分组
-        db = TestingSessionLocal()
-        try:
-            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
-            assert api_key is not None
-            
-            # 获取关联的分组
-            key_groups = api_key.model_groups
-            group_ids = [g.group_id for g in key_groups]
-            
-            # 验证：包含默认分组
-            assert "grp_default" in group_ids, f"Expected grp_default in {group_ids}"
-            
-            # 验证：只有默认分组（用户没有额外的 model_group_ids）
-            assert len(group_ids) == 1, f"Expected only default group, got {group_ids}"
-        finally:
-            db.close()
-
-    def test_create_key_with_user_extra_groups_includes_both(self):
-        """用户有额外授权分组 + 默认分组存在 → Key 获得两者的并集"""
-        db = TestingSessionLocal()
-        try:
-            # 1. 创建默认分组
-            default_group = ModelGroup(
-                group_id="grp_default",
-                name="默认分组",
-                status=ModelGroupStatus.active,
-                is_default=1,
-            )
-            db.add(default_group)
-            
-            # 2. 创建额外分组
-            extra_group = ModelGroup(
-                group_id="grp_extra",
-                name="额外分组",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
-            db.add(extra_group)
-            
-            # 3. 创建供应商
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1/chat/completions",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-            )
-            provider.model_groups.append(default_group)
-            provider.model_groups.append(extra_group)
-            db.add(provider)
-            
-            # 4. 创建模型映射
-            model_mapping = ModelMapping(
-                model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
-            )
-            db.add(model_mapping)
-            
-            # 5. 创建有额外授权的普通用户
-            user = _create_user(
-                db, "extruser", "extruser@example.com", 
-                model_group_ids='["grp_extra"]'
-            )
-            
-            db.commit()
-        finally:
-            db.close()
-
-        # 6. 用户登录获取 token
-        token = _get_token("extruser", "password")
-        assert token is not None, "Failed to get user token"
-
-        # 7. 用户创建 API Key
-        response = client.post(
-            "/api/v1/api-keys",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Key With Extra Groups"},
-        )
-        assert response.status_code == 200, f"Failed to create key: {response.json()}"
-        
-        key_id = response.json()["key_id"]
-        
-        # 8. 验证 Key 同时拥有默认分组和额外分组
-        db = TestingSessionLocal()
-        try:
-            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
-            key_groups = api_key.model_groups
-            group_ids = [g.group_id for g in key_groups]
-            
-            # 验证：两者都有
-            assert "grp_default" in group_ids, f"Expected grp_default in {group_ids}"
-            assert "grp_extra" in group_ids, f"Expected grp_extra in {group_ids}"
-            assert len(group_ids) == 2, f"Expected both groups, got {group_ids}"
-        finally:
-            db.close()
+def _admin_token():
+    """获取管理员 token"""
+    return _get_token("admin", "adminpass")
 
 
-# ========== Scenario 4: 无默认分组 + 用户无授权 → Key 无分组，访问被拒绝时返回通用错误 ==========
-class TestApiKeyCreateWithoutDefaultGroup:
-    """Scenario 4: No default group + no user auth → key has no groups, error is generic"""
+# ========== Tests ==========
 
-    def test_create_key_no_default_no_user_groups(self):
-        """无默认分组且用户无额外授权 → Key 无分组"""
-        db = TestingSessionLocal()
-        try:
-            # 1. 创建非默认分组（不设置 is_default=1）
-            extra_group = ModelGroup(
-                group_id="grp_extra",
-                name="额外分组",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
-            db.add(extra_group)
-            
-            # 2. 创建供应商和模型映射
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1/chat/completions",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-            )
-            provider.model_groups.append(extra_group)
-            db.add(provider)
-            
-            model_mapping = ModelMapping(
-                model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
-            )
-            db.add(model_mapping)
-            
-            # 3. 创建无 model_group_ids 的普通用户
-            user = _create_user(db, "nogroups", "nogroups@example.com", model_group_ids=None)
-            
-            db.commit()
-        finally:
-            db.close()
-
-        # 4. 用户登录
-        token = _get_token("nogroups", "password")
-        assert token is not None
-
-        # 5. 创建 API Key
-        response = client.post(
-            "/api/v1/api-keys",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"name": "No Groups Key"},
-        )
-        assert response.status_code == 200
-        
-        key_id = response.json()["key_id"]
-        
-        # 6. 验证 Key 无分组
-        db = TestingSessionLocal()
-        try:
-            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
-            key_groups = api_key.model_groups
-            assert len(key_groups) == 0, f"Expected no groups, got {[g.group_id for g in key_groups]}"
-        finally:
-            db.close()
-
-    def test_access_denied_generic_error(self):
-        """用户无分组时访问模型 → 返回通用错误，不泄露分组信息"""
-        db = TestingSessionLocal()
-        try:
-            # 1. 创建非默认分组
-            extra_group = ModelGroup(
-                group_id="grp_extra",
-                name="额外分组",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
-            db.add(extra_group)
-            
-            # 2. 创建供应商和模型映射
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1/chat/completions",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-            )
-            provider.model_groups.append(extra_group)
-            db.add(provider)
-            
-            model_mapping = ModelMapping(
-                model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
-            )
-            db.add(model_mapping)
-            
-            # 3. 创建用户（无分组）
-            user = _create_user(db, "denieduser", "denieduser@example.com", model_group_ids=None)
-            
-            # 4. 创建用户的 API Key
-            api_key = ApiKey(
-                key_id="key_denied",
-                user_id=user.user_id,
-                api_key="tmk_denied_key",
-                key_name="Denied Key",
-                status=ApiKeyStatus.active,
-            )
-            db.add(api_key)
-            
-            db.commit()
-        finally:
-            db.close()
-
-        # 5. 测试 ProxyService.check_model_group_access
-        db = TestingSessionLocal()
-        try:
-            user = db.query(User).filter(User.user_id == "usr_denieduser").first()
-            api_key = db.query(ApiKey).filter(ApiKey.key_id == "key_denied").first()
-            
-            service = ProxyService(db)
-            result = service.check_model_group_access(api_key, user, "gpt-4")
-            
-            # 验证：拒绝访问
-            assert result["allowed"] is False
-            
-            # 验证：通用错误信息
-            assert result["message"] == "当前 Key 未被授权访问该模型"
-            
-            # 验证：不泄露分组信息
-            msg = result["message"].lower()
-            assert "default" not in msg
-            assert "分组" not in result["message"]
-            assert "group" not in msg
-        finally:
-            db.close()
-
-
-# ========== Scenario 6: Admin set-default / unset-default 端点 ==========
 class TestAdminModelGroupDefaultEndpoints:
-    """Scenario 6: Admin set-default / unset-default endpoints - admin only, idempotent"""
+    """测试设置/取消默认分组的端点"""
 
     def test_set_default_requires_admin(self):
-        """set-default 端点仅管理员可用"""
+        """非管理员不能设置默认分组"""
         db = TestingSessionLocal()
         try:
-            # 创建普通用户
-            user = _create_user(db, "regular", "regular@example.com", model_group_ids=None)
+            _create_user(db)
             db.commit()
         finally:
             db.close()
 
-        token = _get_token("regular", "password")
-        assert token is not None
+        token = _get_token("testuser", "password")
+        db = TestingSessionLocal()
+        try:
+            group = ModelGroup(
+                group_id="grp_default",
+                name="Default Group",
+                status=ModelGroupStatus.active,
+            )
+            db.add(group)
+            db.commit()
+        finally:
+            db.close()
 
-        # 普通用户尝试设置默认分组 → 403
         response = client.post(
-            "/api/v1/admin/model-groups/grp_test/set-default",
+            "/api/v1/admin/model-groups/grp_default/set-default",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 403
 
     def test_unset_default_requires_admin(self):
-        """unset-default 端点仅管理员可用"""
+        """非管理员不能取消默认分组"""
         db = TestingSessionLocal()
         try:
-            user = _create_user(db, "regular2", "regular2@example.com", model_group_ids=None)
+            user = _create_user(db)
             db.commit()
         finally:
             db.close()
 
-        token = _get_token("regular2", "password")
-        assert token is not None
-
-        # 普通用户尝试取消默认分组 → 403
-        response = client.post(
-            "/api/v1/admin/model-groups/grp_test/unset-default",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 403
-
-    def test_set_default_idempotent(self):
-        """set-default 端点幂等：重复调用结果相同"""
         db = TestingSessionLocal()
         try:
-            # 1. 创建管理员
-            admin = _create_admin(db, "testadmin", "testadmin@example.com")
-            
-            # 2. 创建分组
             group = ModelGroup(
-                group_id="grp_test",
-                name="测试分组",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
-            db.add(group)
-            db.commit()
-        finally:
-            db.close()
-
-        token = _get_token("testadmin", "adminpass")
-        assert token is not None
-
-        # 第一次设置默认
-        response1 = client.post(
-            "/api/v1/admin/model-groups/grp_test/set-default",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response1.status_code == 200
-
-        # 第二次设置默认（幂等）
-        response2 = client.post(
-            "/api/v1/admin/model-groups/grp_test/set-default",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response2.status_code == 200
-
-        # 验证分组确实是默认
-        db = TestingSessionLocal()
-        try:
-            group = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_test").first()
-            assert group.is_default == 1
-        finally:
-            db.close()
-
-    def test_unset_default_idempotent(self):
-        """unset-default 端点幂等：重复调用结果相同"""
-        db = TestingSessionLocal()
-        try:
-            admin = _create_admin(db, "testadmin2", "testadmin2@example.com")
-            
-            group = ModelGroup(
-                group_id="grp_test2",
-                name="测试分组2",
+                group_id="grp_default",
+                name="Default Group",
                 status=ModelGroupStatus.active,
                 is_default=1,
             )
@@ -530,229 +179,400 @@ class TestAdminModelGroupDefaultEndpoints:
         finally:
             db.close()
 
-        token = _get_token("testadmin2", "adminpass")
-        assert token is not None
+        token = _get_token("testuser", "password")
+        response = client.post(
+            "/api/v1/admin/model-groups/grp_default/unset-default",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
 
-        # 第一次取消默认
+    def test_set_default_idempotent(self):
+        """重复设置同一分组为默认是幂等的"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            db.commit()
+        finally:
+            db.close()
+
+        db = TestingSessionLocal()
+        try:
+            group = ModelGroup(
+                group_id="grp_idem",
+                name="Idempotent Group",
+                status=ModelGroupStatus.active,
+            )
+            db.add(group)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
         response1 = client.post(
-            "/api/v1/admin/model-groups/grp_test2/unset-default",
+            "/api/v1/admin/model-groups/grp_idem/set-default",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response1.status_code == 200
 
-        # 第二次取消默认（幂等）
         response2 = client.post(
-            "/api/v1/admin/model-groups/grp_test2/unset-default",
+            "/api/v1/admin/model-groups/grp_idem/set-default",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response2.status_code == 200
 
-        # 验证分组已取消默认
+    def test_unset_default_idempotent(self):
+        """重复取消默认分组是幂等的"""
         db = TestingSessionLocal()
         try:
-            group = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_test2").first()
-            assert group.is_default == 0
-        finally:
-            db.close()
-
-    def test_set_default_clears_previous_default(self):
-        """§2.2：连续 set-default 应只保留一个默认分组"""
-        db = TestingSessionLocal()
-        try:
-            admin = _create_admin(db, "testadmin3", "testadmin3@example.com")
-            
-            group1 = ModelGroup(group_id="grp_d1", name="默认分组1", status=ModelGroupStatus.active, is_default=0)
-            group2 = ModelGroup(group_id="grp_d2", name="默认分组2", status=ModelGroupStatus.active, is_default=0)
-            db.add_all([group1, group2])
+            _create_admin(db)
             db.commit()
         finally:
             db.close()
 
-        token = _get_token("testadmin3", "adminpass")
-        assert token is not None
+        db = TestingSessionLocal()
+        try:
+            group = ModelGroup(
+                group_id="grp_unset",
+                name="Unset Group",
+                status=ModelGroupStatus.active,
+                is_default=1,
+            )
+            db.add(group)
+            db.commit()
+        finally:
+            db.close()
 
-        client.post(
-            "/api/v1/admin/model-groups/grp_d1/set-default",
+        token = _admin_token()
+        response1 = client.post(
+            "/api/v1/admin/model-groups/grp_unset/unset-default",
             headers={"Authorization": f"Bearer {token}"},
         )
-        client.post(
-            "/api/v1/admin/model-groups/grp_d2/set-default",
+        assert response1.status_code == 200
+
+        response2 = client.post(
+            "/api/v1/admin/model-groups/grp_unset/unset-default",
             headers={"Authorization": f"Bearer {token}"},
         )
+        assert response2.status_code == 200
+
+    def test_set_default_clears_previous_default(self):
+        """设置新默认分组时，清除旧的默认标记"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            db.commit()
+        finally:
+            db.close()
 
         db = TestingSessionLocal()
         try:
-            g1 = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_d1").one()
-            g2 = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_d2").one()
-            assert g1.is_default == 0
-            assert g2.is_default == 1
+            old_default = ModelGroup(
+                group_id="grp_old",
+                name="Old Default",
+                status=ModelGroupStatus.active,
+                is_default=1,
+            )
+            new_default = ModelGroup(
+                group_id="grp_new",
+                name="New Default",
+                status=ModelGroupStatus.active,
+            )
+            db.add(old_default)
+            db.add(new_default)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
+        response = client.post(
+            "/api/v1/admin/model-groups/grp_new/set-default",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+
+        db = TestingSessionLocal()
+        try:
+            old = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_old").first()
+            new = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_new").first()
+            assert old.is_default == 0
+            assert new.is_default == 1
         finally:
             db.close()
 
     def test_set_default_nonexistent_group_returns_404(self):
-        """设置不存在的分组为默认 → 404"""
+        """设置不存在的分组为默认返回 404"""
         db = TestingSessionLocal()
         try:
-            admin = _create_admin(db, "testadmin4", "testadmin4@example.com")
+            _create_admin(db)
             db.commit()
         finally:
             db.close()
 
-        token = _get_token("testadmin4", "adminpass")
-        assert token is not None
-
+        token = _admin_token()
         response = client.post(
             "/api/v1/admin/model-groups/nonexistent/set-default",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 404
 
-
-# ========== I1: admin_create_api_key falls back to effective groups ==========
-class TestAdminCreateApiKeyUsesEffectiveGroups:
-    """I1 fix: admin-omitted model_group_ids should fall back to the
-    target user's effective groups (default ∪ user-group union).
-    Regression test — previously, an admin-created key with no explicit
-    groups got zero groups and was locked out of every model.
-    """
-
-    def test_admin_create_key_with_no_groups_falls_back_to_default(self):
-        """Admin creates a key for a user with no extra groups while a
-        default group is set → the resulting key carries that default group.
-        """
-        target_user_id = None
-        db = TestingSessionLocal()
-        try:
-            # 1. Default group
-            default_group = ModelGroup(
-                group_id="grp_default_i1",
-                name="默认分组",
-                status=ModelGroupStatus.active,
-                is_default=1,
-            )
-            db.add(default_group)
-            # 2. Target user (no extra groups)
-            user = _create_user(db, "i1user", "i1user@example.com", model_group_ids=None)
-            # 3. Admin
-            admin = _create_admin(db, "i1admin", "i1admin@example.com")
-            db.commit()
-            target_user_id = user.user_id  # capture before session closes
-        finally:
-            db.close()
-
-        assert target_user_id is not None
-        token = _get_token("i1admin", "adminpass")
-        assert token is not None
-
-        # Admin creates a key for the user, omitting model_group_ids entirely.
-        response = client.post(
-            "/api/v1/api-keys/admin",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Admin-Created Default Key",
-                "user_id": target_user_id,
-                # NO model_group_ids — relies on effective groups fallback.
-            },
-        )
-        assert response.status_code == 200, response.text
-
-        key_id = response.json()["key_id"]
-
-        db = TestingSessionLocal()
-        try:
-            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
-            assert api_key is not None
-            group_ids = [g.group_id for g in api_key.model_groups]
-            assert "grp_default_i1" in group_ids, (
-                f"Expected default group in key's model_groups, got {group_ids}"
-            )
-        finally:
-            db.close()
-
-    def test_admin_create_key_with_explicit_groups_respects_admin_choice(self):
-        """Admin passes explicit non-empty list → that list is honored verbatim
-        (not merged with effective groups). Documents that the fallback only
-        fires when model_group_ids is empty/None, not when admin is explicit.
-        """
-        target_user_id = None
-        db = TestingSessionLocal()
-        try:
-            # Default group set, but admin picks a different group explicitly.
-            default_group = ModelGroup(
-                group_id="grp_default_explicit",
-                name="默认分组",
-                status=ModelGroupStatus.active,
-                is_default=1,
-            )
-            other_group = ModelGroup(
-                group_id="grp_admin_picked",
-                name="管理员指定分组",
-                status=ModelGroupStatus.active,
-                is_default=0,
-            )
-            db.add_all([default_group, other_group])
-            user = _create_user(db, "i1explicit", "i1explicit@example.com")
-            admin = _create_admin(db, "i1admin2", "i1admin2@example.com")
-            db.commit()
-            target_user_id = user.user_id
-        finally:
-            db.close()
-
-        token = _get_token("i1admin2", "adminpass")
-        response = client.post(
-            "/api/v1/api-keys/admin",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Admin-Picked Key",
-                "user_id": target_user_id,
-                "model_group_ids": ["grp_admin_picked"],
-            },
-        )
-        assert response.status_code == 200, response.text
-        key_id = response.json()["key_id"]
-
-        db = TestingSessionLocal()
-        try:
-            api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
-            group_ids = sorted(g.group_id for g in api_key.model_groups)
-            assert group_ids == ["grp_admin_picked"], (
-                f"Expected only grp_admin_picked, got {group_ids}"
-            )
-        finally:
-            db.close()
-
-
     def test_set_default_on_disabled_group_returns_400(self):
-        """I4 fix: setting a disabled group as default returns 400, not 200.
-        A silent success on a disabled group would be a confusing no-op
-        (get_effective_model_group_ids filters by status=active).
-        """
+        """设置 disabled 分组为默认返回 400"""
         db = TestingSessionLocal()
         try:
-            admin = _create_admin(db, "i4admin", "i4admin@example.com")
-            disabled_group = ModelGroup(
-                group_id="grp_disabled",
-                name="禁用分组",
-                status=ModelGroupStatus.disabled,  # disabled
-                is_default=0,
-            )
-            db.add(disabled_group)
+            _create_admin(db)
             db.commit()
         finally:
             db.close()
 
-        token = _get_token("i4admin", "adminpass")
-        assert token is not None
+        db = TestingSessionLocal()
+        try:
+            group = ModelGroup(
+                group_id="grp_disabled",
+                name="Disabled Group",
+                status=ModelGroupStatus.disabled,
+            )
+            db.add(group)
+            db.commit()
+        finally:
+            db.close()
 
+        token = _admin_token()
         response = client.post(
             "/api/v1/admin/model-groups/grp_disabled/set-default",
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert response.status_code == 400, response.text
-        # Make sure the group's is_default didn't get flipped silently.
+        assert response.status_code == 400
+
+
+class TestAdminApiKeyEndpoints:
+    """测试管理员 API Key 端点"""
+
+    def test_admin_create_key_no_model_groups_param(self):
+        """管理员创建 API Key 时不传递 model_group_ids（该参数已移除）"""
         db = TestingSessionLocal()
         try:
-            g = db.query(ModelGroup).filter(ModelGroup.group_id == "grp_disabled").first()
-            assert g.is_default == 0, "Disabled group's is_default must NOT flip"
+            _create_admin(db)
+            db.commit()
         finally:
             db.close()
+
+        token = _admin_token()
+        response = client.post(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Admin Key", "user_id": "usr_admin"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "key_id" in data
+        # 确保响应中没有 model_group_ids 字段
+        assert "model_group_ids" not in data
+
+    def test_admin_list_keys(self):
+        """管理员可以列出所有 API Keys"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            db.commit()
+        finally:
+            db.close()
+
+        # 创建 key
+        token = _admin_token()
+        client.post(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Admin Key 1", "user_id": "usr_admin"},
+        )
+        client.post(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Admin Key 2", "user_id": "usr_admin"},
+        )
+
+        response = client.get(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+        assert len(data["items"]) >= 2
+        # 确保列表中的 keys 没有 model_group_ids 字段
+        for item in data["items"]:
+            assert "model_group_ids" not in item
+
+    def test_admin_update_key(self):
+        """管理员可以更新 API Key"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
+        create_resp = client.post(
+            "/api/v1/api-keys/admin",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Original Name", "user_id": "usr_admin"},
+        )
+        key_id = create_resp.json()["key_id"]
+
+        update_resp = client.put(
+            f"/api/v1/api-keys/admin/{key_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Updated Name"},
+        )
+        assert update_resp.status_code == 200
+        data = update_resp.json()
+        assert data["message"] == "更新成功"
+        # 验证更新确实生效
+        db = TestingSessionLocal()
+        try:
+            key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
+            assert key.key_name == "Updated Name"
+        finally:
+            db.close()
+
+
+class TestModelGroupCrudWithModelIds:
+    """测试 Model Group CRUD 使用 model_ids 而非 provider_ids"""
+
+    def test_create_group_with_model_ids(self):
+        """创建分组时指定 model_ids"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            # 创建 provider 和 model mapping
+            provider = Provider(
+                provider_id="prov_test",
+                name="Test Provider",
+                type=ProviderType.openai,
+                endpoint="https://api.test.com/v1",
+                api_key="sk-test",
+                status=ProviderStatus.active,
+                health_status="healthy",
+            )
+            db.add(provider)
+            model_mapping = ModelMapping(
+                model_id="gpt-4",
+                provider_id="prov_test",
+                provider_model="gpt-4",
+                status=ModelMappingStatus.active,
+            )
+            db.add(model_mapping)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
+        response = client.post(
+            "/api/v1/admin/model-groups",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "name": "Test Group",
+                "model_ids": ["gpt-4"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Test Group"
+        assert "gpt-4" in data["model_ids"]
+        assert data["group_id"].startswith("mg_")
+
+    def test_update_group_model_ids(self):
+        """更新分组的 model_ids"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            provider = Provider(
+                provider_id="prov_test",
+                name="Test Provider",
+                type=ProviderType.openai,
+                endpoint="https://api.test.com/v1",
+                api_key="sk-test",
+                status=ProviderStatus.active,
+                health_status="healthy",
+            )
+            db.add(provider)
+            model1 = ModelMapping(
+                model_id="gpt-4",
+                provider_id="prov_test",
+                provider_model="gpt-4",
+                status=ModelMappingStatus.active,
+            )
+            model2 = ModelMapping(
+                model_id="gpt-3.5",
+                provider_id="prov_test",
+                provider_model="gpt-3.5-turbo",
+                status=ModelMappingStatus.active,
+            )
+            db.add(model1)
+            db.add(model2)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
+        # 创建组
+        create_resp = client.post(
+            "/api/v1/admin/model-groups",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Update Group", "model_ids": ["gpt-4"]},
+        )
+        assert create_resp.status_code == 200
+        group_id = create_resp.json()["group_id"]
+        # 更新
+        response = client.put(
+            f"/api/v1/admin/model-groups/{group_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"model_ids": ["gpt-4", "gpt-3.5"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "gpt-4" in data["model_ids"]
+        assert "gpt-3.5" in data["model_ids"]
+
+    def test_delete_group_with_models_fails(self):
+        """删除有关联模型的分组应失败（Plan A）"""
+        db = TestingSessionLocal()
+        try:
+            _create_admin(db)
+            provider = Provider(
+                provider_id="prov_test",
+                name="Test Provider",
+                type=ProviderType.openai,
+                endpoint="https://api.test.com/v1",
+                api_key="sk-test",
+                status=ProviderStatus.active,
+                health_status="healthy",
+            )
+            db.add(provider)
+            model_mapping = ModelMapping(
+                model_id="gpt-4",
+                provider_id="prov_test",
+                provider_model="gpt-4",
+                status=ModelMappingStatus.active,
+            )
+            db.add(model_mapping)
+            db.commit()
+        finally:
+            db.close()
+
+        token = _admin_token()
+        # 创建组并关联模型
+        create_resp = client.post(
+            "/api/v1/admin/model-groups",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"name": "Delete Group", "model_ids": ["gpt-4"]},
+        )
+        assert create_resp.status_code == 200
+        group_id = create_resp.json()["group_id"]
+        # 尝试删除
+        response = client.delete(
+            f"/api/v1/admin/model-groups/{group_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 400
+        assert "已绑定" in response.json()["detail"] or "bound" in response.json()["detail"].lower()

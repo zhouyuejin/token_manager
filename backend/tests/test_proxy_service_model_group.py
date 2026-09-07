@@ -60,6 +60,7 @@ def non_default_active_group(db: Session) -> ModelGroup:
 
 @pytest.fixture
 def provider_with_group(db: Session, default_active_group: ModelGroup) -> Provider:
+    """Provider with a model mapping that belongs to the default group."""
     p = Provider(
         provider_id="prov_test",
         name="Test Provider",
@@ -68,8 +69,18 @@ def provider_with_group(db: Session, default_active_group: ModelGroup) -> Provid
         api_key="sk-test",
         status=ProviderStatus.active,
     )
-    p.model_groups.append(default_active_group)
     db.add(p)
+    db.flush()
+    # Create model mapping and associate with the default group
+    m = ModelMapping(
+        model_id="gpt-4",
+        provider_id="prov_test",
+        provider_model="gpt-4",
+        status=ModelMappingStatus.active,
+    )
+    db.add(m)
+    db.flush()
+    m.model_groups.append(default_active_group)
     db.commit()
     db.refresh(p)
     return p
@@ -77,7 +88,7 @@ def provider_with_group(db: Session, default_active_group: ModelGroup) -> Provid
 
 @pytest.fixture
 def provider_no_default_group(db: Session, non_default_active_group: ModelGroup) -> Provider:
-    """Provider linked only to a non-default group (used for denial scenarios)."""
+    """Provider with a model mapping in a non-default group (used for denial scenarios)."""
     p = Provider(
         provider_id="prov_no_default",
         name="Provider No Default",
@@ -86,8 +97,18 @@ def provider_no_default_group(db: Session, non_default_active_group: ModelGroup)
         api_key="sk-test2",
         status=ProviderStatus.active,
     )
-    p.model_groups.append(non_default_active_group)
     db.add(p)
+    db.flush()
+    # Create model mapping and associate with the non-default group
+    m = ModelMapping(
+        model_id="gpt-3.5",
+        provider_id="prov_no_default",
+        provider_model="gpt-3.5-turbo",
+        status=ModelMappingStatus.active,
+    )
+    db.add(m)
+    db.flush()
+    m.model_groups.append(non_default_active_group)
     db.commit()
     db.refresh(p)
     return p
@@ -270,7 +291,7 @@ def test_check_access_denied_no_group_leak(
 
 
 def test_check_access_model_not_found(
-    db: Session, api_key, user_no_groups, default_active_group, provider_with_group, model_mapping_for_provider
+    db: Session, api_key, user_no_groups, default_active_group, provider_with_group
 ):
     """Unknown model → denied with generic message"""
     service = ProxyService(db)

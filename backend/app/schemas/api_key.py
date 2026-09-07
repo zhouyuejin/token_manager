@@ -1,5 +1,8 @@
 """
 API Key相关Schema
+
+Task 5: 删除所有 model_group_ids / model_groups 字段。
+API Key 不再保留独立分组权限，统一由用户分组决定。
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -31,7 +34,7 @@ class ApiKeyCreate(BaseModel):
     daily_limit: int = 0
     monthly_limit: int = 0
     qps_limit: int = 10
-    # NO model_group_ids — GC-2
+    # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
 
@@ -47,7 +50,7 @@ class ApiKeyUpdate(BaseModel):
     monthly_limit: Optional[int] = None
     qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
-    # NO model_group_ids — GC-2
+    # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
 
@@ -109,7 +112,7 @@ class ApiKeyAdminCreate(BaseModel):
     daily_limit: int = 0
     monthly_limit: int = 0
     qps_limit: int = 10
-    model_group_ids: Optional[List[str]] = None
+    # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
 
@@ -125,7 +128,7 @@ class ApiKeyAdminUpdate(BaseModel):
     monthly_limit: Optional[int] = None
     qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
-    model_group_ids: Optional[List[str]] = None
+    # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
 
@@ -147,7 +150,7 @@ class ApiKeyAdminResponse(BaseModel):
     status: str
     created_at: UtcDateTime
     last_used_at: Optional[UtcDateTime] = None
-    model_groups: List[str] = []  # admin sees groups
+    # NO model_groups — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
 

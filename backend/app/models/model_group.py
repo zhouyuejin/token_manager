@@ -1,5 +1,8 @@
 """
 模型分组模型
+
+Task 5: 删除旧 provider_model_groups 和 api_key_model_groups Table 及关联关系。
+API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）。
 """
 from typing import Optional
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Table, ForeignKey, UniqueConstraint
@@ -16,34 +19,11 @@ class ModelGroupStatus(enum.Enum):
     disabled = "disabled"
 
 
-# 供应商-模型分组关联表（旧，迁移后删除）
-provider_model_groups = Table(
-    'provider_model_groups',
-    Base.metadata,
-    Column('id', BigInteger, primary_key=True, autoincrement=True),
-    Column('provider_id', String(32), ForeignKey('providers.provider_id'), nullable=False),
-    Column('group_id', String(32), ForeignKey('model_groups.group_id'), nullable=False),
-    Column('created_at', DateTime, server_default=func.now())
-)
-
-
-# API Key-模型分组关联表（迁移后删除 — API Key 不再保留独立分组权限）
-api_key_model_groups = Table(
-    'api_key_model_groups',
-    Base.metadata,
-    Column('id', BigInteger, primary_key=True, autoincrement=True),
-    Column('key_id', String(32), ForeignKey('api_keys.key_id'), nullable=False),
-    Column('group_id', String(32), ForeignKey('model_groups.group_id'), nullable=False),
-    Column('created_at', DateTime, server_default=func.now())
-)
-
-
-# 模型分组-模型映射多对多关联表（新增）
+# 模型分组-模型映射多对多关联表
 # 同一 (group_id, model_id) 只能存在一行；删除分组时级联清理关联。
 model_group_model_mappings = Table(
     'model_group_model_mappings',
     Base.metadata,
-    Column('id', BigInteger, primary_key=True, autoincrement=True),
     Column(
         'group_id',
         String(32),
@@ -74,16 +54,13 @@ class ModelGroup(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    # 旧关联（迁移期间保留）
-    providers = relationship("Provider", secondary=provider_model_groups, back_populates="model_groups")
-    api_keys = relationship("ApiKey", secondary=api_key_model_groups, back_populates="model_groups")
-
     # 新关联：直接绑定模型映射
     model_mappings = relationship(
         "ModelMapping",
         secondary=model_group_model_mappings,
         back_populates="model_groups",
     )
+
 
 def migrate_provider_group_bindings_to_models(db) -> int:
     """
@@ -120,7 +97,6 @@ def migrate_provider_group_bindings_to_models(db) -> int:
         inserted += 1
     db.commit()
     return inserted
-
 
 
 def get_unique_default_group(db) -> Optional["ModelGroup"]:
