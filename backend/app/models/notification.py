@@ -3,6 +3,7 @@
 """
 import enum
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Index
+from datetime import timezone
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -47,6 +48,6 @@ class Notification(Base):
             "content": self.content,
             "is_read": bool(self.is_read),
             "metadata": json.loads(self.extra_data) if self.extra_data else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "read_at": self.read_at.isoformat() if self.read_at else None,
+            "created_at": self.created_at.replace(tzinfo=timezone.utc).isoformat() if self.created_at else None,
+            "read_at": self.read_at.replace(tzinfo=timezone.utc).isoformat() if self.read_at else None,
         }

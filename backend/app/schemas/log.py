@@ -4,6 +4,7 @@
 from pydantic import BaseModel
 from typing import Optional, List, Any
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 class OperationLogResponse(BaseModel):
@@ -16,7 +17,7 @@ class OperationLogResponse(BaseModel):
     target_id: Optional[str] = None
     detail: Optional[Any] = None
     ip_address: Optional[str] = None
-    created_at: datetime
+    created_at: UtcDateTime
 
     model_config = {"from_attributes": True}
 
@@ -36,7 +37,7 @@ class LoginLogResponse(BaseModel):
     user_agent: Optional[str] = None
     status: str
     failure_reason: Optional[str] = None
-    created_at: datetime
+    created_at: UtcDateTime
 
     model_config = {"from_attributes": True}
 

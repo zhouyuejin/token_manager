@@ -4,6 +4,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 class NotificationCreate(BaseModel):
@@ -23,8 +24,8 @@ class NotificationResponse(BaseModel):
     content: Optional[str]
     is_read: bool
     metadata: Optional[dict]
-    created_at: str
-    read_at: Optional[str]
+    created_at: UtcDateTime
+    read_at: Optional[UtcDateTime]
     
     class Config:
         from_attributes = True

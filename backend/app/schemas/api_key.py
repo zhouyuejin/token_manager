@@ -4,6 +4,7 @@ API Key相关Schema
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 class ApiKeyBase(BaseModel):
@@ -66,8 +67,8 @@ class ApiKeyResponse(BaseModel):
     monthly_used: int
     qps_limit: int
     status: str
-    created_at: datetime
-    last_used_at: Optional[datetime] = None
+    created_at: UtcDateTime
+    last_used_at: Optional[UtcDateTime] = None
     # NO model_groups — GC-2
 
     model_config = {'populate_by_name': True}
@@ -144,8 +145,8 @@ class ApiKeyAdminResponse(BaseModel):
     monthly_used: int
     qps_limit: int
     status: str
-    created_at: datetime
-    last_used_at: Optional[datetime] = None
+    created_at: UtcDateTime
+    last_used_at: Optional[UtcDateTime] = None
     model_groups: List[str] = []  # admin sees groups
 
     model_config = {'populate_by_name': True}

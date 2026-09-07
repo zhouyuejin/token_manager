@@ -83,7 +83,7 @@ const ConversationItem = memo(function ConversationItem({
             {title}
           </div>
           <div style={{ color: token.colorTextSecondary, fontSize: '12px', marginTop: '2px' }}>
-            {dayjs(conv.updated_at).fromNow()}
+            {dayjs.utc(conv.updated_at).fromNow()}
           </div>
         </div>
 

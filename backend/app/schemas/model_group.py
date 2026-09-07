@@ -4,6 +4,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 class ModelGroupBase(BaseModel):
@@ -32,7 +33,7 @@ class ModelGroupResponse(ModelGroupBase):
     group_id: str
     status: str
     provider_ids: List[str] = []
-    created_at: datetime
+    created_at: UtcDateTime
 
     class Config:
         from_attributes = True

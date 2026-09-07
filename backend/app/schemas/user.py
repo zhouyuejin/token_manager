@@ -4,6 +4,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 class UserBase(BaseModel):
@@ -34,8 +35,8 @@ class UserResponse(UserBase):
     quota: int
     quota_used: int
     quota_remain: int
-    created_at: datetime
-    last_login_at: Optional[datetime] = None
+    created_at: UtcDateTime
+    last_login_at: Optional[UtcDateTime] = None
     model_group_ids: List[str] = Field(default_factory=list)
 
     class Config:

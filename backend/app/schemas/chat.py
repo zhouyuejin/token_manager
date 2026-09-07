@@ -4,6 +4,7 @@ Chat相关Schema
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
+from app.schemas._datetime import UtcDateTime
 
 
 class ChatMessageCreate(BaseModel):
@@ -20,7 +21,7 @@ class ChatMessageResponse(BaseModel):
     content: str
     model: Optional[str] = None
     tokens: Optional[int] = None
-    created_at: datetime
+    created_at: UtcDateTime
 
     class Config:
         from_attributes = True
@@ -56,8 +57,8 @@ class ChatConversationResponse(BaseModel):
     provider_id: Optional[str] = None
     model_id: Optional[str] = None
     system_prompt: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
     message_count: Optional[int] = 0  # 消息数量
 
     class Config:
