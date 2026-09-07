@@ -1,10 +1,10 @@
 """refresh token 端点测试"""
+import os
 import pytest
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -17,11 +17,11 @@ from app.models.refresh_token import RefreshToken
 from app.api.v1 import auth as auth_module
 
 # 内存 SQLite 测试库
-TEST_DATABASE_URL = "sqlite:///:memory:"
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "mysql+pymysql://token_user:token_password@mysql:3306/token_db_test?charset=utf8mb4")
 engine = create_engine(
     TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,  # TestClient 走独立连接，需要 StaticPool 让 :memory: 共享
+    
+    
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -67,7 +67,15 @@ def setup_db():
     Base.metadata.create_all(bind=engine)
     _id_counters.clear()
     yield
-    Base.metadata.drop_all(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(__import__("sqlalchemy").text("SET FOREIGN_KEY_CHECKS=0"))
+            db.execute(__import__("sqlalchemy").text(f"TRUNCATE TABLE {table.name}"))
+            db.execute(__import__("sqlalchemy").text("SET FOREIGN_KEY_CHECKS=1"))
+        db.commit()
+    finally:
+        db.close()
     _id_counters.clear()
 
 

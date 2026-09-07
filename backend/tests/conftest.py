@@ -1,48 +1,44 @@
-"""测试全局 fixtures。
+"""测试全局 fixtures（MySQL）。"""
+import os
+import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, Session
 
-两件事：
-1) 解决 SQLite 不为 BigInteger 主键创建 ROWID 自增（替换为 TypeDecorator）。
-2) 强制所有 sqlite:///:memory: 测试 engine 使用 StaticPool，避免多 connection 互相看不到表。
-"""
-import sqlalchemy
-from sqlalchemy import Integer, TypeDecorator
-
-
-class _BigIntegerCompat(TypeDecorator):
-    """SQLite -> Integer（自增），MySQL -> BigInteger。"""
-    impl = Integer
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect):
-        if dialect.name in ("mysql", "mariadb"):
-            return dialect.type_descriptor(sqlalchemy.BigInteger())
-        return dialect.type_descriptor(Integer())
-
-
-# 在 import app.models 之前替换 BigInteger
-sqlalchemy.BigInteger = _BigIntegerCompat
-
-# 触发 app.models 加载
 import app.models  # noqa: F401, E402
-
-from sqlalchemy import create_engine as _sa_create_engine  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
-
-_orig_create_engine = _sa_create_engine
+from app.core.database import Base
 
 
-def _patched_create_engine(url, **kwargs):
-    """对 sqlite:///:memory: 强制 StaticPool + check_same_thread=False。"""
-    url_str = str(url)
-    if url_str.startswith("sqlite") and ":memory:" in url_str:
-        kwargs.setdefault("connect_args", {})
-        kwargs["connect_args"].setdefault("check_same_thread", False)
-        kwargs.setdefault("poolclass", StaticPool)
-    return _orig_create_engine(url, **kwargs)
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "mysql+pymysql://token_user:token_password@mysql:3306/token_db_test?charset=utf8mb4",
+)
 
 
-# 替换 sqlalchemy.create_engine：影响所有测试文件里直接调 create_engine 的代码
-sqlalchemy.create_engine = _patched_create_engine
+@pytest.fixture(scope="session")
+def engine():
+    eng = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+    Base.metadata.create_all(bind=eng)
+    return eng
 
 
-import pytest  # noqa: E402
+@pytest.fixture(scope="session")
+def SessionLocal(engine):
+    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def _truncate_all(db: Session):
+    for table in reversed(Base.metadata.sorted_tables):
+        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
+        db.execute(text(f"TRUNCATE TABLE {table.name}"))
+        db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
+    db.commit()
+
+
+@pytest.fixture
+def db(engine, SessionLocal):
+    session = SessionLocal()
+    _truncate_all(session)
+    try:
+        yield session
+    finally:
+        session.close()

@@ -1,4 +1,5 @@
 """登录日志单元测试"""
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
@@ -11,8 +12,8 @@ from app.models.user import User, UserRole, UserStatus
 from app.core.security import hash_password_sha256
 
 # 内存 SQLite 测试库
-TEST_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "mysql+pymysql://token_user:token_password@mysql:3306/token_db_test?charset=utf8mb4")
+engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -32,7 +33,15 @@ client = TestClient(app)
 def setup_db():
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(__import__("sqlalchemy").text("SET FOREIGN_KEY_CHECKS=0"))
+            db.execute(__import__("sqlalchemy").text(f"TRUNCATE TABLE {table.name}"))
+            db.execute(__import__("sqlalchemy").text("SET FOREIGN_KEY_CHECKS=1"))
+        db.commit()
+    finally:
+        db.close()
 
 
 def _create_user(db, username, email, password="hashedpwd", status=UserStatus.active):

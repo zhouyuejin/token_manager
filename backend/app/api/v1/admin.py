@@ -617,7 +617,9 @@ async def create_provider(
                     status=ModelMappingStatus.active
                 )
                 db.add(mapping)
-            
+                from app.models.model_group import bind_new_model_to_default_group
+                bind_new_model_to_default_group(db, mapping)
+
             models_list.append({
                 "model_id": model_id,
                 "model_name": model_input.model_name,
@@ -772,6 +774,8 @@ async def update_provider(
                     status=ModelMappingStatus.active
                 )
                 db.add(mapping)
+                from app.models.model_group import bind_new_model_to_default_group
+                bind_new_model_to_default_group(db, mapping)
             else:
                 # 更新已有的映射
                 existing.display_name = model_input.display_name
@@ -1094,9 +1098,11 @@ async def create_model_mapping(
     )
     
     db.add(mapping)
+    from app.models.model_group import bind_new_model_to_default_group
+    bind_new_model_to_default_group(db, mapping)
     db.commit()
     db.refresh(mapping)
-    
+
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,

@@ -468,6 +468,8 @@ def create_model_sync_service(db: Session) -> ModelSyncService:
                 )
                 
                 self.db.add(mapping)
+                from app.models.model_group import bind_new_model_to_default_group
+                bind_new_model_to_default_group(self.db, mapping)
                 created += 1
                 
             except Exception as e:

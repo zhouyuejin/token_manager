@@ -245,31 +245,11 @@ async def set_model_group_as_default(
     current_user: User = Depends(require_admin),
 ):
     """
-    将指定模型分组设为默认分组（管理员）。
-    多个分组可同时为默认分组（GC-6）。
+    将指定分组设为唯一默认分组（管理员）。
+    事务性清除其他分组的默认状态（§2.2）；不补绑历史模型（§2.10）。
     """
-    group = db.query(ModelGroup).filter(
-        ModelGroup.group_id == group_id
-    ).first()
-
-    if not group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="模型分组不存在"
-        )
-
-    # I4 fix: a disabled group cannot be made default — get_effective_model_group_ids
-    # filters by status=active, so silently flipping is_default=1 on a disabled
-    # group is a no-op that confuses admins.
-    if group.status != ModelGroupStatus.active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="禁用的分组不能设为默认"
-        )
-
-    group.is_default = 1
-    db.commit()
-
+    from app.services.model_groups_service import set_default_group
+    set_default_group(db, group_id)
     return {"message": "已设为默认分组"}
 
 
@@ -280,19 +260,8 @@ async def unset_model_group_default(
     current_user: User = Depends(require_admin),
 ):
     """
-    取消指定模型分组的默认分组状态（管理员）。
+    取消默认分组状态（管理员）。不清除已有模型绑定（§2.11）。
     """
-    group = db.query(ModelGroup).filter(
-        ModelGroup.group_id == group_id
-    ).first()
-
-    if not group:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="模型分组不存在"
-        )
-
-    group.is_default = 0
-    db.commit()
-
+    from app.services.model_groups_service import unset_default_group
+    unset_default_group(db, group_id)
     return {"message": "已取消默认分组"}
