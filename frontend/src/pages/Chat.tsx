@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { loadModelConfig, saveModelConfig } from '../utils/chatStorage'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Layout, Button, App } from 'antd'
 import ConversationList from '../components/Chat/ConversationList'
@@ -30,7 +31,7 @@ const Chat: React.FC = () => {
   const [modelConfig, setModelConfig] = useState<{
     providerId?: string
     modelId?: string
-  }>({})
+  }>(() => loadModelConfig())
 
   // 加载对话消息
   const loadMessages = useCallback(async (conversationId: string) => {
@@ -205,6 +206,11 @@ const Chat: React.FC = () => {
       loadMessages(currentConversationId)
     }
   }, [currentConversationId, loadMessages])
+
+  // 持久化供应商/模型选择,刷新后仍然保留
+  useEffect(() => {
+    saveModelConfig(modelConfig)
+  }, [modelConfig])
 
   return (
     <Layout style={{ height: 'calc(100% + 40px)', margin: '-20px', background: token.colorBgLayout }}>
