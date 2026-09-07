@@ -16,7 +16,7 @@ class ModelGroupBase(BaseModel):
 
 class ModelGroupCreate(ModelGroupBase):
     """创建模型分组请求"""
-    provider_ids: Optional[List[str]] = None
+    model_ids: Optional[List[str]] = None
 
 
 class ModelGroupUpdate(BaseModel):
@@ -25,14 +25,14 @@ class ModelGroupUpdate(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     is_default: Optional[int] = None
-    provider_ids: Optional[List[str]] = None
+    model_ids: Optional[List[str]] = None
 
 
 class ModelGroupResponse(ModelGroupBase):
     """模型分组响应"""
     group_id: str
     status: str
-    provider_ids: List[str] = []
+    model_ids: List[str] = []
     created_at: UtcDateTime
 
     class Config:
