@@ -10,14 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装uvicorn
-RUN pip install --no-cache-dir uvicorn[standard]
+# 安装uvicorn（清除代理）
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY && \
+    pip install --no-cache-dir uvicorn[standard]
 
 # 复制依赖文件
 COPY requirements.txt .
 
-# 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# 安装Python依赖（清除代理）
+RUN unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 复制应用代码
 COPY . .
