@@ -21,6 +21,76 @@ const StatsPage = () => {
     dayjs().subtract(7, 'day'),
     dayjs()
   ])
+  // 额度数据（来自当前登录用户）
+  const quotaTotal: number = user?.quota ?? 0
+  const quotaUsed: number = Math.min(user?.quota_used ?? 0, quotaTotal)
+  const quotaRemain: number = Math.max(0, quotaTotal - quotaUsed)
+  const quotaPercent: number =
+    quotaTotal > 0 ? Math.min(100, (quotaUsed / quotaTotal) * 100) : 0
+  const quotaUsedColor =
+    quotaPercent >= 95 ? '#EF4444'
+      : quotaPercent >= 80 ? '#EA580C'
+      : quotaPercent >= 60 ? '#F59E0B'
+      : '#10B981'
+
+  const quotaChartOption = {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(17, 24, 39, 0.9)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      textStyle: { color: token.colorText },
+      formatter: (params: any) =>
+        `${params.name}: ${Number(params.value || 0).toLocaleString()} (${params.percent}%)`,
+    },
+    legend: {
+      bottom: 0,
+      textStyle: { color: token.colorTextSecondary },
+    },
+    series: [
+      {
+        name: '额度使用',
+        type: 'pie',
+        radius: ['58%', '78%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 8,
+          borderColor: token.colorBgContainer,
+          borderWidth: 3,
+        },
+        label: {
+          show: true,
+          position: 'center',
+          formatter: () => `{a|${quotaPercent.toFixed(1)}%}\n{b|已使用}`,
+          rich: {
+            a: {
+              fontSize: 28,
+              fontWeight: 700,
+              color: token.colorText,
+              fontFamily: "'Space Grotesk', sans-serif",
+              lineHeight: 36,
+            },
+            b: {
+              fontSize: 13,
+              color: token.colorTextSecondary,
+              fontFamily: "'Space Grotesk', sans-serif",
+              lineHeight: 20,
+              padding: [4, 0, 0, 0],
+            },
+          },
+        },
+        emphasis: {
+          label: { show: true },
+          scaleSize: 5,
+        },
+        labelLine: { show: false },
+        data: [
+          { value: quotaUsed, name: '已使用', itemStyle: { color: quotaUsedColor } },
+          { value: quotaRemain, name: '剩余', itemStyle: { color: 'rgba(148, 163, 184, 0.25)' } },
+        ],
+      },
+    ],
+  }
+
 
   useEffect(() => {
     fetchData()
@@ -60,10 +130,6 @@ const StatsPage = () => {
     link.download = `usage_stats_${dateRange[0].format('YYYY-MM-DD')}_${dateRange[1].format('YYYY-MM-DD')}.csv`
     link.click()
   }
-
-  // 模型使用分布的最大值
-  const maxTokens = stats?.by_model?.reduce((max: number, item: any) => 
-    Math.max(max, item.tokens || 0), 0) || 1
 
   const modelColumns = [
     { 
@@ -336,15 +402,15 @@ const StatsPage = () => {
         </Col>
       </Row>
 
-      {/* 主要内容区：模型统计 + API Keys */}
+      {/* 主要内容区：额度使用 + API Keys */}
       <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        {/* 模型使用分布 */}
+        {/* 额度使用情况 */}
         <Col xs={24} lg={12}>
-          <Card 
+          <Card
             title={
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: 10,
               }}>
                 <div style={{
@@ -353,18 +419,17 @@ const StatsPage = () => {
                   background: 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)',
                   borderRadius: 2,
                 }} />
-                <span style={{ 
-                  color: token.colorText, 
+                <span style={{
+                  color: token.colorText,
                   fontFamily: "'Space Grotesk', sans-serif",
                   fontWeight: 600,
                   fontSize: 15,
                 }}>
-                  模型使用分布
+                  额度使用情况
                 </span>
               </div>
             }
-            loading={loading}
-            style={{ 
+            style={{
               background: token.colorBgContainer,
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -375,65 +440,24 @@ const StatsPage = () => {
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
-            {stats?.by_model?.map((item: any, idx: number) => (
-              <div key={item.model} style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ 
-                    color: token.colorText, 
-                    fontWeight: 500,
-                    fontSize: 13,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}>
-                    <span style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][idx % 5],
-                      boxShadow: `0 0 8px ${['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][idx % 5]}40`,
-                    }} />
-                    {item.model}
-                  </span>
-                  <span style={{ 
-                    color: token.colorText, 
-                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                    fontWeight: 600,
-                    fontSize: 13,
-                  }}>
-                    {item.tokens?.toLocaleString()} tokens
-                  </span>
-                </div>
-                <div style={{ 
-                  height: 8, 
-                  background: token.colorBgContainer, 
-                  borderRadius: 4,
-                  overflow: 'hidden',
-                  position: 'relative',
-                }}>
-                  <div style={{ 
-                    height: '100%', 
-                    width: `${(item.tokens / maxTokens) * 100}%`,
-                    background: `linear-gradient(90deg, ${['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][idx % 5]} 0%, ${['#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6'][idx % 5]} 100%)`,
-                    borderRadius: 4,
-                    transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: `0 0 10px ${['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][idx % 5]}40`,
-                  }} />
-                </div>
-              </div>
-            ))}
-            {(!stats?.by_model || stats?.by_model?.length === 0) && (
-              <div style={{ 
-                textAlign: 'center', 
+            {quotaTotal > 0 ? (
+              <ReactECharts
+                style={{ height: 280 }}
+                option={quotaChartOption}
+                notMerge={true}
+              />
+            ) : (
+              <div style={{
+                textAlign: 'center',
                 padding: '40px 0',
                 color: 'rgba(100, 116, 139, 0.6)',
               }}>
-                <div style={{ 
-                  fontSize: 48, 
+                <div style={{
+                  fontSize: 48,
                   marginBottom: 12,
                   opacity: 0.3,
                 }}>📊</div>
-                暂无数据
+                未设置额度
               </div>
             )}
           </Card>
@@ -472,7 +496,7 @@ const StatsPage = () => {
               borderRadius: 16,
             }}
             styles={{
-              body: { padding: '16px' },
+              body: { padding: '16px', height: 320, overflow: 'hidden' },
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
@@ -482,7 +506,8 @@ const StatsPage = () => {
               rowKey="key_id"
               pagination={false}
               size="small"
-              style={{ 
+              scroll={{ y: 288 }}
+              style={{
                 background: 'transparent',
               }}
             />
