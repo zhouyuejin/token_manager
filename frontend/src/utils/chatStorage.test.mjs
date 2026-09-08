@@ -37,25 +37,25 @@ test('roundtrips a saved config', async () => {
   const store = makeStorage()
   globalThis.localStorage = store
   const { loadModelConfig, saveModelConfig } = await importFresh()
-  saveModelConfig({ providerId: 'p-1', modelId: 'm-2' })
-  assert.deepEqual(loadModelConfig(), { providerId: 'p-1', modelId: 'm-2' })
+  saveModelConfig({ modelId: 'm-2' })
+  assert.deepEqual(loadModelConfig(), { modelId: 'm-2' })
 })
 
 test('overwrites a previous config', async () => {
   const store = makeStorage()
   globalThis.localStorage = store
   const { loadModelConfig, saveModelConfig } = await importFresh()
-  saveModelConfig({ providerId: 'p-1', modelId: 'm-2' })
-  saveModelConfig({ providerId: 'p-9', modelId: 'm-7' })
-  assert.deepEqual(loadModelConfig(), { providerId: 'p-9', modelId: 'm-7' })
+  saveModelConfig({ modelId: 'm-2' })
+  saveModelConfig({ modelId: 'm-7' })
+  assert.deepEqual(loadModelConfig(), { modelId: 'm-7' })
 })
 
 test('coerces non-string fields to undefined', async () => {
   const store = makeStorage()
-  store.setItem('chat.modelConfig.v1', JSON.stringify({ providerId: 42, modelId: null, extra: 'ignored' }))
+  store.setItem('chat.modelConfig.v1', JSON.stringify({ modelId: null, extra: 'ignored' }))
   globalThis.localStorage = store
   const { loadModelConfig } = await importFresh()
-  assert.deepEqual(loadModelConfig(), { providerId: undefined, modelId: undefined })
+  assert.deepEqual(loadModelConfig(), { modelId: undefined })
 })
 
 test('returns empty config on corrupted JSON', async () => {
