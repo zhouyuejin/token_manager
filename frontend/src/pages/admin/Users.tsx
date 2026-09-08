@@ -112,7 +112,9 @@ const UsersPage = () => {
       setQuotaModalVisible(false)
       quotaForm.resetFields()
       fetchUsers()
-    } catch (error) {
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || error?.message || '额度调整失败'
+      message.error(detail)
       console.error(error)
     }
   }
@@ -526,7 +528,7 @@ const UsersPage = () => {
               onChange={e => setQuotaMode(e.target.value)}
               buttonStyle="solid"
             >
-              <Radio.Button value="increase">增加/减少</Radio.Button>
+              <Radio.Button value="increase" disabled={quotaUser?.unlimited === true}>增加/减少</Radio.Button>
               <Radio.Button value="set_unlimited" disabled={quotaUser?.unlimited === true}>
                 设为无限制
               </Radio.Button>
