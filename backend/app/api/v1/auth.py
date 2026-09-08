@@ -93,11 +93,16 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         password=password_hash,
         role=UserRole.user,
         status=UserStatus.active,
-        model_group_ids=model_group_ids
+        model_group_ids=model_group_ids,
+        quota=settings.DEFAULT_NEW_USER_QUOTA,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    # 通知所有管理员有新用户注册
+    from app.services.notification_service import notify_admins_new_user
+    await notify_admins_new_user(db, user)
     
     return UserInfo(
         user_id=user.user_id,
