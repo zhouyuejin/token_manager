@@ -131,34 +131,44 @@ class ProxyService:
         return {"allowed": True}
 
     def check_quota(self, user: User, api_key: ApiKey, estimated_tokens: int = 1000) -> Dict[str, Any]:
-        """检查额度是否充足"""
-        # 检查用户额度
+        """检查额度是否充足，返回详细原因"""
         quota_remain = user.quota - user.quota_used
+
+        # 情况一：额度为 0（从未分配）
+        if user.quota == 0:
+            return {
+                "allowed": False,
+                "reason": "quota_zero",
+                "message": "您的账户额度为 0，请联系管理员分配额度后再试。"
+            }
+
+        # 情况二：额度有值但剩余不足
         if quota_remain < estimated_tokens:
             return {
                 "allowed": False,
                 "reason": "quota_insufficient",
-                "message": "用户额度不足"
+                "message": f"额度不足，当前剩余 {quota_remain} tokens，请联系管理员充值。"
             }
-        
-        # 检查API Key日限额
+
+        # 情况三：日限额超
         if api_key.daily_limit > 0 and api_key.daily_used + estimated_tokens > api_key.daily_limit:
             return {
                 "allowed": False,
                 "reason": "daily_limit_exceeded",
-                "message": "日限额已用完"
+                "message": f"今日用量已达上限（{api_key.daily_limit} tokens），请明日再试。"
             }
-        
-        # 检查API Key月限额
+
+        # 情况四：月限额超
         if api_key.monthly_limit > 0 and api_key.monthly_used + estimated_tokens > api_key.monthly_limit:
             return {
                 "allowed": False,
                 "reason": "monthly_limit_exceeded",
-                "message": "月限额已用完"
+                "message": f"本月用量已达上限（{api_key.monthly_limit} tokens）。"
             }
-        
+
         return {"allowed": True}
-    
+
+
     def get_model_mapping(self, model_id: str, provider_id: str = None) -> Optional[ModelMapping]:
         """
         获取模型映射
