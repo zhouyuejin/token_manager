@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from app.models.user import UserRole
 from app.models.api_key import ApiKey
 from app.models.provider import Provider, ProviderStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
@@ -48,7 +49,20 @@ class ProxyService:
         effective = default_ids ∪ user_ids
           default_ids = {g.group_id for g in ModelGroup where is_default=1 and status=active}
           user_ids   = set(json.loads(user.model_group_ids or '[]'))
+
+        GC-2: 管理员（admin 角色）= 超级管理员，自动拥有所有 active 模型分组
+        的访问权限；user_ids 字段被忽略。这避免了 model_group 增删时
+        需要批量更新所有 admin 行的 model_group_ids 字段。
         """
+        # GC-2: admin 短路 — 拥有全部 active 分组
+        if user.role == UserRole.admin:
+            return {
+                g.group_id
+                for g in self.db.query(ModelGroup)
+                .filter(ModelGroup.status == ModelGroupStatus.active)
+                .all()
+            }
+
         default_groups = self.db.query(ModelGroup).filter(
             ModelGroup.is_default == 1,
             ModelGroup.status == "active"
@@ -133,6 +147,14 @@ class ProxyService:
     def check_quota(self, user: User, api_key: ApiKey, estimated_tokens: int = 1000) -> Dict[str, Any]:
         """检查额度是否充足，返回详细原因"""
         quota_remain = user.quota - user.quota_used
+
+        # GC-2: admin 短路 — 管理员账户为无限制额度
+        if user.role == UserRole.admin:
+            return {
+                "allowed": True,
+                "reason": "admin_unlimited",
+                "message": "管理员账户为无限制额度",
+            }
 
         # 情况零：无限制额度
         if user.quota < 0:
