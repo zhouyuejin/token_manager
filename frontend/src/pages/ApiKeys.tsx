@@ -275,7 +275,7 @@ const ApiKeysPage = () => {
           icon={<PlusOutlined />} 
           onClick={() => setModalVisible(true)}
           style={{
-            background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+            background: token.colorPrimary,
             border: 'none',
             borderRadius: 10,
             fontFamily: "'Space Grotesk', sans-serif",
@@ -323,7 +323,7 @@ const ApiKeysPage = () => {
             type="primary"
             onClick={() => form.submit()}
             style={{
-              background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+              background: token.colorPrimary,
               border: 'none',
               borderRadius: 10,
             }}
@@ -384,7 +384,7 @@ const ApiKeysPage = () => {
                 marginTop: 20,
                 height: 40,
                 borderRadius: 10,
-                background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                background: token.colorPrimary,
                 border: 'none',
                 fontFamily: "'Space Grotesk', sans-serif",
               }}
@@ -524,7 +524,7 @@ const ApiKeysPage = () => {
                 type="primary" 
                 htmlType="submit"
                 style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  background: token.colorPrimary,
                   border: 'none',
                   borderRadius: 10,
                   fontFamily: "'Space Grotesk', sans-serif",
