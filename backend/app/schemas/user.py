@@ -1,7 +1,7 @@
 """
 用户相关Schema
 """
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, computed_field
 from typing import Optional, List
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
@@ -39,6 +39,11 @@ class UserResponse(UserBase):
     last_login_at: Optional[UtcDateTime] = None
     model_group_ids: List[str] = Field(default_factory=list)
 
+    @computed_field
+    @property
+    def unlimited(self) -> bool:
+        return self.quota < 0
+
     class Config:
         from_attributes = True
 
@@ -54,6 +59,11 @@ class UserInfo(BaseModel):
     quota_used: int
     quota_remain: int
     created_at: str
+
+    @computed_field
+    @property
+    def unlimited(self) -> bool:
+        return self.quota < 0
 
 
 class PasswordChange(BaseModel):

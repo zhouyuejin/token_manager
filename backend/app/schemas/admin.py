@@ -1,7 +1,7 @@
 """
 管理后台相关Schema
 """
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator, computed_field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
@@ -41,6 +41,11 @@ class AdminUserResponse(BaseModel):
     created_at: UtcDateTime
     model_group_ids: List[str] = Field(default_factory=list)
 
+    @computed_field
+    @property
+    def unlimited(self) -> bool:
+        return self.quota < 0
+
     class Config:
         from_attributes = True
 
@@ -53,8 +58,19 @@ class UserListResponse(BaseModel):
 
 class QuotaAdjustRequest(BaseModel):
     """额度调整请求"""
-    amount: int
+    amount: Optional[int] = None
+    set_unlimited: Optional[bool] = None
     reason: str
+
+    @model_validator(mode="after")
+    def check_mutual_exclusivity(self):
+        if self.amount is not None and self.set_unlimited is not None:
+            raise ValueError("amount 和 set_unlimited 不能同时指定")
+        if self.amount is None and self.set_unlimited is None:
+            raise ValueError("必须指定 amount 或 set_unlimited 之一")
+        if not self.reason or not self.reason.strip():
+            raise ValueError("reason 不能为空")
+        return self
 
 
 # ========== 供应商管理 ==========

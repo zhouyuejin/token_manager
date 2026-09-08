@@ -134,6 +134,14 @@ class ProxyService:
         """检查额度是否充足，返回详细原因"""
         quota_remain = user.quota - user.quota_used
 
+        # 情况零：无限制额度
+        if user.quota < 0:
+            return {
+                "allowed": True,
+                "reason": "unlimited",
+                "message": "您使用的是无限制额度。"
+            }
+
         # 情况一：额度为 0（从未分配）
         if user.quota == 0:
             return {
