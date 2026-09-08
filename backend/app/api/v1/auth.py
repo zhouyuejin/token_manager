@@ -9,6 +9,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from loguru import logger
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -51,7 +52,7 @@ class RefreshRequest(BaseModel):
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str | None = None  # 不传则只登出前端
+    refresh_token: Optional[str] = None  # 不传则只登出前端
 
 
 class UserInfo(BaseModel):
@@ -112,9 +113,9 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     )
 
 
-def _create_login_log(db: Session, username: str, user_id: str | None,
-                      ip: str | None, ua: str | None,
-                      login_status: str, failure_reason: str | None = None) -> None:
+def _create_login_log(db: Session, username: str, user_id: Optional[str],
+                      ip: Optional[str], ua: Optional[str],
+                      login_status: str, failure_reason: Optional[str] = None) -> None:
     """写入登录日志，失败不抛出异常。"""
     try:
         log = LoginLog(
