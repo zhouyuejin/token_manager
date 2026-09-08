@@ -9,6 +9,7 @@ from loguru import logger
 
 from sqlalchemy.orm import Session
 from app.models.notification import Notification, NotificationType
+from app.models.user import User, UserRole
 
 # 全局 manager 实例（从 ws_manager 导入）
 from app.services.ws_manager import manager as ws_manager
@@ -122,3 +123,23 @@ def get_notification_list(
         .limit(page_size).all()
     
     return items, total, unread_count
+
+
+async def notify_admins_new_user(db: Session, user: User) -> None:
+    """
+    向所有管理员发送新用户注册通知。
+    通知失败不影响调用方。
+    """
+    try:
+        admins = db.query(User).filter(User.role == UserRole.admin).all()
+        for admin in admins:
+            await create_notification(
+                db=db,
+                user_id=admin.user_id,
+                notif_type=NotificationType.user_registered,
+                title="新用户注册",
+                content=f"用户 {user.username}（{user.email}）已注册，等待分配权限和额度。",
+                metadata={"user_id": user.user_id, "username": user.username}
+            )
+    except Exception as e:
+        logger.warning(f"[通知] 发送新用户注册通知失败: {e}")
