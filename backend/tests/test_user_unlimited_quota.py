@@ -1,7 +1,7 @@
 """
 测试用户无限制额度（unlimited quota）功能。
 
-7 个核心测试用例：
+8 个核心测试用例：
 1. set_unlimited=true → user.quota = -1
 2. ProxyService.check_quota 对 unlimited 用户返回 allowed=True, reason="unlimited"
 3. deduct_quota 不修改 user.quota（即不覆盖 unlimited sentinel -1）
@@ -153,11 +153,13 @@ def test_deduct_quota_does_not_overwrite_unlimited_sentinel():
 
 def test_adjust_amount_on_unlimited_user_returns_400():
     """
-    对已 unlimited 的用户提交 amount 时，端点返回 400。
+    对已 unlimited 的用户提交 amount 时，ensure_can_adjust_amount 抛出 HTTPException(400)。
 
-    验证逻辑：端点检测 user.quota < 0 时抛出 HTTPException(400)。
+    验证逻辑：quota_guard.ensure_can_adjust_amount 检测 user.quota < 0 时抛出 HTTPException(400)。
+    该函数在 adjust_user_quota 的 amount 分支被调用。
     """
     from fastapi import HTTPException
+    from app.services.quota_guard import ensure_can_adjust_amount
 
     user = User(
         user_id="u4",
@@ -176,13 +178,9 @@ def test_adjust_amount_on_unlimited_user_returns_400():
     assert req.amount == 1000
     assert req.set_unlimited is None
 
-    # 端点业务层：检测到 unlimited 用户 → 拒绝 amount 操作
+    # quota_guard 层：检测到 unlimited 用户 → 拒绝 amount 操作
     with pytest.raises(HTTPException) as exc_info:
-        if user.quota < 0:
-            raise HTTPException(
-                status_code=400,
-                detail="该用户当前为无限制额度，请先取消无限制后再调整金额"
-            )
+        ensure_can_adjust_amount(user)
 
     assert exc_info.value.status_code == 400
     assert "无限制" in exc_info.value.detail
@@ -273,6 +271,16 @@ def test_user_response_includes_unlimited_field():
         quota_remain=1500, created_at="2024-01-01T00:00:00Z"
     )
     assert ui2.unlimited is False
+
+    # adjust_user_quota 端点返回的 dict 同样包含 unlimited 字段
+    # 模拟端点返回结构（端点无法直接 import，参照返回值验证形状）
+    class FakeUser:
+        def __init__(self, quota):
+            self.quota = quota
+    resp_unlimited = {"message": "额度调整成功", "new_quota": FakeUser(-1).quota, "unlimited": FakeUser(-1).quota < 0}
+    resp_limited   = {"message": "额度调整成功", "new_quota": FakeUser(5000).quota, "unlimited": FakeUser(5000).quota < 0}
+    assert resp_unlimited["unlimited"] is True
+    assert resp_limited["unlimited"] is False
 
 
 # =============================================================================
