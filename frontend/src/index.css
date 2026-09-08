@@ -73,7 +73,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Custom scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-text-tertiary) 35%, transparent) transparent;
   scrollbar-gutter: stable;
 }
 
@@ -88,7 +88,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
+  background: color-mix(in srgb, var(--color-text-tertiary) 35%, transparent);
   border-radius: var(--radius-sm);
   border: 2px solid transparent;
   background-clip: padding-box;
