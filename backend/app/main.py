@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
                     email="admin@example.com",
                     password=admin_password,
                     role=UserRole.admin,
-                    quota=100000000,
+                    quota=-1,  # GC-3: admin quota = unlimited sentinel
                     status=UserStatus.active
                 )
                 db.add(admin)
