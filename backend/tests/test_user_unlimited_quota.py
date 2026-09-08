@@ -1,7 +1,7 @@
 """
 测试用户无限制额度（unlimited quota）功能。
 
-8 个核心测试用例：
+7 个核心测试用例：
 1. set_unlimited=true → user.quota = -1
 2. ProxyService.check_quota 对 unlimited 用户返回 allowed=True, reason="unlimited"
 3. deduct_quota 不修改 user.quota（即不覆盖 unlimited sentinel -1）
