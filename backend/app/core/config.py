@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    DEFAULT_NEW_USER_QUOTA: int = 0        # 新注册用户默认额度
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # 日志
