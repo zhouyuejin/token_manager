@@ -3,12 +3,14 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
-  Select, Popconfirm 
+  Select, Popconfirm, Radio, Alert 
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from '../../api/users'
 import { getModelGroups, ModelGroup } from '../../api/modelGroups'
 import dayjs from 'dayjs'
+
+type QuotaMode = 'increase' | 'set_unlimited' | 'cancel_unlimited'
 
 const UsersPage = () => {
   const [loading, setLoading] = useState(false)
@@ -17,6 +19,7 @@ const UsersPage = () => {
   const [editUser, setEditUser] = useState<User | null>(null)
   const [quotaModalVisible, setQuotaModalVisible] = useState(false)
   const [quotaUser, setQuotaUser] = useState<User | null>(null)
+  const [quotaMode, setQuotaMode] = useState<QuotaMode>('increase')
   const [groups, setGroups] = useState<ModelGroup[]>([])
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
@@ -92,10 +95,19 @@ const UsersPage = () => {
     }
   }
 
-  const handleQuotaAdjust = async (values: { amount: number; reason: string }) => {
+  const handleQuotaAdjust = async (values: { amount?: number; reason: string }) => {
     if (!quotaUser) return
     try {
-      await adjustQuota(quotaUser.user_id, values)
+      let payload: { amount?: number; set_unlimited?: boolean; reason: string }
+      if (quotaMode === 'increase') {
+        payload = { amount: values.amount, reason: values.reason }
+      } else if (quotaMode === 'set_unlimited') {
+        payload = { set_unlimited: true, reason: values.reason }
+      } else {
+        // cancel_unlimited
+        payload = { set_unlimited: false, amount: values.amount, reason: values.reason }
+      }
+      await adjustQuota(quotaUser.user_id, payload)
       message.success('额度调整成功')
       setQuotaModalVisible(false)
       quotaForm.resetFields()
@@ -107,6 +119,7 @@ const UsersPage = () => {
 
   const openQuotaModal = (user: User) => {
     setQuotaUser(user)
+    setQuotaMode(user.unlimited ? 'cancel_unlimited' : 'set_unlimited')
     quotaForm.setFieldsValue({ amount: 0, reason: '' })
     setQuotaModalVisible(true)
   }
@@ -164,45 +177,45 @@ const UsersPage = () => {
       key: 'quota',
       render: (quota: number, record: User) => (
         <Space>
-          <span style={{ 
-            fontFamily: "'Space Grotesk', sans-serif", 
-            color: token.colorText 
-          }}>
-            {record.quota_used?.toLocaleString()} / {quota?.toLocaleString()}
-          </span>
-          <Button 
-            type="text" 
-            size="small" 
-            icon={<DollarOutlined />}
-            onClick={() => openQuotaModal(record)}
-            style={{ color: '#3B82F6' }}
-          >
-            调整
-          </Button>
+          {record.unlimited ? (
+            <Tag color="gold" style={{ borderRadius: 6 }}>∞ · 无限制</Tag>
+          ) : (
+            <>
+              <span style={{ 
+                fontFamily: "'Space Grotesk', sans-serif", 
+                color: token.colorText 
+              }}>
+                {record.quota_used?.toLocaleString()} / {quota?.toLocaleString()}
+              </span>
+              <Button 
+                type="text" 
+                size="small" 
+                icon={<DollarOutlined />}
+                onClick={() => openQuotaModal(record)}
+              />
+            </>
+          )}
         </Space>
       )
-    },
-    { 
-      title: '创建时间', 
-      dataIndex: 'created_at', 
-      key: 'created_at',
-      render: (val: string) => <span style={{ color: token.colorTextSecondary }}>{dayjs.utc(val).local().format('YYYY-MM-DD')}</span>
     },
     { 
       title: '模型分组', 
       dataIndex: 'model_group_ids', 
       key: 'model_group_ids',
       render: (groupIds: string[]) => (
-        <Tag 
-          color={groupIds && groupIds.length > 0 ? 'blue' : 'default'}
-          style={{ 
-            borderRadius: '6px',
-            background: groupIds && groupIds.length > 0 ? 'rgba(37, 99, 235, 0.15)' : 'rgba(100, 116, 139, 0.15)',
-            border: 'none',
-          }}
-        >
+        <span style={{ color: token.colorTextSecondary }}>
           {getGroupNames(groupIds)}
-        </Tag>
+        </span>
+      )
+    },
+    { 
+      title: '创建时间', 
+      dataIndex: 'created_at', 
+      key: 'created_at',
+      render: (date: string) => (
+        <span style={{ color: token.colorTextSecondary }}>
+          {dayjs(date).format('YYYY-MM-DD HH:mm')}
+        </span>
       )
     },
     {
@@ -212,83 +225,69 @@ const UsersPage = () => {
         <Space>
           <Button 
             type="text" 
-            icon={<EditOutlined />} 
-            onClick={() => {
-              if (record.role === 'admin') return
-              setEditUser(record)
-              form.setFieldsValue(record)
-            }}
-            disabled={record.role === 'admin'}
-            style={{ color: record.role === 'admin' ? '#64748B' : '#3B82F6' }}
-          >
-            编辑
-          </Button>
+            size="small" 
+            icon={<EditOutlined />}
+            onClick={() => setEditUser(record)}
+          />
           <Popconfirm
-            title={record.role === 'admin' ? "不能删除管理员用户" : "确认删除此用户？"}
+            title="确定删除此用户？"
+            description="删除后不可恢复"
             onConfirm={() => handleDelete(record.user_id)}
-            disabled={record.role === 'admin'}
+            okText="确定"
+            cancelText="取消"
           >
             <Button 
               type="text" 
+              size="small" 
               danger 
               icon={<DeleteOutlined />}
-              disabled={record.role === 'admin'}
-            >
-              删除
-            </Button>
+            />
           </Popconfirm>
         </Space>
-      )
-    }
+      ),
+    },
   ]
 
   return (
-    <div className="stagger-children">
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        marginBottom: 24,
-        alignItems: 'center',
-      }}>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ 
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontSize: 24,
-          fontWeight: 600,
+          margin: 0, 
           color: token.colorText,
-          margin: 0,
+          fontFamily: "'Space Grotesk', sans-serif",
         }}>
-          <TeamOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
           用户管理
         </h2>
         <Button 
           type="primary" 
-          icon={<PlusOutlined />} 
+          icon={<PlusOutlined />}
           onClick={() => setModalVisible(true)}
           style={{
             background: token.colorPrimary,
             border: 'none',
             borderRadius: 10,
-            fontFamily: "'Space Grotesk', sans-serif",
           }}
         >
-          新建用户
+          创建用户
         </Button>
       </div>
 
-      <div style={{
-        background: token.colorBgContainer,
-        backdropFilter: 'blur(20px)',
-        border: `1px solid ${token.colorBorder}`,
-        borderRadius: 16,
-        overflow: 'hidden',
-      }}>
-        <Table
-          dataSource={users}
-          columns={columns}
-          rowKey="user_id"
-          loading={loading}
-        />
-      </div>
+      <Table
+        dataSource={users}
+        columns={columns}
+        rowKey="user_id"
+        loading={loading}
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: false,
+          showTotal: (total) => `共 ${total} 条`,
+        }}
+        style={{
+          background: token.colorBgContainer,
+          borderRadius: 12,
+          overflow: 'hidden',
+        }}
+      />
 
       {/* 创建用户弹窗 */}
       <Modal
@@ -297,7 +296,7 @@ const UsersPage = () => {
             fontFamily: "'Space Grotesk', sans-serif",
             color: token.colorText,
           }}>
-            新建用户
+            创建用户
           </span>
         }
         open={modalVisible}
@@ -308,54 +307,55 @@ const UsersPage = () => {
         footer={null}
       >
         <Form form={form} onFinish={handleCreate} layout="vertical">
-          <Form.Item 
-            name="username" 
-            label={<span style={{ color: token.colorTextSecondary }}>用户名</span>} 
-            rules={[{ required: true }]}
+          <Form.Item
+            name="username"
+            label={<span style={{ color: token.colorTextSecondary }}>用户名</span>}
+            rules={[{ required: true, message: '请输入用户名' }]}
           >
             <Input 
               placeholder="请输入用户名"
               style={{ height: 40, borderRadius: 10 }}
             />
           </Form.Item>
-          <Form.Item 
-            name="email" 
-            label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>} 
-            rules={[{ required: true, type: 'email' }]}
+          <Form.Item
+            name="email"
+            label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>}
+            rules={[
+              { required: true, message: '请输入邮箱' },
+              { type: 'email', message: '请输入有效的邮箱地址' }
+            ]}
           >
             <Input 
               placeholder="请输入邮箱"
               style={{ height: 40, borderRadius: 10 }}
             />
           </Form.Item>
-          <Form.Item 
-            name="password" 
-            label={<span style={{ color: token.colorTextSecondary }}>密码</span>} 
-            rules={[{ required: true, min: 8 }]}
+          <Form.Item
+            name="password"
+            label={<span style={{ color: token.colorTextSecondary }}>密码</span>}
+            rules={[{ required: true, message: '请输入密码' }]}
           >
             <Input.Password 
               placeholder="请输入密码"
               style={{ height: 40, borderRadius: 10 }}
             />
           </Form.Item>
-          <Form.Item 
-            name="role" 
-            label={<span style={{ color: token.colorTextSecondary }}>角色</span>} 
-            initialValue="user"
+          <Form.Item
+            name="role"
+            label={<span style={{ color: token.colorTextSecondary }}>角色</span>}
           >
             <Select style={{ borderRadius: 10 }}>
               <Select.Option value="user">用户</Select.Option>
               <Select.Option value="admin">管理员</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item 
-            name="quota" 
-            label={<span style={{ color: token.colorTextSecondary }}>初始额度</span>}
+          <Form.Item
+            name="quota"
+            label={<span style={{ color: token.colorTextSecondary }}>额度</span>}
           >
             <InputNumber 
-              min={0} 
-               
-              placeholder="请输入初始额度"
+              placeholder="请输入额度"
+              style={{ width: '100%', height: 40, borderRadius: 10 }}
             />
           </Form.Item>
           <Form.Item 
@@ -415,7 +415,12 @@ const UsersPage = () => {
         }}
         footer={null}
       >
-        <Form form={form} onFinish={handleUpdate} layout="vertical">
+        <Form 
+          form={form} 
+          onFinish={handleUpdate} 
+          layout="vertical"
+          initialValues={editUser || {}}
+        >
           <Form.Item
             name="username"
             label={<span style={{ color: token.colorTextSecondary }}>用户名</span>}
@@ -431,7 +436,7 @@ const UsersPage = () => {
             label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>}
             rules={[
               { required: true, message: '请输入邮箱' },
-              { type: 'email', message: '邮箱格式不正确' },
+              { type: 'email', message: '请输入有效的邮箱地址' }
             ]}
           >
             <Input
@@ -515,16 +520,56 @@ const UsersPage = () => {
         footer={null}
       >
         <Form form={quotaForm} onFinish={handleQuotaAdjust} layout="vertical">
-          <Form.Item 
-            name="amount" 
-            label={<span style={{ color: token.colorTextSecondary }}>调整额度（正数增加，负数减少）</span>}
-            rules={[{ required: true, message: '请输入调整额度' }]}
-          >
-            <InputNumber 
-               
-              placeholder="如：10000 或 -5000"
-            />
+          <Form.Item label={<span style={{ color: token.colorTextSecondary }}>调整模式</span>}>
+            <Radio.Group 
+              value={quotaMode} 
+              onChange={e => setQuotaMode(e.target.value)}
+              buttonStyle="solid"
+            >
+              <Radio.Button value="increase">增加/减少</Radio.Button>
+              <Radio.Button value="set_unlimited" disabled={quotaUser?.unlimited === true}>
+                设为无限制
+              </Radio.Button>
+              <Radio.Button value="cancel_unlimited" disabled={quotaUser?.unlimited !== true}>
+                取消无限制
+              </Radio.Button>
+            </Radio.Group>
           </Form.Item>
+          
+          {(quotaMode === 'set_unlimited' || quotaMode === 'cancel_unlimited') && (
+            <Alert
+              message="无限制说明"
+              description="设为无限制后，用户调用 LLM 不再受额度限制（API Key 日/月限额仍生效）"
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          {quotaMode === 'increase' && (
+            <Form.Item 
+              name="amount" 
+              label={<span style={{ color: token.colorTextSecondary }}>调整额度（正数增加，负数减少）</span>}
+              rules={[{ required: true, message: '请输入调整额度' }]}
+            >
+              <InputNumber 
+                placeholder="如：10000 或 -5000"
+              />
+            </Form.Item>
+          )}
+
+          {quotaMode === 'cancel_unlimited' && (
+            <Form.Item 
+              name="amount" 
+              label={<span style={{ color: token.colorTextSecondary }}>新额度（数字）</span>}
+              rules={[{ required: true, message: '请输入新额度' }]}
+            >
+              <InputNumber 
+                placeholder="如：100000"
+              />
+            </Form.Item>
+          )}
+
           <Form.Item 
             name="reason" 
             label={<span style={{ color: token.colorTextSecondary }}>调整原因</span>}
@@ -546,7 +591,7 @@ const UsersPage = () => {
             }}>
               <div style={{ color: token.colorTextSecondary, marginBottom: 8 }}>
                 当前额度：<span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" }}>
-                  {quotaUser.quota?.toLocaleString()}
+                  {quotaUser.unlimited ? '无限制' : quotaUser.quota?.toLocaleString()}
                 </span>
               </div>
               <div style={{ color: token.colorTextSecondary }}>

@@ -9,6 +9,7 @@ export interface User {
   status: string
   quota: number
   quota_used: number
+  unlimited: boolean
   created_at: string
   model_group_ids: string[]
 }
@@ -58,10 +59,13 @@ export const updateUser = (userId: string, data: {
 
 export const deleteUser = (userId: string) => del(`/admin/users/${userId}`)
 
-export const adjustQuota = (userId: string, data: {
-  amount: number
+export interface QuotaAdjustParams {
+  amount?: number
+  set_unlimited?: boolean
   reason: string
-}) => post(`/admin/users/${userId}/quota`, data)
+}
+
+export const adjustQuota = (userId: string, data: QuotaAdjustParams) => post(`/admin/users/${userId}/quota`, data)
 
 /**
  * 重置密码 - 密码在前端进行 SHA256 哈希后再传输
