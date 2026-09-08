@@ -9,10 +9,9 @@ interface InputAreaProps {
   disabled?: boolean
   loading?: boolean
   modelConfig?: {
-    providerId?: string
     modelId?: string
   }
-  onModelChange?: (config: { providerId?: string; modelId?: string }) => void
+  onModelChange?: (config: { modelId?: string }) => void
 }
 
 const InputArea: React.FC<InputAreaProps> = ({

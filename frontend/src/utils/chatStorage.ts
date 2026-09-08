@@ -1,9 +1,8 @@
 // Minimal localStorage-backed persistence for the chat page's
-// provider/model selection. Kept dependency-free so it can be unit-tested
+// model selection. Kept dependency-free so it can be unit-tested
 // in plain Node with a localStorage stub.
 
 export interface ModelConfig {
-  providerId?: string
   modelId?: string
 }
 
@@ -13,7 +12,6 @@ const sanitize = (raw: unknown): ModelConfig => {
   if (!raw || typeof raw !== 'object') return {}
   const obj = raw as Record<string, unknown>
   return {
-    providerId: typeof obj.providerId === 'string' ? obj.providerId : undefined,
     modelId: typeof obj.modelId === 'string' ? obj.modelId : undefined,
   }
 }
@@ -33,7 +31,6 @@ export const saveModelConfig = (cfg: ModelConfig): void => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        providerId: cfg.providerId,
         modelId: cfg.modelId,
       }),
     )

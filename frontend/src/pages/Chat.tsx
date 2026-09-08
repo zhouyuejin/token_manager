@@ -29,7 +29,6 @@ const Chat: React.FC = () => {
   
   // 模型配置
   const [modelConfig, setModelConfig] = useState<{
-    providerId?: string
     modelId?: string
   }>(() => loadModelConfig())
 
@@ -58,7 +57,6 @@ const Chat: React.FC = () => {
     try {
       const res = await createConversation({
         model: modelConfig.modelId,
-        provider_id: modelConfig.providerId,
       })
       setCurrentConversationId(res.conversation_id)
       setMessages([])
@@ -120,7 +118,6 @@ const Chat: React.FC = () => {
       const response = await sendMessageStream(conversationId, {
         messages: messageHistory,
         model: modelConfig.modelId,
-        provider_id: modelConfig.providerId,
         stream: true,
       })
 
@@ -207,7 +204,7 @@ const Chat: React.FC = () => {
     }
   }, [currentConversationId, loadMessages])
 
-  // 持久化供应商/模型选择,刷新后仍然保留
+  // 持久化模型选择,刷新后仍然保留
   useEffect(() => {
     saveModelConfig(modelConfig)
   }, [modelConfig])

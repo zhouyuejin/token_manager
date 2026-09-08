@@ -53,7 +53,6 @@ export interface SendMessageRequest {
     content: string
   }[]
   model?: string
-  provider_id?: string
   temperature?: number
   max_tokens?: number
   stream?: boolean
@@ -93,7 +92,6 @@ export const getConversation = (conversationId: string) =>
 export const createConversation = (data: {
   title?: string
   model?: string
-  provider_id?: string
   system_prompt?: string
 }) => post<ChatConversation>('/chats', data)
 
@@ -103,7 +101,6 @@ export const createConversation = (data: {
 export const updateConversation = (conversationId: string, data: {
   title?: string
   model?: string
-  provider_id?: string
   system_prompt?: string
 }) => put<ChatConversation>(`/chats/${conversationId}`, data)
 
