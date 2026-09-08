@@ -16,6 +16,7 @@ class NotificationType(enum.Enum):
     quota_decrease = "quota_decrease"
     daily_report = "daily_report"
     system = "system"
+    user_registered = "user_registered"   # 新用户注册通知
 
 
 class Notification(Base):
