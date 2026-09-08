@@ -504,8 +504,8 @@ async def adjust_user_quota(
                 pass
 
     elif quota_data.set_unlimited is False:
-        # 取消无限制
-        user.quota = max(0, user.quota)
+        # 取消无限制，可选指定具体额度
+        user.quota = quota_data.amount if quota_data.amount is not None else max(0, user.quota)
         after = user.quota
         log_detail["unlimited"] = False
         log_detail["after"] = after

@@ -64,9 +64,12 @@ class QuotaAdjustRequest(BaseModel):
 
     @model_validator(mode="after")
     def check_mutual_exclusivity(self):
-        if self.amount is not None and self.set_unlimited is not None:
-            raise ValueError("amount 和 set_unlimited 不能同时指定")
-        if self.amount is None and self.set_unlimited is None:
+        # amount 和 set_unlimited 在以下情况允许同时存在：
+        # - set_unlimited=True 时 amount 必须为 None（设为无限制不需要 amount）
+        # - set_unlimited=False 时 amount 可选（有则是取消无限制后的具体额度，没有则默认 0）
+        if self.set_unlimited is True and self.amount is not None:
+            raise ValueError("设为无限制时不能同时指定 amount")
+        if self.set_unlimited is None and self.amount is None:
             raise ValueError("必须指定 amount 或 set_unlimited 之一")
         if not self.reason or not self.reason.strip():
             raise ValueError("reason 不能为空")
