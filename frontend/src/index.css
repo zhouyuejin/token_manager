@@ -69,3 +69,38 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   color: var(--color-foreground);
 }
+
+/* Custom scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scrollbar-gutter: stable;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 2px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+  background-clip: padding-box;
+  box-shadow: var(--shadow-glow);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
