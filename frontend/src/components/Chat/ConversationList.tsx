@@ -189,7 +189,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
           block
           onClick={onNewChat}
           style={{
-            background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+            background: token.colorPrimary,
             border: 'none',
           }}
         >

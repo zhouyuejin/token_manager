@@ -265,7 +265,7 @@ const UsersPage = () => {
           icon={<PlusOutlined />} 
           onClick={() => setModalVisible(true)}
           style={{
-            background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+            background: token.colorPrimary,
             border: 'none',
             borderRadius: 10,
             fontFamily: "'Space Grotesk', sans-serif",
@@ -386,7 +386,7 @@ const UsersPage = () => {
                 type="primary" 
                 htmlType="submit"
                 style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  background: token.colorPrimary,
                   border: 'none',
                   borderRadius: 10,
                 }}
@@ -485,7 +485,7 @@ const UsersPage = () => {
                 type="primary" 
                 htmlType="submit"
                 style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  background: token.colorPrimary,
                   border: 'none',
                   borderRadius: 10,
                 }}
@@ -568,7 +568,7 @@ const UsersPage = () => {
                 type="primary" 
                 htmlType="submit"
                 style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                  background: token.colorPrimary,
                   border: 'none',
                   borderRadius: 10,
                 }}

@@ -235,7 +235,7 @@ const SettingsPage = () => {
               style={{
                 height: 44,
                 borderRadius: 10,
-                background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+                background: token.colorPrimary,
                 border: 'none',
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 500,

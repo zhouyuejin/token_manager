@@ -284,7 +284,7 @@ const ModelsPage = () => {
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={openCreateModal}
-            style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none', borderRadius: 10 }}
+            style={{ background: token.colorPrimary, border: 'none', borderRadius: 10 }}
           >
             添加模型
           </Button>
@@ -509,7 +509,7 @@ const ModelsPage = () => {
           <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
             <Space>
               <Button onClick={() => { setModalVisible(false); setEditModel(null); form.resetFields(); }}>取消</Button>
-              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none' }}>
+              <Button type="primary" htmlType="submit" style={{ background: token.colorPrimary, border: 'none' }}>
                 {editModel ? '保存' : '创建'}
               </Button>
             </Space>
@@ -597,7 +597,7 @@ const ModelsPage = () => {
                   type="primary" 
                   onClick={handleBatchCreate}
                   disabled={selectedModels.length === 0}
-                  style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none' }}
+                  style={{ background: token.colorPrimary, border: 'none' }}
                 >
                   批量创建 ({selectedModels.length})
                 </Button>

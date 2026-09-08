@@ -325,7 +325,7 @@ const ProvidersPage = () => {
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={() => setCreateModalVisible(true)}
-            style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none', borderRadius: 10 }}
+            style={{ background: token.colorPrimary, border: 'none', borderRadius: 10 }}
           >
             添加供应商
           </Button>
@@ -484,7 +484,7 @@ const ProvidersPage = () => {
           <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
             <Space>
               <Button icon={<SyncOutlined />} onClick={() => selectedProvider && handleSync(selectedProvider.provider_id)}>手动同步</Button>
-              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)', border: 'none' }}>保存配置</Button>
+              <Button type="primary" htmlType="submit" style={{ background: token.colorPrimary, border: 'none' }}>保存配置</Button>
             </Space>
           </Form.Item>
         </Form>
@@ -580,7 +580,7 @@ const ProvidersPage = () => {
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
               <Button onClick={() => setCreateModalVisible(false)}>取消</Button>
-              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none' }}>创建</Button>
+              <Button type="primary" htmlType="submit" style={{ background: token.colorPrimary, border: 'none' }}>创建</Button>
             </Space>
           </Form.Item>
         </Form>
@@ -656,7 +656,7 @@ const ProvidersPage = () => {
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
               <Button onClick={() => setEditModalVisible(false)}>取消</Button>
-              <Button type="primary" htmlType="submit" style={{ background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)', border: 'none' }}>保存</Button>
+              <Button type="primary" htmlType="submit" style={{ background: token.colorPrimary, border: 'none' }}>保存</Button>
             </Space>
           </Form.Item>
         </Form>

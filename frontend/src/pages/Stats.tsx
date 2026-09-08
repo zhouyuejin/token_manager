@@ -235,7 +235,7 @@ const StatsPage = () => {
             icon={<DownloadOutlined />} 
             onClick={handleExport}
             style={{
-              background: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+              background: token.colorPrimary,
               border: 'none',
               borderRadius: 10,
               fontFamily: "'Space Grotesk', sans-serif",
