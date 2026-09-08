@@ -10,7 +10,7 @@ import gsap from 'gsap'
 const isDev = import.meta.env.DEV
 
 const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: any) => {
-  const { token } = useThemeToken()
+  const { token, isDark } = useThemeToken()
   return (
     <div style={{
     position: 'relative',
@@ -25,7 +25,7 @@ const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: an
   }}
     className="custom-input-wrap"
   >
-    <span style={{ color: '#475569', fontSize: 18, marginRight: 12, display: 'flex' }}>
+    <span style={{ color: token.colorTextSecondary, fontSize: 18, marginRight: 12, display: 'flex' }}>
       {prefix}
     </span>
     <input
@@ -39,14 +39,14 @@ const CustomInput = ({ prefix, placeholder, type = 'text', value, onChange }: an
         border: 'none',
         outline: 'none',
         fontSize: 15,
-        color: '#F1F5F9',
+        color: token.colorText,
         fontFamily: "'DM Sans', sans-serif",
       }}
     />
     <style>{`
-      .custom-input-wrap:hover { background: rgba(30, 41, 59, 0.7) !important; }
-      .custom-input-wrap:focus-within { background: rgba(30, 41, 59, 0.8) !important; border-color: rgba(99, 102, 241, 0.4) !important; }
-      .custom-input-wrap input::placeholder { color: #64748B !important; }
+      .custom-input-wrap:hover { background: ${isDark ? 'rgba(30, 41, 59, 0.7)' : 'rgba(240, 240, 250, 0.9)'} !important; }
+      .custom-input-wrap:focus-within { background: ${isDark ? 'rgba(30, 41, 59, 0.8)' : 'rgba(240, 240, 250, 1)'} !important; border-color: ${isDark ? 'rgba(99, 102, 241, 0.4)' : 'rgba(37, 99, 235, 0.4)'} !important; }
+      .custom-input-wrap input::placeholder { color: ${token.colorTextSecondary} !important; }
     `}</style>
   </div>
   )
@@ -435,7 +435,7 @@ const Login = () => {
           zIndex: 10,
           width: 400,
           padding: 44,
-          background: 'rgba(8, 12, 20, 0.85)',
+          background: token.colorBgElevated,
           backdropFilter: 'blur(20px)',
           borderRadius: 24,
           border: '1px solid rgba(255, 255, 255, 0.06)',
@@ -449,7 +449,7 @@ const Login = () => {
             justifyContent: 'center',
             width: 64,
             height: 64,
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+            background: token.colorPrimary,
             borderRadius: 18,
             marginBottom: 20,
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
@@ -459,7 +459,7 @@ const Login = () => {
               fontFamily: "'Space Grotesk', sans-serif",
               fontWeight: 700,
               fontSize: 26,
-              color: '#E2E8F0',
+              color: token.colorText,
               textShadow: '0 2px 8px rgba(0,0,0,0.5)',
             }}>T</span>
           </div>
@@ -467,12 +467,12 @@ const Login = () => {
             fontFamily: "'Space Grotesk', sans-serif",
             fontSize: 24,
             fontWeight: 600,
-            color: '#E2E8F0',
+            color: token.colorText,
             marginBottom: 8,
           }}>
             Token中转平台
           </h1>
-          <p style={{ color: '#64748B', fontSize: 14 }}>
+          <p style={{ color: token.colorTextSecondary, fontSize: 14 }}>
             统一API入口 · 管理大模型调用
           </p>
         </div>
@@ -510,32 +510,32 @@ const Login = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
                 fontSize: 16,
-                background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+                background: token.colorPrimary,
                 border: '1px solid rgba(255,255,255,0.1)',
                 boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
               }}
               onMouseEnter={(e) => {
                 gsap.to(e.currentTarget, {
-                  background: 'linear-gradient(135deg, #234b70 0%, #102540 100%)',
+                  background: token.colorPrimaryHover || token.colorPrimary,
                   boxShadow: '0 6px 28px rgba(0, 0, 0, 0.4)',
                   duration: 0.25
                 })
               }}
               onMouseLeave={(e) => {
                 gsap.to(e.currentTarget, {
-                  background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+                  background: token.colorPrimary,
                   boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
                   duration: 0.25
                 })
               }}
             >
-              <span style={{ position: 'relative', zIndex: 1, letterSpacing: '0.15em', color: '#E2E8F0' }}>登 录</span>
+              <span style={{ position: 'relative', zIndex: 1, letterSpacing: '0.15em', color: '#fff' }}>登 录</span>
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', color: '#475569', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', color: token.colorTextSecondary, fontSize: 14 }}>
             还没有账号？{' '}
-            <Link to="/register" style={{ color: '#94A3B8', fontWeight: 500, textDecoration: 'none' }}>
+            <Link to="/register" style={{ color: token.colorPrimary, fontWeight: 500, textDecoration: 'none' }}>
               立即注册
             </Link>
           </div>
