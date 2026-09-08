@@ -23,6 +23,8 @@ const UsersPage = () => {
   const [groups, setGroups] = useState<ModelGroup[]>([])
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
+  // GC-8: 监听 role 字段；admin 时隐藏 quota / model_group_ids 表单项
+  const watchedRole = Form.useWatch('role', form)
   const message = useMessage()
   const { token, isDark } = useThemeToken()
 
@@ -62,7 +64,13 @@ const UsersPage = () => {
 
   const handleCreate = async (values: any) => {
     try {
-      await createUser(values)
+      // GC-8: 创建 admin 时不传 quota/model_group_ids（后端按 GC-6 强制）
+      const payload = { ...values }
+      if (payload.role === 'admin') {
+        delete payload.quota
+        delete payload.model_group_ids
+      }
+      await createUser(payload)
       message.success('创建成功')
       setModalVisible(false)
       form.resetFields()
@@ -75,7 +83,15 @@ const UsersPage = () => {
   const handleUpdate = async (values: any) => {
     if (!editUser) return
     try {
-      await updateUser(editUser.user_id, values)
+      // GC-8: 编辑 admin 时，后端拒绝修改内部属性；前端剥掉 quota
+      // 避免初始值（admin.quota=-1）在 demote-to-user 时被一并提交，
+      // 覆盖 transition 自动副作用的 quota=0。
+      const payload = { ...values }
+      if (editUser.role === 'admin') {
+        delete payload.quota
+        delete payload.model_group_ids
+      }
+      await updateUser(editUser.user_id, payload)
       message.success('更新成功')
       setEditUser(null)
       form.resetFields()
@@ -179,7 +195,10 @@ const UsersPage = () => {
       key: 'quota',
       render: (quota: number, record: User) => (
         <Space>
-          {record.unlimited ? (
+          {record.role === 'admin' ? (
+            // GC-7 + GC-8: admin 账户额度由角色自动管理，无按钮入口
+            <Tag color="gold" style={{ borderRadius: 6 }}>∞ · 无限制</Tag>
+          ) : record.unlimited ? (
             <>
               <Tag color="gold" style={{ borderRadius: 6 }}>∞ · 无限制</Tag>
               <Button
@@ -214,16 +233,18 @@ const UsersPage = () => {
       title: '模型分组',
       dataIndex: 'model_group_ids',
       key: 'model_group_ids',
-      render: (groupIds: string[]) => (
+      render: (groupIds: string[], record: User) => (
         <Tag
-          color={groupIds && groupIds.length > 0 ? 'blue' : 'default'}
+          color={record.role === 'admin' ? 'gold' : (groupIds && groupIds.length > 0 ? 'blue' : 'default')}
           style={{
             borderRadius: '6px',
-            background: groupIds && groupIds.length > 0 ? 'rgba(37, 99, 235, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+            background: record.role === 'admin'
+              ? 'rgba(234, 179, 8, 0.15)'
+              : (groupIds && groupIds.length > 0 ? 'rgba(37, 99, 235, 0.15)' : 'rgba(100, 116, 139, 0.15)'),
             border: 'none',
           }}
         >
-          {getGroupNames(groupIds)}
+          {record.role === 'admin' ? '全部模型分组' : getGroupNames(groupIds)}
         </Tag>
       )
     },
@@ -378,6 +399,7 @@ const UsersPage = () => {
           <Form.Item
             name="quota"
             label={<span style={{ color: token.colorTextSecondary }}>额度</span>}
+            hidden={watchedRole === 'admin'}
           >
             <InputNumber 
               placeholder="请输入额度"
@@ -387,6 +409,7 @@ const UsersPage = () => {
           <Form.Item 
             name="model_group_ids" 
             label={<span style={{ color: token.colorTextSecondary }}>模型分组</span>}
+            hidden={watchedRole === 'admin'}
           >
             <Select 
               mode="multiple" 
@@ -491,6 +514,7 @@ const UsersPage = () => {
           <Form.Item 
             name="model_group_ids" 
             label={<span style={{ color: token.colorTextSecondary }}>模型分组</span>}
+            hidden={watchedRole === 'admin'}
           >
             <Select 
               mode="multiple" 
