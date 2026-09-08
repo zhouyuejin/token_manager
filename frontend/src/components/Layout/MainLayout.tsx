@@ -198,19 +198,37 @@ const MainLayout = () => {
 
   const tourSteps = [
     {
-      title: '欢迎使用 Token 中转平台',
-      description: '让我们快速了解主要功能',
-      target: () => document.querySelector('[data-key="/api-keys"]') as HTMLElement,
-    },
-    {
       title: 'API Key 管理',
       description: '在这里创建和管理您的 API Key，开始使用平台服务',
-      target: () => document.querySelector('[data-key="/api-keys"]') as HTMLElement,
+      target: () => {
+        const items = document.querySelectorAll('.ant-menu-item');
+        for (const item of items) {
+          if (item.textContent?.trim() === 'API Key') return item as HTMLElement;
+        }
+        return null;
+      },
     },
     {
       title: '仪表盘',
       description: '查看用量统计和账户概览',
-      target: () => document.querySelector(`[data-key="${isAdmin ? '/admin/dashboard' : '/stats'}"]`) as HTMLElement,
+      target: () => {
+        const items = document.querySelectorAll('.ant-menu-item');
+        for (const item of items) {
+          if (item.textContent?.trim() === '仪表盘') return item as HTMLElement;
+        }
+        return null;
+      },
+    },
+    {
+      title: '消息通知',
+      description: '查看系统通知和重要提醒',
+      target: () => {
+        const items = document.querySelectorAll('.ant-menu-item');
+        for (const item of items) {
+          if (item.textContent?.trim() === '消息通知') return item as HTMLElement;
+        }
+        return null;
+      },
     },
   ];
 
