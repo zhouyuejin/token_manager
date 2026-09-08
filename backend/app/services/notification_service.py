@@ -128,18 +128,59 @@ def get_notification_list(
 async def notify_admins_new_user(db: Session, user: User) -> None:
     """
     向所有管理员发送新用户注册通知。
-    通知失败不影响调用方。
+
+    每个管理员的通知使用 SAVEPOINT 隔离写入：单个通知失败只回滚自身，
+    不污染调用方的 db session，保证 /register 后续逻辑（如读取 user 属性）
+    不会被连带 500。
     """
     try:
         admins = db.query(User).filter(User.role == UserRole.admin).all()
-        for admin in admins:
-            await create_notification(
-                db=db,
+    except Exception as e:
+        logger.warning(f"[通知] 查询管理员列表失败: {e}")
+        return
+
+    saved_count = 0
+    for admin in admins:
+        savepoint = db.begin_nested()
+        try:
+            notif_id = f"notif_{secrets.token_hex(8)}"
+            notif = Notification(
+                notif_id=notif_id,
                 user_id=admin.user_id,
-                notif_type=NotificationType.user_registered,
+                type=NotificationType.user_registered,
                 title="新用户注册",
                 content=f"用户 {user.username}（{user.email}）已注册，等待分配权限和额度。",
-                metadata={"user_id": user.user_id, "username": user.username}
+                extra_data=json.dumps({"user_id": user.user_id, "username": user.username}),
+                is_read=0,
             )
-    except Exception as e:
-        logger.warning(f"[通知] 发送新用户注册通知失败: {e}")
+            db.add(notif)
+            db.flush()
+            db.refresh(notif)
+            savepoint.commit()
+            saved_count += 1
+
+            logger.info(f"[通知] 创建通知 {notif_id} 给用户 {admin.user_id}，类型: {NotificationType.user_registered.value}")
+
+            # WebSocket 实时推送
+            try:
+                ws_result = await ws_manager.send_to_user(admin.user_id, {
+                    "type": "new_notification",
+                    "notif": notif.to_dict()
+                })
+                if ws_result:
+                    logger.info(f"[通知] WebSocket 推送成功 {notif_id} 给用户 {admin.user_id}")
+                else:
+                    logger.warning(f"[通知] WebSocket 推送失败 {notif_id} 给用户 {admin.user_id}，用户可能未连接")
+            except Exception as e:
+                logger.error(f"[通知] WebSocket 推送异常 {notif_id} 给用户 {admin.user_id}: {e}")
+        except Exception as e:
+            savepoint.rollback()
+            logger.warning(f"[通知] 发送给管理员 {admin.user_id} 失败: {e}")
+            continue
+
+    # 至少有一条通知成功 flush 时，提交外层事务使其落库
+    if saved_count > 0:
+        try:
+            db.commit()
+        except Exception as e:
+            logger.warning(f"[通知] 提交新用户注册通知失败: {e}")
