@@ -307,3 +307,151 @@ class TestCheckQuotaErrors:
         )
         assert resp.status_code == 403
         assert "本月用量已达上限" in resp.json()["detail"]
+
+
+# =============================================================================
+# Test 5: 管理员调整额度通知
+# =============================================================================
+class TestQuotaAdjustNotifications:
+    def _get_token(self, username, password):
+        """登录并返回 access_token"""
+        response = client.post(
+            "/api/v1/auth/login",
+            data={"username": username, "password": hash_password_sha256(password)},
+        )
+        assert response.status_code == 200, f"Login failed: {response.json()}"
+        return response.json()["access_token"]
+
+    def _admin_token(self):
+        return self._get_token("admin", "adminpass")
+
+    def test_quota_increase_creates_notification(self):
+        """管理员增加额度，DB 中存在 quota_increase 通知，内容含增加额度"""
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db)
+            user = _create_user(db, "inc_user", "inc@test.com", quota=100)
+            db.commit()
+            user_id = user.user_id
+        finally:
+            db.close()
+
+        token = self._admin_token()
+        resp = client.post(
+            f"/api/v1/admin/users/{user_id}/quota",
+            json={"amount": 50, "reason": "bonus"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["new_quota"] == 150
+
+        # 验证 DB 中有 quota_increase 通知
+        db2 = TestingSessionLocal()
+        try:
+            from app.models.notification import Notification, NotificationType
+            notifs = db2.query(Notification).filter(
+                Notification.user_id == user.user_id,
+                Notification.type == NotificationType.quota_increase,
+            ).all()
+            assert len(notifs) == 1, f"Expected 1 notification, got {len(notifs)}"
+            notif = notifs[0]
+            assert "50" in notif.content, f"通知内容未包含增加额度: {notif.content}"
+            assert "150" in notif.content, f"通知内容未包含新额度: {notif.content}"
+        finally:
+            db2.close()
+
+    def test_quota_decrease_creates_notification(self):
+        """管理员减少额度，DB 中存在 quota_decrease 通知，内容含减少额度"""
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db)
+            user = _create_user(db, "dec_user", "dec@test.com", quota=100)
+            db.commit()
+            user_id = user.user_id
+        finally:
+            db.close()
+
+        token = self._admin_token()
+        resp = client.post(
+            f"/api/v1/admin/users/{user_id}/quota",
+            json={"amount": -30, "reason": "correction"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["new_quota"] == 70
+
+        # 验证 DB 中有 quota_decrease 通知
+        db2 = TestingSessionLocal()
+        try:
+            from app.models.notification import Notification, NotificationType
+            notifs = db2.query(Notification).filter(
+                Notification.user_id == user.user_id,
+                Notification.type == NotificationType.quota_decrease,
+            ).all()
+            assert len(notifs) == 1, f"Expected 1 notification, got {len(notifs)}"
+            notif = notifs[0]
+            assert "30" in notif.content, f"通知内容未包含减少额度: {notif.content}"
+            assert "70" in notif.content, f"通知内容未包含剩余额度: {notif.content}"
+        finally:
+            db2.close()
+
+    def test_quota_adjust_notification_contains_reason(self):
+        """验证 metadata 中包含操作原因"""
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db)
+            user = _create_user(db, "reason_user", "reason@test.com", quota=200)
+            db.commit()
+            user_id = user.user_id
+        finally:
+            db.close()
+
+        token = self._admin_token()
+        resp = client.post(
+            f"/api/v1/admin/users/{user_id}/quota",
+            json={"amount": 25, "reason": "monthly bonus"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+
+        db2 = TestingSessionLocal()
+        try:
+            from app.models.notification import Notification, NotificationType
+            import json
+            notif = db2.query(Notification).filter(
+                Notification.user_id == user.user_id,
+                Notification.type == NotificationType.quota_increase,
+            ).first()
+            assert notif is not None, "通知不存在"
+            extra = json.loads(notif.extra_data) if notif.extra_data else {}
+            # operator 字段应存在于 metadata 中
+            assert "operator" in extra, f"metadata 中缺少 operator: {extra}"
+        finally:
+            db2.close()
+
+    def test_quota_adjust_response_unaffected(self):
+        """通知发送失败时 API 仍返回 new_quota"""
+        import unittest.mock as mock
+
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db)
+            user = _create_user(db, "resp_user", "resp@test.com", quota=100)
+            db.commit()
+            user_id = user.user_id
+        finally:
+            db.close()
+
+        token = self._admin_token()
+        with mock.patch("app.services.notification_service.create_notification", side_effect=Exception("mocked error")):
+            resp = client.post(
+                f"/api/v1/admin/users/{user_id}/quota",
+                json={"amount": 20, "reason": "test"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.json()}"
+        data = resp.json()
+        assert "new_quota" in data, f"响应缺少 new_quota 字段: {data}"
+        assert data["new_quota"] == 120

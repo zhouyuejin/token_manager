@@ -493,6 +493,22 @@ async def adjust_user_quota(
         except Exception:
             pass  # 通知失败不影响主流程
     
+    # 额度减少时发送应用内通知
+    elif quota_data.amount < 0 and user.quota_change_alert:
+        from app.services.notification_service import create_notification
+        from app.models.notification import NotificationType
+        try:
+            await create_notification(
+                db=db,
+                user_id=user.user_id,
+                notif_type=NotificationType.quota_decrease,
+                title="额度已减少",
+                content=f"管理员收回了 {abs(quota_data.amount)} tokens，当前剩余 {user.quota - user.quota_used} tokens。",
+                metadata={"decreased": abs(quota_data.amount), "quota_remain": user.quota - user.quota_used, "operator": admin.user_id}
+            )
+        except Exception:
+            pass  # 通知失败不影响主流程
+
     # 发送额度变动通知
     change_type = "increase" if quota_data.amount > 0 else "decrease"
     asyncio.create_task(notify_quota_change(
@@ -502,6 +518,7 @@ async def adjust_user_quota(
         reason=quota_data.reason
     ))
     
+    ip_address = extract_client_ip(request)
     record_operation(
         db=db,
         operator=admin,
