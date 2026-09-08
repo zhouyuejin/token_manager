@@ -17,6 +17,7 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.provider import Provider, ProviderType, ProviderStatus
 from app.models.provider_quota import ProviderQuota, QuotaType
 from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.model_group import model_group_model_mappings
 from app.models.usage_log import UsageLog
 from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
@@ -829,14 +830,40 @@ async def delete_provider(
 ):
     """
     删除供应商（管理员）
+
+    级联清理：先找出该 Provider 下所有 ModelMapping，
+    然后清掉它们的 (a) model_group_model_mappings 关联、
+    (b) usage_logs 历史用量、(c) ModelMapping 本身，
+    最后再删 Provider。这样保证 usage_logs 不会出现指向不存在模型的孤儿行。
     """
     provider = db.query(Provider).filter(Provider.provider_id == provider_id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="供应商不存在")
-    
+
+    mappings = db.query(ModelMapping).filter(
+        ModelMapping.provider_id == provider_id
+    ).all()
+    model_ids = [m.model_id for m in mappings]
+
+    deleted_usages = 0
+    if model_ids:
+        # (a) 先清 model_group_model_mappings（FK RESTRICT，必须先做）
+        db.execute(
+            model_group_model_mappings.delete().where(
+                model_group_model_mappings.c.model_id.in_(model_ids)
+            )
+        )
+        # (b) 清 UsageLog 里 model 等于这些 id 的行
+        deleted_usages = db.query(UsageLog).filter(
+            UsageLog.model.in_(model_ids)
+        ).delete(synchronize_session=False)
+        # (c) 删 ModelMapping
+        for m in mappings:
+            db.delete(m)
+
     db.delete(provider)
     db.commit()
-        
+
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,
@@ -844,10 +871,11 @@ async def delete_provider(
         action="delete",
         target_type="provider",
         target_id=provider_id,
+        detail={"deleted_usages": deleted_usages, "deleted_mappings": len(model_ids)},
         ip_address=ip_address,
     )
-    
-    return {"message": "删除成功"}
+
+    return {"message": "删除成功", "deleted_usages": deleted_usages, "deleted_mappings": len(model_ids)}
 
 @router.post("/providers/{provider_id}/quota/sync")
 async def sync_provider_quota(
@@ -1213,16 +1241,31 @@ async def delete_model_mapping(
 ):
     """
     删除模型映射（管理员）
+
+    级联清理：先清掉 (a) model_group_model_mappings 关联、
+    (b) usage_logs 历史用量，再删 ModelMapping 本身。
+    这样保证 usage_logs 不会出现指向不存在模型的孤儿行。
     """
     mapping = db.query(ModelMapping).filter(
         ModelMapping.model_id == model_id
     ).first()
     if not mapping:
         raise HTTPException(status_code=404, detail="模型映射不存在")
-    
+
+    # (a) 先清 model_group_model_mappings（FK RESTRICT，必须先做）
+    db.execute(
+        model_group_model_mappings.delete().where(
+            model_group_model_mappings.c.model_id == model_id
+        )
+    )
+    # (b) 清 UsageLog 里 model 等于这个 model_id 的行
+    deleted_usages = db.query(UsageLog).filter(
+        UsageLog.model == model_id
+    ).delete(synchronize_session=False)
+
     db.delete(mapping)
     db.commit()
-        
+
     ip_address = extract_client_ip(request)
     record_operation(
         db=db,
@@ -1230,10 +1273,11 @@ async def delete_model_mapping(
         action="delete",
         target_type="model_mapping",
         target_id=model_id,
+        detail={"deleted_usages": deleted_usages},
         ip_address=ip_address,
     )
-    
-    return {"message": "删除成功"}
+
+    return {"message": "删除成功", "deleted_usages": deleted_usages}
 
 
 # ========== 模型同步管理 ==========
