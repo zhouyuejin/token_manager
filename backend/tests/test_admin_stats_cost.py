@@ -210,3 +210,73 @@ class TestAdminStatsCost:
         cost = _fetch_costs("orphan-model")
         assert cost is not None, "orphan-model 应该出现在 by_model 里"
         assert cost == 0.0
+
+
+# ========== 级联删除回归测试 ==========
+
+class TestDeleteCascade:
+    """删 Provider / ModelMapping 时必须清掉 UsageLog，防止孤儿。"""
+
+    def _setup_priced_model_with_usage(self):
+        """通用 helper：建一个 provider + 一个配价的 model + 一条 usage log。"""
+        _make_admin()
+        _make_provider()
+        _make_mapping(model_id="orphan-test", provider_model="orphan-test",
+                      in_price=0.01, out_price=0.02)
+        _make_usage("orphan-test", 1000, 500)
+
+    def test_delete_provider_cascades_to_usage_log(self):
+        """删 Provider 后，原本属于它模型的所有 UsageLog 必须被清掉。"""
+        self._setup_priced_model_with_usage()
+        # 验证前置状态：1 条 UsageLog
+        db = TestingSessionLocal()
+        try:
+            assert db.query(UsageLog).filter(UsageLog.model == "orphan-test").count() == 1
+        finally:
+            db.close()
+
+        tok = _admin_token()
+        r = client.delete(
+            "/api/v1/admin/providers/prov_1",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["deleted_mappings"] >= 1
+        assert body["deleted_usages"] == 1
+
+        # 验证后置状态：UsageLog 没了，ModelMapping 也没了，Provider 也没了
+        db = TestingSessionLocal()
+        try:
+            assert db.query(UsageLog).filter(UsageLog.model == "orphan-test").count() == 0
+            assert db.query(ModelMapping).filter(ModelMapping.provider_id == "prov_1").count() == 0
+            assert db.query(Provider).filter(Provider.provider_id == "prov_1").count() == 0
+        finally:
+            db.close()
+
+    def test_delete_model_mapping_cascades_to_usage_log(self):
+        """删单个 ModelMapping 后，引用它的 UsageLog 必须被清掉。"""
+        self._setup_priced_model_with_usage()
+        # 同时建另一个模型，确认不会误删
+        _make_mapping(model_id="keep-me", provider_model="keep-me",
+                      in_price=0.01, out_price=0.01)
+        _make_usage("keep-me", 100, 100)
+
+        tok = _admin_token()
+        r = client.delete(
+            "/api/v1/admin/models/orphan-test",
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["deleted_usages"] == 1
+
+        db = TestingSessionLocal()
+        try:
+            # orphan-test 相关的全清
+            assert db.query(UsageLog).filter(UsageLog.model == "orphan-test").count() == 0
+            assert db.query(ModelMapping).filter(ModelMapping.model_id == "orphan-test").count() == 0
+            # keep-me 应该原封不动
+            assert db.query(UsageLog).filter(UsageLog.model == "keep-me").count() == 1
+            assert db.query(ModelMapping).filter(ModelMapping.model_id == "keep-me").count() == 1
+        finally:
+            db.close()
