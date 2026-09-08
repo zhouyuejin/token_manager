@@ -181,25 +181,59 @@ async def chat_completions(
         def sync_generator():
             """同步generator，用于在StreamingResponse中迭代"""
             from app.core.database import SessionLocal
+            import json
             db = SessionLocal()
             try:
+                completion_text = ""  # 累积completion文本用于token统计
                 for chunk in stream_generator:
+                    # 解析SSE chunk，提取delta.content用于token计数
+                    line = chunk.strip()
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str and data_str != "[DONE]":
+                            try:
+                                data = json.loads(data_str)
+                                choices = data.get("choices", [])
+                                if choices:
+                                    delta = choices[0].get("delta", {})
+                                    content = delta.get("content", "")
+                                    if content:
+                                        completion_text += content
+                            except (json.JSONDecodeError, KeyError, TypeError):
+                                pass
                     yield chunk
             finally:
-                # 流结束时记录延迟（使用新的数据库会话）
+                # 流结束时记录延迟并扣减额度
                 latency_ms = int((time.time() - start_time) * 1000)
                 try:
                     service = create_proxy_service(db)
+                    # 计算实际token数量
+                    prompt_tokens = 0
+                    if "messages" in request_data:
+                        for msg in request_data["messages"]:
+                            if "content" in msg:
+                                prompt_tokens += len(msg["content"]) // 4
+                    completion_tokens = len(completion_text) // 4
+                    total_tokens = prompt_tokens + completion_tokens
+                    tokens = {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": total_tokens
+                    }
+                    # 记录用量（使用实际token数）
                     service.record_usage(
                         user_id=_user_id,
                         key_id=_key_id,
                         provider_id=_provider_id,
                         model=_model,
-                        tokens={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        tokens=tokens,
                         latency_ms=latency_ms,
                         status_code=200,
                         error_message=None
                     )
+                    # 扣减额度（使用实际token数，而非估算值）
+                    import asyncio
+                    asyncio.run(service.deduct_quota(user, api_key, tokens))
                 finally:
                     db.close()
         

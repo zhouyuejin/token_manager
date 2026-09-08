@@ -123,7 +123,21 @@ const Chat: React.FC = () => {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(errorText || '请求失败')
+        // 尝试解析后端返回的 JSON 错误格式 {"detail":"..."}
+        let errorMessage = '请求失败'
+        try {
+          const parsed = JSON.parse(errorText)
+          if (parsed.detail) {
+            errorMessage = parsed.detail
+          } else if (parsed.message) {
+            errorMessage = parsed.message
+          } else {
+            errorMessage = errorText || '请求失败'
+          }
+        } catch {
+          errorMessage = errorText || '请求失败'
+        }
+        throw new Error(errorMessage)
       }
 
       // 处理流式响应
@@ -174,9 +188,11 @@ const Chat: React.FC = () => {
       await loadMessages(conversationId)
       setStreaming(false)
       setSending(false)
-    } catch (error) {
+    } catch (error: any) {
       console.error('发送消息失败:', error)
-      message.error('发送消息失败')
+      // 优先显示后端返回的具体错误信息（如额度不足）
+      const detail = error?.message || '发送消息失败'
+      message.error(detail)
       setMessages(prev => prev.slice(0, -2))
       setStreaming(false)
       setSending(false)

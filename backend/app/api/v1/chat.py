@@ -444,6 +444,14 @@ async def send_message(
             detail=group_check["message"]
         )
 
+    # 检查额度 (fail-fast: 额度不足直接返回,不写入任何状态)
+    quota_check = proxy_service.check_quota(current_user, api_key, 1000)
+    if not quota_check["allowed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=quota_check["message"]
+        )
+
     # === All pre-flight checks passed. Now persist the user-side state. ===
 
     # 如果是第一条消息，自动生成标题
