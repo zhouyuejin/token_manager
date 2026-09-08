@@ -436,13 +436,13 @@ const StatsPage = () => {
               borderRadius: 16,
             }}
             styles={{
-              body: { padding: '20px' },
+              body: { padding: '16px', height: 332 },
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
             {quotaTotal > 0 ? (
               <ReactECharts
-                style={{ height: 280 }}
+                style={{ height: 300 }}
                 option={quotaChartOption}
                 notMerge={true}
               />
@@ -496,7 +496,7 @@ const StatsPage = () => {
               borderRadius: 16,
             }}
             styles={{
-              body: { padding: '16px', height: 320, overflow: 'hidden' },
+              body: { padding: '16px', height: 332, overflow: 'hidden' },
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
@@ -506,7 +506,7 @@ const StatsPage = () => {
               rowKey="key_id"
               pagination={false}
               size="small"
-              scroll={{ y: 288 }}
+              scroll={{ y: 300 }}
               style={{
                 background: 'transparent',
               }}
@@ -622,7 +622,7 @@ const StatsPage = () => {
               border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
-            styles={{ body: { padding: '16px' } }}
+            styles={{ body: { padding: '16px', height: 332 } }}
           >
             <ReactECharts
               style={{ height: 300 }}
@@ -707,6 +707,7 @@ const StatsPage = () => {
               border: `1px solid ${token.colorBorder}`,
               borderRadius: 16,
             }}
+            styles={{ body: { padding: '16px', height: 332 } }}
           >
             <ReactECharts
               style={{ height: 300 }}
