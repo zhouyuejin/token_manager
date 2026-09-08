@@ -75,6 +75,15 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     # 前端已对密码进行 SHA256 哈希，直接存储
     # 使用 SHA256 哈希值存储（不再使用 bcrypt）
     password_hash = user_data.password  # 已经是前端哈希后的值
+
+    # 新注册用户自动分配默认模型分组
+    from app.models.model_group import get_unique_default_group
+    import json
+    default_group = get_unique_default_group(db)
+    if default_group:
+        model_group_ids = json.dumps([default_group.group_id])
+    else:
+        model_group_ids = '[]'
     
     # 创建用户
     user = User(
@@ -83,7 +92,8 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         password=password_hash,
         role=UserRole.user,
-        status=UserStatus.active
+        status=UserStatus.active,
+        model_group_ids=model_group_ids
     )
     db.add(user)
     db.commit()
