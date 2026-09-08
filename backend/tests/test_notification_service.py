@@ -154,3 +154,59 @@ class TestNotifyAdminsNewUser:
                 asyncio.run(notify_admins_new_user(db, user))
         finally:
             db.close()
+
+    def test_notification_failure_does_not_poison_session(self):
+        """通知 flush 失败时，调用方的 db session 仍可继续使用（SAVEPOINT 隔离）
+
+        回归测试：notifications.type 列若缺少 user_registered，INSERT 会失败；
+        savepoint 必须隔离这次失败，否则 session 被毒化，/register 读 user 属性
+        时会触发 PendingRollbackError 导致 500。
+        """
+        from sqlalchemy import text
+        db = TestingSessionLocal()
+        try:
+            admin = _create_admin(db, username="safe_admin2", email="safe2@test.com")
+            user = _create_user(db, username="boom_user2", email="boom_u2@test.com")
+
+            # 临时把 notifications.type 改回不含 user_registered，
+            # 复现未迁移的状态（这就是 /register 之前 500 的真实场景）
+            db.execute(text(
+                "ALTER TABLE notifications "
+                "MODIFY COLUMN type ENUM('quota_low','quota_increase','quota_decrease','daily_report','system') NOT NULL"
+            ))
+            db.commit()
+
+            try:
+                from app.services.notification_service import notify_admins_new_user
+                import asyncio
+                # 不应抛异常
+                asyncio.run(notify_admins_new_user(db, user))
+
+                # 关键断言：session 仍然可用，可以继续操作
+                # 如果 savepoint 没生效，这里会触发 PendingRollbackError
+                count = db.query(User).count()
+                assert count == 2  # admin + user
+
+                # 还能做后续写操作（模拟 /register 里 db.refresh + 读 user 属性）
+                extra = User(
+                    user_id="usr_extra",
+                    username="extra",
+                    email="extra@test.com",
+                    password=hash_password_sha256("x"),
+                    role=UserRole.user,
+                    status=UserStatus.active,
+                )
+                db.add(extra)
+                db.commit()
+                db.refresh(extra)
+                # 读 user 属性不能触发 PendingRollbackError
+                assert extra.username == "extra"
+            finally:
+                # 恢复 enum，避免影响其他测试
+                db.execute(text(
+                    "ALTER TABLE notifications "
+                    "MODIFY COLUMN type ENUM('quota_low','quota_increase','quota_decrease','daily_report','system','user_registered') NOT NULL"
+                ))
+                db.commit()
+        finally:
+            db.close()
