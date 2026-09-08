@@ -529,11 +529,8 @@ async def adjust_user_quota(
 
     elif quota_data.amount is not None:
         # 额度调整
-        if user.quota < 0:
-            raise HTTPException(
-                status_code=400,
-                detail="该用户当前为无限制额度，请先取消无限制后再调整金额"
-            )
+        from app.services.quota_guard import ensure_can_adjust_amount
+        ensure_can_adjust_amount(user)
 
         user.quota += quota_data.amount
         if user.quota < 0:
@@ -598,7 +595,8 @@ async def adjust_user_quota(
     
     return {
         "message": "额度调整成功",
-        "new_quota": user.quota
+        "new_quota": user.quota,
+        "unlimited": user.quota < 0
     }
 
 
