@@ -76,6 +76,9 @@ const AdminDashboard: React.FC = () => {
     return stats.by_model.reduce((sum, item) => sum + (item.cost || 0), 0)
   }, [stats, isDark, token])
   const hasUsage = (stats?.by_model?.length || 0) > 0
+  // 当前查询覆盖的天数（>=1，避免除 0）；用于把周期内成本折合成月预估
+  const dayCount = Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1)
+  const monthlyCost = totalCost * (30 / dayCount)
 
   // 获取模型显示名称
   const getModelDisplayName = (model: string, displayName?: string) => {
@@ -476,18 +479,30 @@ const AdminDashboard: React.FC = () => {
               borderRadius: 16,
             }}
           >
-            <Statistic
-              title={
-                <Tooltip title="费用 = 输入token × 输入价 + 输出token × 输出价（由模型映射的 price_per_1k_input/output 计算，单位 USD）">
-                  <span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>预估费用</span>
-                </Tooltip>
-              }
-              value={hasUsage ? totalCost : 0}
-              precision={2}
-              valueStyle={{ color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
-              prefix={<DollarOutlined style={{ color: '#F59E0B' }} />}
-              formatter={hasUsage ? undefined : () => '—'}
-            />
+            <div>
+              <Statistic
+                title={
+                  <Tooltip title="费用 = 输入token × 输入价 + 输出token × 输出价（由模型映射的 price_per_1k_input/output 计算，单位 USD）。下方为按当前速率折合的月度预估。">
+                    <span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>预估费用</span>
+                  </Tooltip>
+                }
+                value={hasUsage ? totalCost : 0}
+                precision={4}
+                valueStyle={{ color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
+                prefix={<DollarOutlined style={{ color: '#F59E0B' }} />}
+                formatter={hasUsage ? undefined : () => '—'}
+              />
+              {hasUsage && (
+                <div style={{
+                  marginTop: -8,
+                  fontSize: 12,
+                  color: 'rgba(148, 163, 184, 0.85)',
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}>
+                  按当前速率 ≈ <span style={{ color: '#F59E0B', fontWeight: 600 }}>${monthlyCost.toFixed(2)}</span> / 月
+                </div>
+              )}
+            </div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
