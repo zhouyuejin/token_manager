@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import {
+import { Tour,
   Layout,
   Menu,
   Avatar,
@@ -31,6 +31,7 @@ import { useThemeToken } from "../../theme/useThemeToken";
 import { useTheme } from "../../theme";
 import NotificationDropdown from "../NotificationDropdown";
 import { useNotificationStore } from "../../store/notification";
+import { getApiKeys } from "../../api/apiKeys";
 
 const { Sider } = Layout;
 
@@ -100,6 +101,8 @@ const MainLayout = () => {
   const isLightTheme = theme === "light";
 
   // 初始化折叠状态,优先从 localStorage 读取
+  const [tourOpen, setTourOpen] = useState(false);
+
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true";
@@ -113,6 +116,19 @@ const MainLayout = () => {
       navigate("/login");
     }
   }, [token, navigate]);
+
+  // 引导检测：无 API Key 时每次进入都显示引导
+  useEffect(() => {
+    getApiKeys().then(res => {
+      if (!res.items || res.items.length === 0) {
+        setTourOpen(true);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleTourFinish = () => {
+    setTourOpen(false);
+  };
 
   // 持久化折叠状态
   useEffect(() => {
@@ -178,6 +194,24 @@ const MainLayout = () => {
         ]
       : []),
     { key: "/settings", icon: <SettingOutlined />, label: "个人设置" },
+  ];
+
+  const tourSteps = [
+    {
+      title: '欢迎使用 Token 中转平台',
+      description: '让我们快速了解主要功能',
+      target: () => document.querySelector('[data-key="/api-keys"]') as HTMLElement,
+    },
+    {
+      title: 'API Key 管理',
+      description: '在这里创建和管理您的 API Key，开始使用平台服务',
+      target: () => document.querySelector('[data-key="/api-keys"]') as HTMLElement,
+    },
+    {
+      title: '仪表盘',
+      description: '查看用量统计和账户概览',
+      target: () => document.querySelector(`[data-key="${isAdmin ? '/admin/dashboard' : '/stats'}"]`) as HTMLElement,
+    },
   ];
 
   const userMenuItems: MenuProps["items"] = [
@@ -626,6 +660,11 @@ const MainLayout = () => {
           >
             <Outlet />
           </main>
+          <Tour
+            open={tourOpen}
+            steps={tourSteps}
+            onFinish={handleTourFinish}
+          />
         </Layout>
       </Layout>
     </div>
