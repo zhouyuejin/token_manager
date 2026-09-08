@@ -105,7 +105,7 @@ const UsersPage = () => {
         payload = { set_unlimited: true, reason: values.reason }
       } else {
         // cancel_unlimited
-        payload = { set_unlimited: false, amount: values.amount, reason: values.reason }
+        payload = { set_unlimited: false, reason: values.reason }
       }
       await adjustQuota(quotaUser.user_id, payload)
       message.success('额度调整成功')
@@ -180,7 +180,15 @@ const UsersPage = () => {
       render: (quota: number, record: User) => (
         <Space>
           {record.unlimited ? (
-            <Tag color="gold" style={{ borderRadius: 6 }}>∞ · 无限制</Tag>
+            <>
+              <Tag color="gold" style={{ borderRadius: 6 }}>∞ · 无限制</Tag>
+              <Button
+                type="text"
+                size="small"
+                icon={<DollarOutlined />}
+                onClick={() => openQuotaModal(record)}
+              />
+            </>
           ) : (
             <>
               <span style={{ 
@@ -189,25 +197,34 @@ const UsersPage = () => {
               }}>
                 {record.quota_used?.toLocaleString()} / {quota?.toLocaleString()}
               </span>
-              <Button 
-                type="text" 
-                size="small" 
+              <Button
+                type="text"
+                size="small"
                 icon={<DollarOutlined />}
                 onClick={() => openQuotaModal(record)}
-              />
+              >
+                调整
+              </Button>
             </>
           )}
         </Space>
       )
     },
-    { 
-      title: '模型分组', 
-      dataIndex: 'model_group_ids', 
+    {
+      title: '模型分组',
+      dataIndex: 'model_group_ids',
       key: 'model_group_ids',
       render: (groupIds: string[]) => (
-        <span style={{ color: token.colorTextSecondary }}>
+        <Tag
+          color={groupIds && groupIds.length > 0 ? 'blue' : 'default'}
+          style={{
+            borderRadius: '6px',
+            background: groupIds && groupIds.length > 0 ? 'rgba(37, 99, 235, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+            border: 'none',
+          }}
+        >
           {getGroupNames(groupIds)}
-        </span>
+        </Tag>
       )
     },
     { 
@@ -225,25 +242,32 @@ const UsersPage = () => {
       key: 'action',
       render: (_: any, record: User) => (
         <Space>
-          <Button 
-            type="text" 
-            size="small" 
+          <Button
+            type="text"
             icon={<EditOutlined />}
-            onClick={() => setEditUser(record)}
-          />
-          <Popconfirm
-            title="确定删除此用户？"
-            description="删除后不可恢复"
-            onConfirm={() => handleDelete(record.user_id)}
-            okText="确定"
-            cancelText="取消"
+            onClick={() => {
+              if (record.role === 'admin') return
+              setEditUser(record)
+              form.setFieldsValue(record)
+            }}
+            disabled={record.role === 'admin'}
+            style={{ color: record.role === 'admin' ? '#64748B' : '#3B82F6' }}
           >
-            <Button 
-              type="text" 
-              size="small" 
-              danger 
+            编辑
+          </Button>
+          <Popconfirm
+            title={record.role === 'admin' ? "不能删除管理员用户" : "确认删除此用户？"}
+            onConfirm={() => handleDelete(record.user_id)}
+            disabled={record.role === 'admin'}
+          >
+            <Button
+              type="text"
+              danger
               icon={<DeleteOutlined />}
-            />
+              disabled={record.role === 'admin'}
+            >
+              删除
+            </Button>
           </Popconfirm>
         </Space>
       ),
