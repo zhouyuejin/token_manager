@@ -322,9 +322,83 @@ const AdminDashboard: React.FC = () => {
     }
   }, [stats, isDark, token])
 
-  // ========== 模型使用分布配置 ==========
-  const maxTokens = stats?.by_model?.reduce((max, item) => 
-    Math.max(max, item.tokens || 0), 0) || 1
+  // ========== 模型使用分布配置（柱状图） ==========
+  const modelBarOption = useMemo(() => {
+    if (!stats?.by_model?.length) return null
+
+    // 按 token 数降序排列，便于一眼看出主力模型
+    const sortedModels = [...stats.by_model].sort((a, b) => b.tokens - a.tokens)
+    const names = sortedModels.map(m => getModelDisplayName(m.model, m.display_name))
+    const tokens = sortedModels.map(m => m.tokens || 0)
+
+    return {
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        textStyle: { color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" },
+        axisPointer: { type: 'shadow' },
+        formatter: (params: any) => {
+          const item = params[0]
+          return `<div style="font-family: 'Space Grotesk', sans-serif;">
+            <div style="font-weight: 600; margin-bottom: 4px;">${item.name}</div>
+            <div>Token: ${item.value.toLocaleString()}</div>
+          </div>`
+        }
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '8%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: names,
+        axisLine: { show: false },
+        axisLabel: {
+          color: token.colorTextSecondary,
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontSize: 11,
+          rotate: names.length > 4 ? 20 : 0,
+          interval: 0
+        },
+        axisTick: { show: false }
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisLabel: {
+          color: token.colorTextSecondary,
+          fontFamily: "'Space Grotesk', sans-serif",
+          formatter: (value: number) => value.toLocaleString()
+        },
+        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+      },
+      series: [
+        {
+          type: 'bar',
+          barWidth: '40%',
+          data: tokens.map((t, i) => ({
+            value: t,
+            itemStyle: {
+              // 沿用原有渐变色板，与卡片标题的 BarChartOutlined（紫）保持品牌一致
+              color: {
+                type: 'linear',
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: ['#A78BFA', '#60A5FA', '#34D399', '#FBBF24', '#F472B6'][i % 5] },
+                  { offset: 1, color: ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899'][i % 5] }
+                ]
+              },
+              borderRadius: [4, 4, 0, 0]
+            }
+          }))
+        }
+      ]
+    }
+  }, [stats, isDark, token])
 
   // ========== 成本统计配置 ==========
   const maxCost = stats?.by_model?.reduce((max, item) => 
@@ -422,8 +496,8 @@ const AdminDashboard: React.FC = () => {
         }}>
           仪表盘
         </h2>
-        <RangePicker 
-          value={dateRange}
+        <RangePicker
+          value={dateRange as any}
           onChange={(dates: any) => {
             if (dates && dates[0] && dates[1]) {
               setDateRange([dates[0], dates[1]])
@@ -479,30 +553,36 @@ const AdminDashboard: React.FC = () => {
               borderRadius: 16,
             }}
           >
-            <div>
-              <Statistic
-                title={
-                  <Tooltip title="费用 = 输入token × 输入价 + 输出token × 输出价（由模型映射的 price_per_1k_input/output 计算，单位 USD）。下方为按当前速率折合的月度预估。">
-                    <span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>预估费用</span>
-                  </Tooltip>
-                }
-                value={hasUsage ? totalCost : 0}
-                precision={4}
-                valueStyle={{ color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
-                prefix={<DollarOutlined style={{ color: '#F59E0B' }} />}
-                formatter={hasUsage ? undefined : () => '—'}
-              />
-              {hasUsage && (
-                <div style={{
-                  marginTop: -8,
-                  fontSize: 12,
-                  color: 'rgba(148, 163, 184, 0.85)',
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}>
-                  按当前速率 ≈ <span style={{ color: '#F59E0B', fontWeight: 600 }}>${monthlyCost.toFixed(2)}</span> / 月
-                </div>
-              )}
-            </div>
+            <Statistic
+              title={
+                <Tooltip title="费用 = 输入token × 输入价 + 输出token × 输出价（由模型映射的 price_per_1k_input/output 计算，单位 USD）。下方为按当前速率折合的月度预估。">
+                  <span style={{
+                    color: 'rgba(148, 163, 184, 0.8)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                  }}>
+                    <span>预估费用</span>
+                    {hasUsage && (
+                      <span style={{
+                        fontSize: 12,
+                        fontWeight: 400,
+                        color: 'rgba(148, 163, 184, 0.7)',
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}>
+                        ≈ <span style={{ color: '#F59E0B', fontWeight: 600 }}>${monthlyCost.toFixed(2)}</span>/月
+                      </span>
+                    )}
+                  </span>
+                </Tooltip>
+              }
+              value={hasUsage ? totalCost : 0}
+              precision={4}
+              valueStyle={{ color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
+              prefix={<DollarOutlined style={{ color: '#F59E0B' }} />}
+              formatter={hasUsage ? undefined : () => '—'}
+            />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -543,36 +623,19 @@ const AdminDashboard: React.FC = () => {
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: 16,
             }}
-            styles={{ 
-              body: { padding: '20px', maxHeight: 400, overflow: 'auto' },
+            styles={{
+              body: { padding: '20px', height: 400 },
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
-            {stats?.by_model?.map((item, idx) => (
-              <div key={item.model} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ color: token.colorText, fontWeight: 500, fontSize: 13 }}>
-                    {getModelDisplayName(item.model, item.display_name)}
-                  </span>
-                  <span style={{ color: token.colorText, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, fontSize: 13 }}>
-                    {item.tokens?.toLocaleString()} tokens
-                  </span>
-                </div>
-                <div style={{ height: 8, background: token.colorBgContainer, borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ 
-                    height: '100%', 
-                    width: `${(item.tokens / maxTokens) * 100}%`,
-                    background: `linear-gradient(90deg, ${['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][idx % 5]} 0%, ${['#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F472B6'][idx % 5]} 100%)`,
-                    borderRadius: 4,
-                    transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-                  }} />
-                </div>
-              </div>
-            ))}
-            {(!stats?.by_model || stats?.by_model?.length === 0) && (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(100, 116, 139, 0.6)' }}>
-                暂无数据
-              </div>
+            {modelBarOption ? (
+              <ReactECharts
+                option={modelBarOption}
+                style={{ height: 350 }}
+                opts={{ renderer: 'svg' }}
+              />
+            ) : (
+              <Empty description="暂无数据" />
             )}
           </Card>
         </Col>
