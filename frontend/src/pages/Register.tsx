@@ -381,7 +381,7 @@ const Register = () => {
           zIndex: 10,
           width: 420,
           padding: 44,
-          background: 'rgba(8, 12, 20, 0.85)',
+          background: token.colorBgElevated,
           backdropFilter: 'blur(20px)',
           borderRadius: 24,
           border: '1px solid rgba(255, 255, 255, 0.06)',
@@ -396,7 +396,7 @@ const Register = () => {
             justifyContent: 'center',
             width: 64,
             height: 64,
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+            background: token.colorPrimary,
             borderRadius: 18,
             marginBottom: 20,
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
@@ -406,7 +406,7 @@ const Register = () => {
               fontFamily: "'Space Grotesk', sans-serif",
               fontWeight: 700,
               fontSize: 26,
-              color: '#E2E8F0',
+              color: token.colorText,
               textShadow: '0 2px 8px rgba(0,0,0,0.5)',
             }}>T</span>
           </div>
@@ -414,12 +414,12 @@ const Register = () => {
             fontFamily: "'Space Grotesk', sans-serif",
             fontSize: 24,
             fontWeight: 600,
-            color: '#E2E8F0',
+            color: token.colorText,
             marginBottom: 8,
           }}>
             注册账号
           </h1>
-          <p style={{ color: '#64748B', fontSize: 14 }}>
+          <p style={{ color: token.colorTextSecondary, fontSize: 14 }}>
             创建账号，开始使用
           </p>
         </div>
@@ -441,12 +441,12 @@ const Register = () => {
               style={{ marginBottom: 16 }}
             >
               <Input 
-                prefix={<UserOutlined style={{ color: '#475569' }} />} 
+                prefix={<UserOutlined style={{ color: token.colorTextSecondary }} />} 
                 placeholder="用户名（4-20位字母数字）"
                 style={{
                   height: 52,
-                  background: 'rgba(30, 41, 59, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: token.colorBgContainer,
+                  border: '1px solid ' + token.colorBorder,
                   borderRadius: 14,
                 }}
               />
@@ -463,12 +463,12 @@ const Register = () => {
               style={{ marginBottom: 16 }}
             >
               <Input 
-                prefix={<MailOutlined style={{ color: '#475569' }} />} 
+                prefix={<MailOutlined style={{ color: token.colorTextSecondary }} />} 
                 placeholder="邮箱"
                 style={{
                   height: 52,
-                  background: 'rgba(30, 41, 59, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: token.colorBgContainer,
+                  border: '1px solid ' + token.colorBorder,
                   borderRadius: 14,
                 }}
               />
@@ -485,12 +485,12 @@ const Register = () => {
               style={{ marginBottom: 16 }}
             >
               <Input.Password 
-                prefix={<LockOutlined style={{ color: '#475569' }} />} 
+                prefix={<LockOutlined style={{ color: token.colorTextSecondary }} />} 
                 placeholder="密码（至少8位）"
                 style={{
                   height: 52,
-                  background: 'rgba(30, 41, 59, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: token.colorBgContainer,
+                  border: '1px solid ' + token.colorBorder,
                   borderRadius: 14,
                 }}
               />
@@ -515,12 +515,12 @@ const Register = () => {
               style={{ marginBottom: 24 }}
             >
               <Input.Password 
-                prefix={<LockOutlined style={{ color: '#475569' }} />} 
+                prefix={<LockOutlined style={{ color: token.colorTextSecondary }} />} 
                 placeholder="确认密码"
                 style={{
                   height: 52,
-                  background: 'rgba(30, 41, 59, 0.5)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: token.colorBgContainer,
+                  border: '1px solid ' + token.colorBorder,
                   borderRadius: 14,
                 }}
               />
@@ -540,44 +540,44 @@ const Register = () => {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 600,
                 fontSize: 16,
-                background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+                background: token.colorPrimary,
                 border: '1px solid rgba(255,255,255,0.1)',
                 boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
               }}
               onMouseEnter={(e) => {
                 gsap.to(e.currentTarget, {
-                  background: 'linear-gradient(135deg, #234b70 0%, #102540 100%)',
+                  background: token.colorPrimaryHover || token.colorPrimary,
                   boxShadow: '0 6px 28px rgba(0, 0, 0, 0.4)',
                   duration: 0.25
                 })
               }}
               onMouseLeave={(e) => {
                 gsap.to(e.currentTarget, {
-                  background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1b2a 100%)',
+                  background: token.colorPrimary,
                   boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
                   duration: 0.25
                 })
               }}
             >
-              <span style={{ position: 'relative', zIndex: 1, letterSpacing: '0.15em', color: '#E2E8F0' }}>注 册</span>
+              <span style={{ position: 'relative', zIndex: 1, letterSpacing: '0.15em', color: '#fff' }}>注 册</span>
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', color: '#475569', fontSize: 14 }}>
+          <div style={{ textAlign: 'center', color: token.colorTextSecondary, fontSize: 14 }}>
             已有账号？{' '}
             <Link 
               to="/login" 
               style={{
-                color: '#94A3B8',
+                color: token.colorPrimary,
                 fontWeight: 500,
                 textDecoration: 'none',
                 transition: 'all 0.2s',
               }}
               onMouseEnter={(e) => {
-                gsap.to(e.currentTarget, { color: '#CBD5E1', duration: 0.2 })
+                gsap.to(e.currentTarget, { color: token.colorPrimaryHover || token.colorPrimary, duration: 0.2 })
               }}
               onMouseLeave={(e) => {
-                gsap.to(e.currentTarget, { color: '#94A3B8', duration: 0.2 })
+                gsap.to(e.currentTarget, { color: token.colorPrimary, duration: 0.2 })
               }}
             >
               立即登录
