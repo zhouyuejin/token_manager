@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Row, Col, Card, Statistic, DatePicker, Typography, Empty } from 'antd'
+import { Row, Col, Card, Statistic, DatePicker, Typography, Empty, Tooltip } from 'antd'
 import { 
   UserOutlined, 
   CloudServerOutlined, 
@@ -75,6 +75,7 @@ const AdminDashboard: React.FC = () => {
     if (!stats?.by_model) return 0
     return stats.by_model.reduce((sum, item) => sum + (item.cost || 0), 0)
   }, [stats, isDark, token])
+  const hasUsage = (stats?.by_model?.length || 0) > 0
 
   // 获取模型显示名称
   const getModelDisplayName = (model: string, displayName?: string) => {
@@ -468,19 +469,24 @@ const AdminDashboard: React.FC = () => {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card 
-            style={{ 
+          <Card
+            style={{
               background: isDark ? 'linear-gradient(135deg, #1E3A5F 0%, #0F172A 100%)' : 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
               border: '1px solid rgba(245, 158, 11, 0.3)',
               borderRadius: 16,
             }}
           >
             <Statistic
-              title={<span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>预估费用</span>}
-              value={totalCost}
+              title={
+                <Tooltip title="费用 = 输入token × 输入价 + 输出token × 输出价（由模型映射的 price_per_1k_input/output 计算，单位 USD）">
+                  <span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>预估费用</span>
+                </Tooltip>
+              }
+              value={hasUsage ? totalCost : 0}
               precision={2}
               valueStyle={{ color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
               prefix={<DollarOutlined style={{ color: '#F59E0B' }} />}
+              formatter={hasUsage ? undefined : () => '—'}
             />
           </Card>
         </Col>

@@ -37,9 +37,9 @@ class ModelMapping(Base):
     
     # 定价配置
     price_type = Column(Enum(PriceType), default=PriceType.token, nullable=False, comment="计费类型")
-    price_per_1k_input = Column(Numeric(10, 4), default=0, nullable=False, comment="每千输入token价格(单位:元)")
-    price_per_1k_output = Column(Numeric(10, 4), default=0, nullable=False, comment="每千输出token价格(单位:元)")
-    price_per_request = Column(Numeric(10, 4), default=0, nullable=False, comment="每次请求价格(单位:元)")
+    price_per_1k_input = Column(Numeric(10, 6), default=0, nullable=False, comment="每千输入token价格(单位:$)")
+    price_per_1k_output = Column(Numeric(10, 6), default=0, nullable=False, comment="每千输出token价格(单位:$)")
+    price_per_request = Column(Numeric(10, 6), default=0, nullable=False, comment="每次请求价格(单位:$)")
     
     status = Column(Enum(ModelMappingStatus), default=ModelMappingStatus.active, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
