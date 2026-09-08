@@ -213,7 +213,7 @@ const Chat: React.FC = () => {
   }, [modelConfig])
 
   return (
-    <Layout style={{ height: 'calc(100% + 40px)', margin: '-20px', background: token.colorBgLayout }}>
+    <Layout style={{ height: 'calc(100vh - 56px)', margin: '-20px', background: token.colorBgLayout }}>
       <Sider
         width={SIDEBAR_WIDTH}
         collapsedWidth={0}
@@ -229,7 +229,7 @@ const Chat: React.FC = () => {
         />
       </Sider>
 
-      <Layout style={{ background: token.colorBgLayout }}>
+      <Layout style={{ background: token.colorBgLayout, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* 顶部标题区域 - 简洁优化 */}
         <div
           style={{
@@ -246,7 +246,7 @@ const Chat: React.FC = () => {
           </span>
         </div>
 
-        <Layout.Content style={{ overflow: 'hidden' }}>
+        <Layout.Content style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <MessageList
             messages={messages}
             loading={loading}
