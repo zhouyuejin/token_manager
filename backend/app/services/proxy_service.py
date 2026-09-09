@@ -21,7 +21,7 @@ from app.models.api_key import ApiKey
 from app.models.channel import Channel, ChannelStatus, ChannelHealthStatus
 from app.models.model import Model, ModelStatus
 from app.models.model_channel import ModelChannel
-from app.models.model_group import ModelGroup, ModelGroupStatus
+from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_model_mappings
 from app.models.usage_log import UsageLog
 
 
@@ -117,11 +117,17 @@ class ProxyService:
                 "message": "当前 Key 未被授权访问该模型"
             }
 
-        # 模型 → 分组（直接绑定）
-        bound_active_group_ids = {
-            g.group_id for g in model.model_groups
-            if g.status == ModelGroupStatus.active
-        }
+        # 模型 → 分组（通过 model_group_model_mappings 表查询）
+        bound_active_group_ids = set()
+        group_mapping = self.db.query(
+            model_group_model_mappings.c.group_id
+        ).join(
+            ModelGroup, ModelGroup.group_id == model_group_model_mappings.c.group_id
+        ).filter(
+            model_group_model_mappings.c.model_id == model_id,
+            ModelGroup.status == ModelGroupStatus.active
+        ).all()
+        bound_active_group_ids = {g.group_id for g in group_mapping}
 
         if not bound_active_group_ids:
             return {
@@ -196,7 +202,7 @@ class ProxyService:
                 ModelChannel.model_id == model_id,
                 ModelChannel.enabled == True,
                 Channel.status == ChannelStatus.active,
-                Channel.health_status != ChannelHealthStatus.unhealthy,
+                (Channel.health_status == None) | (Channel.health_status != ChannelHealthStatus.unhealthy),
                 # 过滤 cooldown
                 (Channel.cooldown_until == None) | (Channel.cooldown_until < now)
             )
@@ -238,7 +244,7 @@ class ProxyService:
                 ModelChannel.model_id == model_id,
                 ModelChannel.enabled == True,
                 Channel.status == ChannelStatus.active,
-                Channel.health_status != ChannelHealthStatus.unhealthy,
+                (Channel.health_status == None) | (Channel.health_status != ChannelHealthStatus.unhealthy),
                 (Channel.cooldown_until == None) | (Channel.cooldown_until < now)
             )
             .order_by(
