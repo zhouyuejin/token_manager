@@ -29,9 +29,12 @@ interface SystemStats {
 
 // 颜色配置
 const CHART_COLORS = [
-  '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', 
+  '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899',
   '#06B6D4', '#84CC16', '#F97316', '#6366F1', '#14B8A6'
 ]
+
+// 用户分布只取前 N 名，剩余折叠为"其他"——避免用户多了之后图例/切片不可读
+const TOP_USERS_DISPLAY = 10
 
 const AdminDashboard: React.FC = () => {
   const { token, isDark } = useThemeToken()
@@ -85,67 +88,98 @@ const AdminDashboard: React.FC = () => {
     return displayName || model
   }
 
-  // ========== 用户分布饼图配置 ==========
-  const userPieOption = useMemo(() => {
+  // ========== 用户分布横向条形图配置（Top N + 其他折叠） ==========
+  const userBarOption = useMemo(() => {
     if (!stats?.by_user?.length) return null
-    
+
     const totalTokens = stats.by_user.reduce((sum, u) => sum + u.tokens, 0)
-    const data = stats.by_user.map((user, idx) => ({
-      name: user.username || user.user_id,
-      value: user.tokens,
-      percent: totalTokens > 0 ? ((user.tokens / totalTokens) * 100).toFixed(1) : 0
-    }))
+    const sorted = [...stats.by_user].sort((a, b) => b.tokens - a.tokens)
+    const head = sorted.slice(0, TOP_USERS_DISPLAY)
+    const rest = sorted.slice(TOP_USERS_DISPLAY)
+    const restTokens = rest.reduce((sum, u) => sum + u.tokens, 0)
+
+    const labels: string[] = head.map(u => u.username || u.user_id)
+    const tokens: number[] = head.map(u => u.tokens)
+    if (rest.length > 0) {
+      labels.push(`其他（${rest.length} 人）`)
+      tokens.push(restTokens)
+    }
 
     return {
-      tooltip: {
-        trigger: 'item',
-        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-        textStyle: { color: token.colorText },
-        formatter: (params: any) => {
+     tooltip: {
+        trigger: 'axis',
+       backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+       borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+       textStyle: { color: token.colorText },
+        axisPointer: { type: 'shadow' },
+       formatter: (params: any) => {
+          const item = params[0]
+          const isOthers = rest.length > 0 && item.dataIndex === labels.length - 1 && item.name.startsWith('其他')
+          const percent = totalTokens > 0 ? ((item.value / totalTokens) * 100).toFixed(1) : '0.0'
+          const detail = isOthers
+            ? `<div>聚合用户数: ${rest.length}</div>`
+            : ''
           return `<div style="font-family: 'Space Grotesk', sans-serif;">
-            <div style="font-weight: 600; margin-bottom: 4px;">${params.name}</div>
-            <div>Token: ${params.value.toLocaleString()}</div>
-            <div>占比: ${params.percent}%</div>
+            <div style="font-weight: 600; margin-bottom: 4px;">${item.name}</div>
+            <div>Token: ${item.value.toLocaleString()}</div>
+            <div>占比: ${percent}%</div>
+            ${detail}
           </div>`
         }
       },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'center',
-        textStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
-        itemWidth: 12,
-        itemHeight: 12,
-        itemGap: 8,
+      grid: {
+        left: '3%',
+        right: '8%',
+        top: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisLabel: {
+          color: token.colorTextSecondary,
+          fontFamily: "'Space Grotesk', sans-serif",
+          formatter: (value: number) => value.toLocaleString()
+        },
+        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+      },
+      yAxis: {
+        type: 'category',
+        data: labels.slice().reverse(),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: token.colorTextSecondary,
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontSize: 12
+        }
       },
       series: [
         {
-          type: 'pie',
-          radius: ['45%', '70%'],
-          center: ['35%', '50%'],
-          avoidLabelOverlap: true,
-          itemStyle: {
-            borderRadius: 6,
-            borderColor: isDark ? 'rgba(17, 24, 39, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-            borderWidth: 2
-          },
-          label: {
-            show: false
-          },
-          emphasis: {
-            label: {
-              show: false
-            },
-            itemStyle: {
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
+          type: 'bar',
+          barWidth: '55%',
+          data: tokens.slice().reverse().map((t, i) => {
+            // 反转后数组里，"其他"会落在索引 0（视觉上在最下方）
+            const originalIndex = tokens.length - 1 - i
+            const isOthers = rest.length > 0 && originalIndex === tokens.length - 1
+            return {
+              value: t,
+              itemStyle: isOthers
+                ? { color: 'rgba(148, 163, 184, 0.45)', borderRadius: [0, 4, 4, 0] }
+                : {
+                    color: {
+                      type: 'linear',
+                      x: 0, y: 0, x2: 1, y2: 0,
+                      colorStops: [
+                        { offset: 0, color: '#60A5FA' },
+                        { offset: 1, color: '#3B82F6' }
+                      ]
+                    },
+                    borderRadius: [0, 4, 4, 0]
+                  }
             }
-          },
-          data: data.map((d, i) => ({
-            ...d,
-            itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
-          }))
+          })
         }
       ]
     }
@@ -662,9 +696,9 @@ const AdminDashboard: React.FC = () => {
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
-            {userPieOption ? (
-              <ReactECharts 
-                option={userPieOption} 
+            {userBarOption ? (
+              <ReactECharts
+                option={userBarOption}
                 style={{ height: 350 }}
                 opts={{ renderer: 'svg' }}
               />
