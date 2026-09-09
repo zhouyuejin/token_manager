@@ -23,7 +23,7 @@ from sqlalchemy.dialects import mysql
 
 # revision identifiers
 revision = '20260910_channels_models_refactor'
-down_revision = '20260909_1200_drop_api_key_limit_columns'
+down_revision = 'drop_api_key_limit_columns'
 branch_labels = None
 depends_on = None
 
