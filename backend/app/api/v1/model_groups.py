@@ -24,9 +24,12 @@ from app.schemas.model_group import (
 router = APIRouter()
 
 
-def _get_model_ids_from_group(group: ModelGroup) -> List[str]:
-    """从 group 对象提取绑定的 model_id 列表"""
-    return [m.model_id for m in group.model_mappings]
+def _get_model_ids_from_group(db: Session, group_id: str) -> List[str]:
+    """从 model_group_model_mappings 表查询该分组绑定的 model_id 列表"""
+    result = db.query(model_group_model_mappings.c.model_id).filter(
+        model_group_model_mappings.c.group_id == group_id
+    ).all()
+    return [row[0] for row in result]
 
 
 def _sync_model_bindings(db: Session, group: ModelGroup, model_ids: Optional[List[str]]) -> List[str]:
@@ -39,7 +42,7 @@ def _sync_model_bindings(db: Session, group: ModelGroup, model_ids: Optional[Lis
     - 返回最终绑定的 model_id 列表
     """
     if model_ids is None:
-        return _get_model_ids_from_group(group)
+        return _get_model_ids_from_group(db, group.group_id)
     
     # 去重
     unique_ids = list(set(model_ids))
@@ -57,13 +60,21 @@ def _sync_model_bindings(db: Session, group: ModelGroup, model_ids: Optional[Lis
                 detail=f"模型不存在: {', '.join(sorted(missing))}"
             )
     
-    # 重新构建绑定关系
-    group.model_mappings.clear()
-    if unique_ids:
-        models = db.query(ModelMapping).filter(
-            ModelMapping.model_id.in_(unique_ids)
-        ).all()
-        group.model_mappings.extend(models)
+    # 删除旧的绑定
+    db.execute(
+        model_group_model_mappings.delete().where(
+            model_group_model_mappings.c.group_id == group.group_id
+        )
+    )
+    
+    # 插入新的绑定
+    for model_id in unique_ids:
+        db.execute(
+            model_group_model_mappings.insert().values(
+                group_id=group.group_id,
+                model_id=model_id
+            )
+        )
     
     return unique_ids
 
@@ -108,7 +119,7 @@ async def list_model_groups(
     
     items = []
     for g in groups:
-        model_ids = _get_model_ids_from_group(g)
+        model_ids = _get_model_ids_from_group(db, g.group_id)
         items.append(ModelGroupResponse(
             group_id=g.group_id,
             name=g.name,
@@ -183,7 +194,7 @@ async def get_model_group(
             detail="模型分组不存在"
         )
     
-    model_ids = _get_model_ids_from_group(group)
+    model_ids = _get_model_ids_from_group(db, group_id)
     
     return ModelGroupResponse(
         group_id=group.group_id,
@@ -233,7 +244,7 @@ async def update_model_group(
     db.commit()
     db.refresh(group)
     
-    model_ids = _get_model_ids_from_group(group)
+    model_ids = _get_model_ids_from_group(db, group_id)
     
     return ModelGroupResponse(
         group_id=group.group_id,
@@ -254,7 +265,7 @@ async def delete_model_group(
 ):
     """
     删除模型分组（仅管理员）
-    §13 Task 5: 删除前检查是否有模型正在使用该分组，如有则拒绝删除（方案A）。
+    §13 Task 5: 删除前检查是否有模型正在使用该分组，如有则拒绝删除。
     删除后清理用户 JSON 中的 group_id。
     """
     group = db.query(ModelGroup).filter(
@@ -267,12 +278,15 @@ async def delete_model_group(
             detail="模型分组不存在"
         )
     
-    # §12 方案A：检查是否有模型绑定了该分组，拒绝删除
-    if group.model_mappings:
-        bound_models = [m.model_id for m in group.model_mappings]
+    # 检查是否有模型绑定了该分组
+    bound_count = db.query(model_group_model_mappings.c.model_id).filter(
+        model_group_model_mappings.c.group_id == group_id
+    ).count()
+    
+    if bound_count > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"该分组已绑定 {len(bound_models)} 个模型，请先解除绑定后再删除"
+            detail=f"该分组已绑定 {bound_count} 个模型，请先解除绑定后再删除"
         )
     
     # 清理用户 JSON 中的 group_id
@@ -295,7 +309,6 @@ async def set_model_group_as_default(
 ):
     """
     将指定分组设为唯一默认分组（管理员）。
-    事务性清除其他分组的默认状态（§2.2）；不补绑历史模型（§2.10）。
     """
     from app.services.model_groups_service import set_default_group
     set_default_group(db, group_id)
@@ -309,43 +322,34 @@ async def unset_model_group_default(
     current_user: User = Depends(require_admin),
 ):
     """
-    取消默认分组状态（管理员）。不清除已有模型绑定（§2.11）。
+    取消默认分组状态（管理员）。
     """
     from app.services.model_groups_service import unset_default_group
     unset_default_group(db, group_id)
     return {"message": "已取消默认分组"}
 
 
-# ============ 旧接口，迁移后保留兼容或删除 ============
+# ============ 已废弃的接口（基于 provider）============
 
 @router.get("/providers/{provider_id}", response_model=ModelGroupListResponse)
 async def get_groups_by_provider(
     provider_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)  # §13 Task 5: 仅管理员
+    current_user: User = Depends(require_admin)
 ):
     """
-    获取指定供应商关联的模型分组（仅管理员）
-    注意：此接口基于旧 provider 关联，返回结果可能不完整。
+    获取指定供应商关联的模型分组（已废弃）
+    注意：此接口基于旧的 provider 关联，返回结果可能不完整。
     建议使用按模型查询的接口。
     """
-    # 不再推荐使用，基于 provider 过滤不可靠
-    # 返回所有分组，由前端按需过滤
+    # 返回所有分组
     groups = db.query(ModelGroup).all()
     
     items = []
     for g in groups:
-        # 检查分组中是否有来自该供应商的模型
-        model_ids = _get_model_ids_from_group(g)
+        model_ids = _get_model_ids_from_group(db, g.group_id)
         if not model_ids:
             continue
-        models_from_provider = db.query(ModelMapping).filter(
-            ModelMapping.model_id.in_(model_ids),
-            ModelMapping.provider_id == provider_id
-        ).count()
-        if models_from_provider == 0:
-            continue
-            
         items.append(ModelGroupResponse(
             group_id=g.group_id,
             name=g.name,
