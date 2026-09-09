@@ -6,6 +6,7 @@
 import json
 import time
 from typing import Optional, List
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
@@ -26,7 +27,6 @@ class ChatMessage(BaseModel):
     role: str
     content: str
 
-from pydantic import BaseModel
 
 
 class ChatCompletionRequest(BaseModel):

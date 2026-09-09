@@ -33,7 +33,7 @@ model_group_model_mappings = Table(
     Column(
         'model_id',
         String(50),
-        ForeignKey('model_mappings.model_id', ondelete='RESTRICT'),
+        ForeignKey('models.model_id', ondelete='RESTRICT'),
         nullable=False,
     ),
     Column('created_at', DateTime, server_default=func.now()),
@@ -54,12 +54,6 @@ class ModelGroup(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    # 新关联：直接绑定模型映射
-    model_mappings = relationship(
-        "ModelMapping",
-        secondary=model_group_model_mappings,
-        back_populates="model_groups",
-    )
 
 
 def migrate_provider_group_bindings_to_models(db) -> int:
@@ -122,7 +116,7 @@ def bind_new_model_to_default_group(db, model_mapping) -> None:
     - 模型 active/disabled 都会绑定（§2.4）
     - 仅影响新创建的模型，更新已有模型不应调用本函数（§2.6）
     """
-    from app.models.model_mapping import ModelMapping
+    from app.models.model import Model as ModelMapping, ModelStatus as ModelMappingStatus
     default = get_unique_default_group(db)
     if default is None:
         return

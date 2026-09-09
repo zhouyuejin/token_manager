@@ -46,8 +46,6 @@ class AdminUserResponse(BaseModel):
     def unlimited(self) -> bool:
         return self.quota < 0
 
-    class Config:
-        from_attributes = True
 
 
 class UserListResponse(BaseModel):
@@ -92,11 +90,11 @@ class ChannelCreate(BaseModel):
     key_strategy: str = "round_robin"
     priority: int = 0
     timeout: int = 60
-    quota_type: str = "none"
-    quota_hourly: int = 0
-    quota_weekly: int = 0
-    sync_enabled: bool = False
-    sync_interval: int = 300
+    quota_type: Optional[str] = "none"
+    quota_hourly: Optional[int] = 0
+    quota_weekly: Optional[int] = 0
+    sync_enabled: Optional[bool] = False
+    sync_interval: Optional[int] = 300
     quota_config: Optional[QuotaConfig] = None
 
 
@@ -135,20 +133,17 @@ class ChannelResponse(BaseModel):
     health_status: str
     last_check_at: Optional[UtcDateTime] = None
     cooldown_until: Optional[UtcDateTime] = None
-    quota_type: str = "none"
-    quota_hourly: int = 0
-    quota_weekly: int = 0
-    sync_enabled: bool = False
-    sync_interval: int = 300
+    quota_type: Optional[str] = "none"
+    quota_hourly: Optional[int] = 0
+    quota_weekly: Optional[int] = 0
+    sync_enabled: Optional[bool] = False
+    sync_interval: Optional[int] = 300
     last_sync_at: Optional[UtcDateTime] = None
     quota_config: Optional[QuotaConfig] = None
     # 绑定模型数量（列表页聚合）
     bound_models_count: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
-
-    class Config:
-        from_attributes = True
 
 
 class ChannelWithModelsResponse(ChannelResponse):
@@ -232,8 +227,6 @@ class ModelResponse(BaseModel):
     # 所属分组
     model_groups: List[str] = Field(default_factory=list, description="所属分组名称列表")
 
-    class Config:
-        from_attributes = True
 
 
 class ModelWithChannelsResponse(ModelResponse):
@@ -279,8 +272,6 @@ class ModelChannelResponse(BaseModel):
     # 渠道信息（嵌套）
     channel: Optional[ChannelResponse] = None
 
-    class Config:
-        from_attributes = True
 
 
 # ========== 兼容性 (ModelMapping alias) ==========
@@ -311,8 +302,6 @@ class ChannelQuotaResponse(BaseModel):
     hourly: Optional["QuotaDetail"] = None
     weekly: Optional["QuotaDetail"] = None
 
-    class Config:
-        from_attributes = True
 
 
 class QuotaDetail(BaseModel):
