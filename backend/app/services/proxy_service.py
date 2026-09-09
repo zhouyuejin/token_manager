@@ -517,14 +517,11 @@ class ProxyService:
     ):
         """
         流式转发（不做 failover）。
-        
-        Yields: SSE chunks
+        返回一个生成器，yield SSE chunks。
         """
         result = self.select_channel(model_id, user, api_key)
-        
+
         if not result:
-            yield 'data: {"error": "无可用渠道"}\n\n'
-            yield "data: [DONE]\n\n"
             self._record_usage_failure(
                 user_id=user.user_id,
                 key_id=api_key.key_id,
@@ -533,10 +530,14 @@ class ProxyService:
                 status_code=502,
                 error="无可用渠道"
             )
-            return
+
+            def empty():
+                yield 'data: {"error": "无可用渠道"}\n\n'
+                yield "data: [DONE]\n\n"
+            return empty()
 
         ch, upstream_model, key = result
-        
+
         def generate():
             try:
                 with httpx.Client(timeout=ch.timeout) as client:
@@ -546,7 +547,7 @@ class ProxyService:
                         "Authorization": f"Bearer {key}",
                         "Content-Type": "application/json"
                     }
-                    
+
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
                         if response.status_code != 200:
                             error_msg = f"HTTP {response.status_code}"
@@ -567,10 +568,11 @@ class ProxyService:
                         for chunk in response.iter_lines():
                             if chunk:
                                 yield chunk + "\n"
-                                
+
             except Exception as e:
                 yield f'data: {{"error": "{str(e)}"}}\n\n'
-        
+                yield "data: [DONE]\n\n"
+
         return generate()
 
     def _record_usage_failure(

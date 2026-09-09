@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     @property
     def DATABASE_URL(self) -> str:
         """数据库连接URL"""
-        return f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
+        return f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}?charset=utf8mb4"
     
     @property
     def REDIS_URL(self) -> str:

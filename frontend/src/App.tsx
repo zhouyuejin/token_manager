@@ -77,6 +77,7 @@ function App() {
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="channels" element={<AdminChannels />} />
+              <Route path="providers" element={<Navigate to="/admin/channels" replace />} />
               <Route path="models" element={<AdminModels />} />
               <Route path="model-groups" element={<AdminModelGroups />} />
               <Route path="logs/operations" element={<OperationLogs />} />

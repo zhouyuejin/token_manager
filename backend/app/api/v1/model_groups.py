@@ -327,37 +327,3 @@ async def unset_model_group_default(
     from app.services.model_groups_service import unset_default_group
     unset_default_group(db, group_id)
     return {"message": "已取消默认分组"}
-
-
-# ============ 已废弃的接口（基于 provider）============
-
-@router.get("/providers/{provider_id}", response_model=ModelGroupListResponse)
-async def get_groups_by_provider(
-    provider_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
-):
-    """
-    获取指定供应商关联的模型分组（已废弃）
-    注意：此接口基于旧的 provider 关联，返回结果可能不完整。
-    建议使用按模型查询的接口。
-    """
-    # 返回所有分组
-    groups = db.query(ModelGroup).all()
-    
-    items = []
-    for g in groups:
-        model_ids = _get_model_ids_from_group(db, g.group_id)
-        if not model_ids:
-            continue
-        items.append(ModelGroupResponse(
-            group_id=g.group_id,
-            name=g.name,
-            description=g.description,
-            status=g.status.value,
-            is_default=g.is_default,
-            model_ids=model_ids,
-            created_at=g.created_at
-        ))
-    
-    return ModelGroupListResponse(total=len(items), items=items)
