@@ -8,6 +8,7 @@ import {
   getCurrentUser,
   UserInfo,
 } from '../api/auth'
+import { clearModelConfigStorage } from '../utils/chatStorage'
 
 interface AuthState {
   token: string | null
@@ -47,9 +48,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        const userId = get().user?.user_id
         const rt = get().refreshToken
         // 先清本地 store，避免撤销请求本身 401 时也被踢
         set({ token: null, refreshToken: null, user: null })
+        // 清掉该用户的 chat 模型偏好，避免本地残留他人/本人上次的模型选择。
+        // 自动登出（401）和手动登出都会走这里，统一处理不会漏。
+        clearModelConfigStorage(userId)
         if (rt) {
           try {
             await logoutServer(rt)

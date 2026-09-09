@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Select, Spin, Empty } from 'antd'
 import { getAvailableModels, ModelGroup } from '../../api/chat'
+import { pickInitialModelId } from '../../utils/chatStorage'
 
 interface ModelSelectorProps {
   value?: {
@@ -23,21 +24,26 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     fetchModels()
   }, [])
 
+  // 父级纠正（如 logout/login 触发 modelConfig 重置）能回流到 Select
+  useEffect(() => {
+    setSelectedModelId(value?.modelId)
+  }, [value?.modelId])
+
   const fetchModels = async () => {
     setLoading(true)
     try {
       const res = await getAvailableModels()
       setModelGroups(res.groups)
 
-      // 默认选中第一个可用模型,免得用户每次都要点
-      if (res.groups.length > 0 && !value?.modelId) {
-        for (const group of res.groups) {
-          if (group.models && group.models.length > 0) {
-            const firstModel = group.models[0]
-            setSelectedModelId(firstModel.model_id)
-            onChange?.({ modelId: firstModel.model_id })
-            break
-          }
+      // 校验持久化的 modelId 是否对当前用户仍可用。
+      // localStorage 是全局 key,跨用户/跨权限变更后会留下陈旧值,
+      // 不在可用集就回退到第一个,并通过 onChange 覆盖存储。
+      if (res.groups.length > 0) {
+        const availableIds = getAllModels(res.groups).map((m) => m.model_id)
+        const initial = pickInitialModelId(value?.modelId, availableIds)
+        if (initial !== value?.modelId) {
+          setSelectedModelId(initial)
+          onChange?.({ modelId: initial })
         }
       }
     } catch (error) {
@@ -48,10 +54,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   }
 
   // 聚合所有分组下的模型,按 model_id 去重
-  const getAllModels = () => {
+  const getAllModels = (groups: ModelGroup[] = modelGroups) => {
     const seen = new Set<string>()
     const result: { model_id: string; display_name?: string; provider_model?: string }[] = []
-    for (const group of modelGroups) {
+    for (const group of groups) {
       if (!group.models) continue
       for (const m of group.models) {
         if (seen.has(m.model_id)) continue
