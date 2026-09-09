@@ -44,11 +44,6 @@ class Model(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
     # 与模型分组的多对多关系
-    model_groups = relationship(
-        "ModelGroup",
-        secondary="model_group_model_mappings",
-        back_populates="model_mappings",
-    )
     
     # 与渠道的多对多关系
     model_channels = relationship("ModelChannel", back_populates="model", cascade="all, delete-orphan")

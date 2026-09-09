@@ -2,7 +2,7 @@
 Chat API - 对话管理接口
 """
 import json
-from typing import Optional, List
+from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -39,8 +39,8 @@ class ChatConversationResponse(BaseModel):
     channel_id: Optional[str] = None
     model_id: str
     system_prompt: Optional[str] = None
-    created_at: any
-    updated_at: any
+    created_at: Any
+    updated_at: Any
     message_count: int = 0
 
 
@@ -56,7 +56,7 @@ class ChatMessageResponse(BaseModel):
     content: str
     model: str
     tokens: int = 0
-    created_at: any
+    created_at: Any
 
 
 class ChatMessageListResponse(BaseModel):

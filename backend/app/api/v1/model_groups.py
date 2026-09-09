@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
 from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_model_mappings
-from app.models.model_mapping import ModelMapping
+from app.models.model import Model as ModelMapping, ModelStatus as ModelMappingStatus
 from app.dependencies import get_current_user, require_admin
 from app.schemas.model_group import (
     ModelGroupCreate, ModelGroupUpdate, ModelGroupResponse,

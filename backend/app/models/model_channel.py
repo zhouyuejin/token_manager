@@ -3,7 +3,7 @@
 
 表达 Model 与 Channel 的多对多关系，包含路由优先级和权重
 """
-from sqlalchemy import Column, BigInteger, String, Integer, DateTime, Boolean
+from sqlalchemy import Column, BigInteger, String, Integer, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -15,8 +15,8 @@ class ModelChannel(Base):
     __tablename__ = "model_channels"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    model_id = Column(String(50), nullable=False, index=True, comment="模型ID")
-    channel_id = Column(String(32), nullable=False, index=True, comment="渠道ID")
+    model_id = Column(String(50), ForeignKey("models.model_id", ondelete="CASCADE"), nullable=False, index=True, comment="模型ID")
+    channel_id = Column(String(32), ForeignKey("channels.channel_id", ondelete="CASCADE"), nullable=False, index=True, comment="渠道ID")
     upstream_model = Column(String(50), nullable=False, comment="该渠道上的实际上游模型名")
     
     # 路由配置

@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey
 from app.models.usage_log import UsageLog
-from app.models.model_mapping import ModelMapping
+from app.models.model import Model as ModelMapping, ModelStatus as ModelMappingStatus
 from app.dependencies import get_current_user
 from app.schemas.stats import UsageStatsResponse, ModelUsage, DailyUsage
 
