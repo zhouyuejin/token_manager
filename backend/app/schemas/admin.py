@@ -1,7 +1,7 @@
 """
 管理后台相关Schema
 """
-from pydantic import BaseModel, EmailStr, Field, model_validator, computed_field
+from pydantic import BaseModel, EmailStr, Field, model_validator, computed_field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
@@ -64,9 +64,6 @@ class QuotaAdjustRequest(BaseModel):
 
     @model_validator(mode="after")
     def check_mutual_exclusivity(self):
-        # amount 和 set_unlimited 在以下情况允许同时存在：
-        # - set_unlimited=True 时 amount 必须为 None（设为无限制不需要 amount）
-        # - set_unlimited=False 时 amount 可选（有则是取消无限制后的具体额度，没有则默认 0）
         if self.set_unlimited is True and self.amount is not None:
             raise ValueError("设为无限制时不能同时指定 amount")
         if self.set_unlimited is None and self.amount is None:
@@ -76,109 +73,141 @@ class QuotaAdjustRequest(BaseModel):
         return self
 
 
-# ========== 供应商管理 ==========
+# ========== 渠道管理 (Channel) ==========
 
 class QuotaConfig(BaseModel):
     """用量查询自定义配置"""
-    model_name: Optional[str] = None  # 查询的模型名称
-    custom_api_path: Optional[str] = None  # 自定义API路径
-    extra_params: Optional[Dict[str, str]] = None  # 其他自定义参数
+    model_name: Optional[str] = None
+    custom_api_path: Optional[str] = None
+    extra_params: Optional[Dict[str, str]] = None
 
 
-class ModelInput(BaseModel):
-    """模型输入（创建供应商时直接配置）"""
-    model_name: str = Field(..., description="上游模型名称，如 gpt-4")
-    display_name: str = Field(..., description="显示名称，如 GPT-4")
-
-
-class ProviderCreate(BaseModel):
-    """创建供应商请求"""
+class ChannelCreate(BaseModel):
+    """创建渠道请求"""
     name: str
     type: str
     endpoint: str
     api_key: str
-    priority: int = 100
+    extra_keys: Optional[List[str]] = Field(default=None, description="额外 Key 列表")
+    key_strategy: str = "round_robin"
+    priority: int = 0
     timeout: int = 60
+    quota_type: str = "none"
     quota_hourly: int = 0
     quota_weekly: int = 0
     sync_enabled: bool = False
-    sync_interval: int = 300  # 默认5分钟
+    sync_interval: int = 300
     quota_config: Optional[QuotaConfig] = None
-    models: Optional[List[ModelInput]] = Field(default=None, description="直接配置的模型列表")
 
 
-class ProviderUpdate(BaseModel):
-    """更新供应商请求"""
+class ChannelUpdate(BaseModel):
+    """更新渠道请求"""
     name: Optional[str] = None
     type: Optional[str] = None
     endpoint: Optional[str] = None
     api_key: Optional[str] = None
+    extra_keys: Optional[List[str]] = None
+    key_strategy: Optional[str] = None
     priority: Optional[int] = None
     timeout: Optional[int] = None
     status: Optional[str] = None
+    health_status: Optional[str] = None
+    quota_type: Optional[str] = None
     quota_hourly: Optional[int] = None
     quota_weekly: Optional[int] = None
     sync_enabled: Optional[bool] = None
     sync_interval: Optional[int] = None
     quota_config: Optional[QuotaConfig] = None
-    models: Optional[List[ModelInput]] = Field(default=None, description="直接配置的模型列表")
 
 
-class ProviderResponse(BaseModel):
-    """供应商响应"""
-    provider_id: str
+class ChannelResponse(BaseModel):
+    """渠道响应"""
+    channel_id: str
     name: str
     type: str
     endpoint: str
+    api_key: str
+    extra_keys: Optional[List[str]] = None
+    key_strategy: str = "round_robin"
     priority: int
     timeout: int
     status: str
     health_status: str
-    last_check_at: Optional[UtcDateTime]
-    quota_hourly: int
-    quota_weekly: int
+    last_check_at: Optional[UtcDateTime] = None
+    cooldown_until: Optional[UtcDateTime] = None
+    quota_type: str = "none"
+    quota_hourly: int = 0
+    quota_weekly: int = 0
     sync_enabled: bool = False
     sync_interval: int = 300
     last_sync_at: Optional[UtcDateTime] = None
     quota_config: Optional[QuotaConfig] = None
-    models: Optional[List[dict]] = None  # 模型列表
+    # 绑定模型数量（列表页聚合）
+    bound_models_count: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
     class Config:
         from_attributes = True
 
 
-class ProviderListResponse(BaseModel):
-    """供应商列表响应"""
+class ChannelWithModelsResponse(ChannelResponse):
+    """渠道响应（含绑定模型列表）"""
+    bound_models: List["ModelChannelResponse"] = []
+
+
+class ChannelListResponse(BaseModel):
+    """渠道列表响应"""
     total: int
-    items: List[ProviderResponse]
+    items: List[ChannelResponse]
 
 
-# ========== 模型映射管理 ==========
+# ========== 兼容性 (Provider alias) ==========
 
-class ModelMappingCreate(BaseModel):
-    """创建模型映射请求"""
+class ProviderCreate(ChannelCreate):
+    """兼容旧接口"""
+    pass
+
+
+class ProviderUpdate(ChannelUpdate):
+    """兼容旧接口"""
+    pass
+
+
+class ProviderResponse(ChannelResponse):
+    """兼容旧接口"""
+    
+    @classmethod
+    def from_channel(cls, channel: ChannelResponse) -> "ProviderResponse":
+        """从 ChannelResponse 转换"""
+        return cls(**{k: v for k, v in channel.model_dump().items()})
+
+
+class ProviderListResponse(ChannelListResponse):
+    """兼容旧接口"""
+    pass
+
+
+# ========== 模型管理 (Model) ==========
+
+class ModelCreate(BaseModel):
+    """创建模型请求"""
     model_id: Optional[str] = None
-    provider_id: str
-    provider_model: str
-    display_name: str
+    display_name: Optional[str] = None
     description: Optional[str] = None
     aliases: Optional[List[str]] = None
-    # 定价配置
-    price_type: str = "token"  # token 或 request
+    price_type: str = "token"
     price_per_1k_input: float = 0
     price_per_1k_output: float = 0
     price_per_request: float = 0
     status: str = "active"
 
 
-class ModelMappingUpdate(BaseModel):
-    """更新模型映射请求"""
-    provider_id: Optional[str] = None
-    provider_model: Optional[str] = None
+class ModelUpdate(BaseModel):
+    """更新模型请求"""
     display_name: Optional[str] = None
     description: Optional[str] = None
     aliases: Optional[List[str]] = None
-    # 定价配置
     price_type: Optional[str] = None
     price_per_1k_input: Optional[float] = None
     price_per_1k_output: Optional[float] = None
@@ -186,32 +215,121 @@ class ModelMappingUpdate(BaseModel):
     status: Optional[str] = None
 
 
-class ModelMappingResponse(BaseModel):
-    """模型映射响应"""
+class ModelResponse(BaseModel):
+    """模型响应"""
     model_id: str
-    provider_id: str
-    provider_model: str
-    display_name: str
+    display_name: Optional[str] = None
     description: Optional[str] = None
-    aliases: Optional[str] = None
-    # 定价配置
+    aliases: Optional[List[str]] = None
     price_type: str = "token"
     price_per_1k_input: float = 0
     price_per_1k_output: float = 0
     price_per_request: float = 0
     status: str
     created_at: Optional[UtcDateTime] = None
-    # 所属分组（Task 6）
+    # 绑定渠道数量（列表页聚合）
+    bound_channels_count: Optional[int] = None
+    # 所属分组
     model_groups: List[str] = Field(default_factory=list, description="所属分组名称列表")
 
     class Config:
         from_attributes = True
 
 
-class ModelMappingListResponse(BaseModel):
-    """模型映射列表响应"""
+class ModelWithChannelsResponse(ModelResponse):
+    """模型响应（含绑定渠道列表）"""
+    bound_channels: List["ModelChannelResponse"] = []
+
+
+class ModelListResponse(BaseModel):
+    """模型列表响应"""
     total: int
-    items: List[ModelMappingResponse]
+    items: List[ModelResponse]
+
+
+# ========== 模型-渠道绑定管理 (ModelChannel) ==========
+
+class ModelChannelCreate(BaseModel):
+    """创建模型-渠道绑定"""
+    channel_id: str
+    upstream_model: str
+    priority: int = 0
+    weight: int = 100
+    enabled: bool = True
+
+
+class ModelChannelUpdate(BaseModel):
+    """更新模型-渠道绑定"""
+    upstream_model: Optional[str] = None
+    priority: Optional[int] = None
+    weight: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+class ModelChannelResponse(BaseModel):
+    """模型-渠道绑定响应"""
+    id: int
+    model_id: str
+    channel_id: str
+    upstream_model: str
+    priority: int = 0
+    weight: int = 100
+    enabled: bool = True
+    created_at: Optional[UtcDateTime] = None
+    # 渠道信息（嵌套）
+    channel: Optional[ChannelResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ========== 兼容性 (ModelMapping alias) ==========
+
+class ModelMappingCreate(ModelCreate):
+    """兼容旧接口"""
+    provider_id: Optional[str] = None  # 忽略
+    provider_model: Optional[str] = None  # 忽略
+
+
+class ModelMappingUpdate(ModelUpdate):
+    """兼容旧接口"""
+    pass
+
+
+class ModelMappingResponse(ModelResponse):
+    """兼容旧接口"""
+    provider_id: Optional[str] = None  # 兼容字段
+    provider_model: Optional[str] = None  # 兼容字段
+
+
+# ========== 渠道配额 (ChannelQuota) ==========
+
+class ChannelQuotaResponse(BaseModel):
+    """渠道配额响应"""
+    channel_id: str
+    channel_name: Optional[str] = None
+    hourly: Optional["QuotaDetail"] = None
+    weekly: Optional["QuotaDetail"] = None
+
+    class Config:
+        from_attributes = True
+
+
+class QuotaDetail(BaseModel):
+    """配额详情"""
+    limit: int
+    used: int
+    remain: int
+    percent: float
+    reset_at: Optional[str] = None
+    last_sync: Optional[str] = None
+    raw_data: Optional[Any] = None
+
+
+class ChannelQuotaListResponse(BaseModel):
+    """渠道配额列表响应"""
+    total: int
+    items: List[ChannelQuotaResponse]
 
 
 # ========== 用量统计 ==========
@@ -224,9 +342,9 @@ class UserUsage(BaseModel):
     requests: int = 0
 
 
-class ProviderUsage(BaseModel):
-    """供应商用量统计"""
-    provider: str
+class ChannelUsage(BaseModel):
+    """渠道用量统计"""
+    channel: str
     tokens: int
     requests: int = 0
 
@@ -254,6 +372,15 @@ class AdminStatsResponse(BaseModel):
     avg_latency_ms: float = 0
     success_rate: float = 100.0
     by_user: List[UserUsage] = []
-    by_provider: List[ProviderUsage] = []
+    by_channel: List[ChannelUsage] = []
     by_model: List[ModelUsageStats] = []
     by_day: List[DailyUsageStats] = []
+    
+    # 兼容旧字段
+    by_provider: List[ChannelUsage] = []
+
+
+# 解决前向引用
+ChannelWithModelsResponse.model_rebuild()
+ModelWithChannelsResponse.model_rebuild()
+ChannelQuotaResponse.model_rebuild()

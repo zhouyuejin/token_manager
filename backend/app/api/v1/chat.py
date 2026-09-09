@@ -2,38 +2,100 @@
 Chat API - 对话管理接口
 """
 import json
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.user import User
 from app.models.api_key import ApiKey, ApiKeyStatus
-from app.models.chat import ChatConversation, ChatMessage
-from app.models.model_group import ModelGroup, ModelGroupStatus
-from app.models.model_mapping import ModelMapping, ModelMappingStatus
-from app.models.provider import Provider, ProviderStatus
+from app.models.chat import ChatConversation, ChatMessage, MessageRole
 from app.dependencies import get_current_user
-from app.schemas.chat import (
-    ChatConversationCreate,
-    ChatConversationUpdate,
-    ChatConversationResponse,
-    ChatConversationListResponse,
-    ChatMessageResponse,
-    ChatMessageListResponse,
-    ChatSendMessageRequest,
-    ChatSendMessageResponse,
-    ModelGroupInfo,
-    AvailableModelsResponse
-)
-from app.services.proxy_service import ProxyService, create_proxy_service
+from app.services.proxy_service import create_proxy_service
 
 router = APIRouter()
 
 
-# ========== 辅助函数 ==========
+class ChatConversationCreate(BaseModel):
+    title: Optional[str] = None
+    model: str
+    channel_id: Optional[str] = None  # 改为 channel_id
+    system_prompt: Optional[str] = None
+
+
+class ChatConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    model: Optional[str] = None
+    channel_id: Optional[str] = None
+    system_prompt: Optional[str] = None
+
+
+class ChatConversationResponse(BaseModel):
+    conversation_id: str
+    user_id: str
+    title: Optional[str] = None
+    channel_id: Optional[str] = None
+    model_id: str
+    system_prompt: Optional[str] = None
+    created_at: any
+    updated_at: any
+    message_count: int = 0
+
+
+class ChatConversationListResponse(BaseModel):
+    total: int
+    items: List[ChatConversationResponse]
+
+
+class ChatMessageResponse(BaseModel):
+    message_id: str
+    conversation_id: str
+    role: str
+    content: str
+    model: str
+    tokens: int = 0
+    created_at: any
+
+
+class ChatMessageListResponse(BaseModel):
+    total: int
+    items: List[ChatMessageResponse]
+
+
+class MessageItem(BaseModel):
+    role: str
+    content: str
+
+
+class ChatSendMessageRequest(BaseModel):
+    messages: List[MessageItem]
+    model: Optional[str] = None
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 1000
+    stream: Optional[bool] = False
+
+
+class ChatSendMessageResponse(BaseModel):
+    conversation_id: str
+    message_id: str
+    role: str
+    content: str
+    model: str
+    tokens: int = 0
+
+
+class ModelGroupInfo(BaseModel):
+    group_id: str
+    name: str
+    providers: List[dict]
+    models: List[dict]
+
+
+class AvailableModelsResponse(BaseModel):
+    groups: List[ModelGroupInfo]
+
 
 def get_user_api_key(db: Session, user_id: str) -> Optional[ApiKey]:
     """获取用户的第一个有效API Key"""
@@ -45,74 +107,52 @@ def get_user_api_key(db: Session, user_id: str) -> Optional[ApiKey]:
 
 def generate_conversation_title(first_message: str) -> str:
     """从第一条消息生成标题"""
-    # 移除换行符，取前20个字符
     title = first_message.replace("\n", " ").strip()
-    if len(title) > 20:
-        title = title[:20] + "..."
-    return title if title else "新对话"
+    return (title[:20] + "...") if len(title) > 20 else (title or "新对话")
 
-
-# ========== API Endpoints ==========
 
 @router.get("/models", response_model=AvailableModelsResponse)
-async def get_available_models(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    获取用户可用模型列表
-    M1 fix: filter by effective groups (default ∪ user-group union), not
-    by api_key.model_groups alone. They can diverge when defaults change.
-    """
-    # M1: use ProxyService.get_effective_model_group_ids(user) — single source.
-    # This includes any active default groups the admin set, even if the
-    # user's API key didn't pre-list them at create time.
+async def get_available_models(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """获取用户可用模型列表"""
     proxy_service = create_proxy_service(db)
     effective_group_ids = proxy_service.get_effective_model_group_ids(current_user)
 
     if not effective_group_ids:
         return AvailableModelsResponse(groups=[])
 
-    # 获取生效分组及其关联的供应商和模型
+    from app.models.model_group import ModelGroup
+    from app.models.model import Model, ModelStatus
+    from app.models.channel import Channel, ChannelStatus
+    from app.models.model_channel import ModelChannel
+
     groups = db.query(ModelGroup).filter(
         ModelGroup.group_id.in_(effective_group_ids),
         ModelGroup.status == "active"
     ).all()
 
-    # 该分组下"用户实际可访问"的模型：模型自身 active、供应商 active、且绑定此 active 分组
     result_groups = []
     for group in groups:
-        mappings = [
-            m for m in group.model_mappings
-            if m.status == ModelMappingStatus.active
-            and m.provider is not None
-            and m.provider.status == ProviderStatus.active
-        ]
-
-        models = [
-            {
-                "model_id": mapping.model_id,
-                "display_name": mapping.display_name,
-                "provider_model": mapping.provider_model,
-            }
-            for mapping in mappings
-        ]
-
-        providers_map = {m.provider_id: m.provider for m in mappings}
-        providers = [
-            {
-                "provider_id": p.provider_id,
-                "name": p.name,
-                "type": p.type.value if hasattr(p.type, 'value') else str(p.type),
-            }
-            for p in providers_map.values()
-        ]
+        # 获取该分组下可访问的模型（需绑定 enabled channel）
+        from sqlalchemy.orm import selectinload
+        mappings = (
+            db.query(Model)
+            .filter(Model.status == ModelStatus.active)
+            .join(Model.model_groups)
+            .join(Model.model_channels)
+            .join(Channel)
+            .filter(
+                ModelGroup.group_id == group.group_id,
+                ModelChannel.enabled == True,
+                Channel.status == ChannelStatus.active
+            )
+            .all()
+        )
 
         result_groups.append(ModelGroupInfo(
             group_id=group.group_id,
             name=group.name,
-            providers=providers,
-            models=models,
+            providers=[],  # 简化：不再返回 providers
+            models=[{"model_id": m.model_id, "display_name": m.display_name, "provider_model": m.model_id} for m in mappings]
         ))
 
     return AvailableModelsResponse(groups=result_groups)
@@ -120,499 +160,213 @@ async def get_available_models(
 
 @router.get("", response_model=ChatConversationListResponse)
 async def get_conversations(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    limit: int = 50,
-    offset: int = 0
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+    limit: int = 50, offset: int = 0
 ):
-    """
-    获取对话列表
-    """
-    # 查询用户的对话
-    query = db.query(ChatConversation).filter(
-        ChatConversation.user_id == current_user.user_id
-    )
-    
-    # 获取总数
+    """获取对话列表"""
+    query = db.query(ChatConversation).filter(ChatConversation.user_id == current_user.user_id)
     total = query.count()
-    
-    # 获取分页列表
-    conversations = query.order_by(
-        ChatConversation.updated_at.desc()
-    ).offset(offset).limit(limit).all()
-    
-    # 获取每个对话的消息数量
+    conversations = query.order_by(ChatConversation.updated_at.desc()).offset(offset).limit(limit).all()
+
     items = []
     for conv in conversations:
-        message_count = db.query(ChatMessage).filter(
-            ChatMessage.conversation_id == conv.conversation_id
-        ).count()
-        
+        message_count = db.query(ChatMessage).filter(ChatMessage.conversation_id == conv.conversation_id).count()
         items.append(ChatConversationResponse(
-            conversation_id=conv.conversation_id,
-            user_id=conv.user_id,
-            title=conv.title,
-            provider_id=conv.provider_id,
-            model_id=conv.model_id,
-            system_prompt=conv.system_prompt,
-            created_at=conv.created_at,
-            updated_at=conv.updated_at,
-            message_count=message_count
+            conversation_id=conv.conversation_id, user_id=conv.user_id, title=conv.title,
+            channel_id=conv.channel_id, model_id=conv.model_id, system_prompt=conv.system_prompt,
+            created_at=conv.created_at, updated_at=conv.updated_at, message_count=message_count
         ))
-    
+
     return ChatConversationListResponse(total=total, items=items)
 
 
 @router.post("", response_model=ChatConversationResponse)
 async def create_conversation(
-    conversation_data: ChatConversationCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    data: ChatConversationCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """
-    创建新对话
-    """
-    conversation = ChatConversation(
-        user_id=current_user.user_id,
-        title=conversation_data.title,
-        model_id=conversation_data.model,
-        provider_id=conversation_data.provider_id,
-        system_prompt=conversation_data.system_prompt
-    )
-    
-    db.add(conversation)
+    """创建新对话"""
+    conv = ChatConversation(user_id=current_user.user_id, title=data.title or "新对话",
+                            model=data.model, channel_id=data.channel_id, system_prompt=data.system_prompt)
+    db.add(conv)
     db.commit()
-    db.refresh(conversation)
-    
-    return ChatConversationResponse(
-        conversation_id=conversation.conversation_id,
-        user_id=conversation.user_id,
-        title=conversation.title,
-        provider_id=conversation.provider_id,
-        model_id=conversation.model_id,
-        system_prompt=conversation.system_prompt,
-        created_at=conversation.created_at,
-        updated_at=conversation.updated_at,
-        message_count=0
-    )
+    db.refresh(conv)
+    return ChatConversationResponse(conversation_id=conv.conversation_id, user_id=conv.user_id, title=conv.title,
+                                    channel_id=conv.channel_id, model_id=conv.model_id, system_prompt=conv.system_prompt,
+                                    created_at=conv.created_at, updated_at=conv.updated_at, message_count=0)
 
 
 @router.get("/{conversation_id}", response_model=ChatConversationResponse)
-async def get_conversation(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    获取对话详情
-    """
-    conversation = db.query(ChatConversation).filter(
+async def get_conversation(conversation_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """获取对话详情"""
+    conv = db.query(ChatConversation).filter(
         ChatConversation.conversation_id == conversation_id,
         ChatConversation.user_id == current_user.user_id
     ).first()
-    
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
-        )
-    
-    # 获取消息数量
-    message_count = db.query(ChatMessage).filter(
-        ChatMessage.conversation_id == conversation_id
-    ).count()
-    
-    return ChatConversationResponse(
-        conversation_id=conversation.conversation_id,
-        user_id=conversation.user_id,
-        title=conversation.title,
-        provider_id=conversation.provider_id,
-        model_id=conversation.model_id,
-        system_prompt=conversation.system_prompt,
-        created_at=conversation.created_at,
-        updated_at=conversation.updated_at,
-        message_count=message_count
-    )
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+    message_count = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).count()
+    return ChatConversationResponse(conversation_id=conv.conversation_id, user_id=conv.user_id, title=conv.title,
+                                    channel_id=conv.channel_id, model_id=conv.model_id, system_prompt=conv.system_prompt,
+                                    created_at=conv.created_at, updated_at=conv.updated_at, message_count=message_count)
 
 
 @router.put("/{conversation_id}", response_model=ChatConversationResponse)
 async def update_conversation(
-    conversation_id: str,
-    conversation_data: ChatConversationUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    conversation_id: str, data: ChatConversationUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """
-    更新对话
-    """
-    conversation = db.query(ChatConversation).filter(
+    """更新对话"""
+    conv = db.query(ChatConversation).filter(
         ChatConversation.conversation_id == conversation_id,
         ChatConversation.user_id == current_user.user_id
     ).first()
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
     
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
-        )
-    
-    # 更新字段
-    if conversation_data.title is not None:
-        conversation.title = conversation_data.title
-    if conversation_data.model is not None:
-        conversation.model_id = conversation_data.model
-    if conversation_data.provider_id is not None:
-        conversation.provider_id = conversation_data.provider_id
-    if conversation_data.system_prompt is not None:
-        conversation.system_prompt = conversation_data.system_prompt
+    for field in ["title", "model", "channel_id", "system_prompt"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            setattr(conv, field, val)
     
     db.commit()
-    db.refresh(conversation)
-    
-    # 获取消息数量
-    message_count = db.query(ChatMessage).filter(
-        ChatMessage.conversation_id == conversation_id
-    ).count()
-    
-    return ChatConversationResponse(
-        conversation_id=conversation.conversation_id,
-        user_id=conversation.user_id,
-        title=conversation.title,
-        provider_id=conversation.provider_id,
-        model_id=conversation.model_id,
-        system_prompt=conversation.system_prompt,
-        created_at=conversation.created_at,
-        updated_at=conversation.updated_at,
-        message_count=message_count
-    )
+    db.refresh(conv)
+    message_count = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).count()
+    return ChatConversationResponse(conversation_id=conv.conversation_id, user_id=conv.user_id, title=conv.title,
+                                    channel_id=conv.channel_id, model_id=conv.model_id, system_prompt=conv.system_prompt,
+                                    created_at=conv.created_at, updated_at=conv.updated_at, message_count=message_count)
 
 
 @router.delete("/{conversation_id}")
-async def delete_conversation(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    删除对话
-    """
-    conversation = db.query(ChatConversation).filter(
+async def delete_conversation(conversation_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """删除对话"""
+    conv = db.query(ChatConversation).filter(
         ChatConversation.conversation_id == conversation_id,
         ChatConversation.user_id == current_user.user_id
     ).first()
-    
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
-        )
-    
-    # 删除对话（级联删除消息）
-    db.delete(conversation)
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+    db.delete(conv)
     db.commit()
-    
     return {"message": "对话已删除"}
 
 
 @router.get("/{conversation_id}/messages", response_model=ChatMessageListResponse)
-async def get_messages(
-    conversation_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    limit: int = 100,
-    offset: int = 0
-):
-    """
-    获取消息列表
-    """
-    # 验证对话属于当前用户
-    conversation = db.query(ChatConversation).filter(
+async def get_messages(conversation_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db), limit: int = 100, offset: int = 0):
+    """获取消息列表"""
+    conv = db.query(ChatConversation).filter(
         ChatConversation.conversation_id == conversation_id,
         ChatConversation.user_id == current_user.user_id
     ).first()
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
     
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
-        )
-    
-    # 查询消息
-    query = db.query(ChatMessage).filter(
-        ChatMessage.conversation_id == conversation_id
-    )
-    
-    # 获取总数
+    query = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id)
     total = query.count()
+    messages = query.order_by(ChatMessage.created_at.asc()).offset(offset).limit(limit).all()
     
-    # 获取消息列表
-    messages = query.order_by(
-        ChatMessage.created_at.asc()
-    ).offset(offset).limit(limit).all()
-    
-    items = [
-        ChatMessageResponse(
-            message_id=msg.message_id,
-            conversation_id=msg.conversation_id,
-            role=msg.role,
-            content=msg.content,
-            model=msg.model,
-            tokens=msg.tokens,
-            created_at=msg.created_at
-        )
-        for msg in messages
-    ]
-    
-    return ChatMessageListResponse(total=total, items=items)
+    return ChatMessageListResponse(total=total, items=[
+        ChatMessageResponse(message_id=m.message_id, conversation_id=m.conversation_id, role=m.role.value if hasattr(m.role, 'value') else str(m.role),
+                           content=m.content, model=m.model, tokens=m.tokens, created_at=m.created_at) for m in messages
+    ])
 
 
 @router.post("/{conversation_id}/messages")
 async def send_message(
-    conversation_id: str,
-    message_request: ChatSendMessageRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    conversation_id: str, data: ChatSendMessageRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """
-    发送消息
-    支持流式和非流式响应
-    """
-    # 验证对话属于当前用户
-    conversation = db.query(ChatConversation).filter(
+    """发送消息"""
+    conv = db.query(ChatConversation).filter(
         ChatConversation.conversation_id == conversation_id,
         ChatConversation.user_id == current_user.user_id
     ).first()
+    if not conv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
     
-    if not conversation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="对话不存在"
-        )
-    
-    # 获取用户的API Key
     api_key = get_user_api_key(db, current_user.user_id)
     if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="请先创建API Key"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先创建API Key")
     
-    # I2 fix: fail-fast ordering — do all access/lookups BEFORE persisting
-    # the user message. Previously, we wrote the user_message + conversation
-    # title to the DB first, then ran the access gate. A 403 left dangling
-    # state: a conversation with a title and a user message but no AI reply.
-
-    # 确定使用的模型
-    model = message_request.model or conversation.model_id
-    if not model:
-        # 获取第一个可用的模型
-        mapping = db.query(ModelMapping).filter(
-            ModelMapping.status == "active"
-        ).first()
-        if mapping:
-            model = mapping.model_id
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="没有可用的模型"
-            )
-
-    # 获取代理服务 — must be reachable before any DB writes below
     proxy_service = create_proxy_service(db)
-
-    # 获取模型映射
-    model_mapping = proxy_service.get_model_mapping(model)
-    if not model_mapping:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不支持的模型: {model}"
-        )
-
-    # 获取供应商
-    provider = proxy_service.get_provider(model_mapping.provider_id)
-    if not provider:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="供应商不可用"
-        )
-
-    # GC-1: 检查模型分组访问权限 (before any state mutation)
+    model = data.model or conv.model_id
+    if not model:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有可用的模型")
+    
+    # 前置检查
     group_check = proxy_service.check_model_group_access(api_key, current_user, model)
     if not group_check["allowed"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=group_check["message"]
-        )
-
-    # 检查额度 (fail-fast: 额度不足直接返回,不写入任何状态)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=group_check["message"])
+    
     quota_check = proxy_service.check_quota(current_user, api_key, 1000)
     if not quota_check["allowed"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=quota_check["message"]
-        )
-
-    # === All pre-flight checks passed. Now persist the user-side state. ===
-
-    # 如果是第一条消息，自动生成标题
-    message_count = db.query(ChatMessage).filter(
-        ChatMessage.conversation_id == conversation_id
-    ).count()
-
-    if message_count == 0 and message_request.messages:
-        first_user_message = next(
-            (m.content for m in message_request.messages if m.role == "user"),
-            None
-        )
-        if first_user_message:
-            conversation.title = generate_conversation_title(first_user_message)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=quota_check["message"])
+    
+    # 第一条消息生成标题
+    message_count = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).count()
+    if message_count == 0 and data.messages:
+        first_user = next((m.content for m in data.messages if m.role == "user"), None)
+        if first_user:
+            conv.title = generate_conversation_title(first_user)
             db.commit()
-
+    
     # 保存用户消息
-    user_message = ChatMessage(
-        conversation_id=conversation_id,
-        role="user",
-        content=message_request.messages[-1].content if message_request.messages else "",
-        model=model
-    )
-    db.add(user_message)
+    user_msg = ChatMessage(conversation_id=conversation_id, role=MessageRole.user,
+                          content=data.messages[-1].content if data.messages else "", model=model)
+    db.add(user_msg)
     db.commit()
-    db.refresh(user_message)
-
-    # 构建请求数据
+    db.refresh(user_msg)
+    
+    # 构建请求
     messages_for_api = []
+    if conv.system_prompt:
+        messages_for_api.append({"role": "system", "content": conv.system_prompt})
+    history = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).order_by(ChatMessage.created_at.asc()).all()
+    messages_for_api.extend([{"role": m.role.value if hasattr(m.role, 'value') else str(m.role), "content": m.content} for m in history])
     
-    # 添加系统提示词
-    if conversation.system_prompt:
-        messages_for_api.append({
-            "role": "system",
-            "content": conversation.system_prompt
-        })
-    
-    # 添加历史消息
-    history_messages = db.query(ChatMessage).filter(
-        ChatMessage.conversation_id == conversation_id
-    ).order_by(ChatMessage.created_at.asc()).all()
-    
-    for msg in history_messages:
-        messages_for_api.append({
-            "role": msg.role,
-            "content": msg.content
-        })
-    
-    # 添加当前用户消息
-    if message_request.messages:
-        messages_for_api.append({
-            "role": "user",
-            "content": message_request.messages[-1].content
-        })
-    
-    request_data = {
-        "model": model_mapping.provider_model,
-        "messages": messages_for_api,
-        "temperature": message_request.temperature,
-        "max_tokens": message_request.max_tokens,
-        "stream": message_request.stream
-    }
-    
-    # 移除None值
+    request_data = {"model": model, "messages": messages_for_api, "temperature": data.temperature, "max_tokens": data.max_tokens, "stream": data.stream}
     request_data = {k: v for k, v in request_data.items() if v is not None}
     
-    # 更新对话的模型和供应商
-    conversation.model_id = model
-    conversation.provider_id = model_mapping.provider_id
+    conv.model_id = model
     db.commit()
     
-    if message_request.stream:
-        # 流式响应
-        return StreamingResponse(
-            _stream_generator(
-                proxy_service, provider, model_mapping, request_data,
-                conversation_id, user_message.message_id, current_user, api_key, db
-            ),
-            media_type="text/event-stream"
-        )
+    if data.stream:
+        return StreamingResponse(_stream_generator(proxy_service, request_data, conversation_id, user_msg.message_id, current_user, api_key, db),
+                                media_type="text/event-stream")
     else:
-        # 非流式响应
-        result = proxy_service.forward_request(provider, model_mapping, request_data)
+        result = proxy_service.forward_with_failover(model, current_user, api_key, request_data)
         
-        if not result["success"]:
-            raise HTTPException(
-                status_code=result["status_code"],
-                detail=result["error"]
-            )
+        if not result.get("success"):
+            raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
         
-        # 提取回复内容
         content = ""
-        if result["data"] and "choices" in result["data"]:
+        if result.get("data") and "choices" in result["data"]:
             choices = result["data"]["choices"]
             if choices and "message" in choices[0]:
                 content = choices[0]["message"].get("content", "")
         
-        # 计算token数量
-        tokens = proxy_service.calculate_tokens(request_data, result["data"])
+        tokens = proxy_service.calculate_tokens(request_data, result.get("data"))
         
-        # 保存助手消息
-        assistant_message = ChatMessage(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=content,
-            model=model,
-            tokens=tokens.get("total_tokens", 0)
-        )
-        db.add(assistant_message)
+        assistant_msg = ChatMessage(conversation_id=conversation_id, role=MessageRole.assistant, content=content, model=model, tokens=tokens.get("total_tokens", 0))
+        db.add(assistant_msg)
         
-        # 记录用量
-        proxy_service.record_usage(
-            user_id=current_user.user_id,
-            key_id=api_key.key_id,
-            provider_id=provider.provider_id,
-            model=model,
-            tokens=tokens,
-            latency_ms=result["latency_ms"],
-            status_code=result["status_code"],
-            error_message=result["error"]
-        )
+        proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=result.get("channel_id"),
+                                   model=model, tokens=tokens, latency_ms=result.get("latency_ms", 0), status_code=result.get("status_code", 200),
+                                   error_message=result.get("error"))
         
-        # 扣减额度
-        if result["success"] and result["status_code"] == 200:
-            await proxy_service.deduct_quota(current_user, api_key, tokens)
-        
+        await proxy_service.deduct_quota(current_user, api_key, tokens)
         db.commit()
         
-        return ChatSendMessageResponse(
-            conversation_id=conversation_id,
-            message_id=assistant_message.message_id,
-            role="assistant",
-            content=content,
-            model=model,
-            tokens=tokens.get("total_tokens", 0)
-        )
+        return ChatSendMessageResponse(conversation_id=conversation_id, message_id=assistant_msg.message_id, role="assistant", content=content, model=model, tokens=tokens.get("total_tokens", 0))
 
 
-async def _stream_generator(
-    proxy_service: ProxyService,
-    provider,
-    model_mapping,
-    request_data: dict,
-    conversation_id: str,
-    user_message_id: str,
-    current_user: User,
-    api_key: ApiKey,
-    db: Session
-):
+async def _stream_generator(proxy_service, request_data, conversation_id, user_msg_id, current_user, api_key, db):
     """流式响应生成器"""
     content = ""
-    
     try:
-        stream_generator, _ = proxy_service.forward_stream_request(provider, model_mapping, request_data)
-        for chunk in stream_generator:
-            # 解析chunk，提取内容
+        stream_gen = proxy_service.forward_stream(request_data["model"], current_user, api_key, request_data)
+        for chunk in stream_gen:
             if chunk.startswith("data: "):
                 data_str = chunk[6:]
                 if data_str.strip() == "[DONE]":
                     break
-                
                 try:
                     data = json.loads(data_str)
                     if "choices" in data and len(data["choices"]) > 0:
@@ -621,38 +375,16 @@ async def _stream_generator(
                             content += delta["content"]
                             yield chunk + "\n\n"
                 except:
-                    yield chunk + "\n\n"
-            else:
-                yield chunk + "\n\n"
+                    pass
+            yield chunk + "\n\n"
         
-        # 保存助手消息
-        assistant_message = ChatMessage(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=content,
-            model=model_mapping.model_id,
-            tokens=len(content) // 4  # 简单估算
-        )
-        db.add(assistant_message)
-        
-        # 记录用量
+        assistant_msg = ChatMessage(conversation_id=conversation_id, role=MessageRole.assistant, content=content, model=request_data["model"], tokens=len(content) // 4)
+        db.add(assistant_msg)
         tokens = {"total_tokens": len(content) // 4, "prompt_tokens": 0, "completion_tokens": len(content) // 4}
-        proxy_service.record_usage(
-            user_id=current_user.user_id,
-            key_id=api_key.key_id,
-            provider_id=provider.provider_id,
-            model=model_mapping.model_id,
-            tokens=tokens,
-            latency_ms=0,
-            status_code=200,
-            error_message=None
-        )
-        
-        # 扣减额度
+        proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=None, model=request_data["model"],
+                                   tokens=tokens, latency_ms=0, status_code=200, error_message=None)
         await proxy_service.deduct_quota(current_user, api_key, tokens)
-        
         db.commit()
-        
     except Exception as e:
         yield f'data: {{"error": "{str(e)}"}}\n\n'
         yield "data: [DONE]\n\n"
