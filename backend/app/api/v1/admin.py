@@ -34,6 +34,48 @@ from app.utils.request import extract_client_ip
 
 router = APIRouter()
 
+
+def _apply_role_transition(
+    user: "User",
+    new_role_value: str,
+    changed: dict,
+) -> bool:
+    """
+    GC-5 / GC-6: 检测并应用 role transition 的自动副作用（in-place 变更 user）。
+
+    - non-admin → admin: user.quota = -1（unlimited sentinel）;
+      model_group_ids 强制为 '[]'（admin 的 effective 分组由计算层给）
+    - admin → non-admin: user.quota = 0；user.model_group_ids = '[]'（重置，
+      避免 demote 后仍带 admin 时代的 -1 sentinel）
+    - no-op（同 role）：不做事
+
+    返回 True 表示发生了 transition。`changed` 字典会被写入 detail（自动审计用）。
+    """
+    try:
+        new_role = UserRole(new_role_value)
+    except ValueError:
+        return False  # 让调用方后续 UserRole(...) 抛 422
+
+    if user.role == new_role:
+        return False
+
+    if new_role == UserRole.admin:
+        user.quota = -1
+        user.model_group_ids = "[]"
+        changed["quota"] = -1
+        changed["model_group_ids"] = []
+        changed["auto"] = "promoted_to_admin"
+    else:
+        user.quota = 0
+        user.model_group_ids = "[]"
+        changed["quota"] = 0
+        changed["model_group_ids"] = []
+        changed["auto"] = "demoted_from_admin"
+
+    user.role = new_role
+    changed["role"] = new_role_value
+    return True
+
 # ========== 用量统计 ==========
 
 @router.get("/stats/usage", response_model=AdminStatsResponse)
@@ -296,26 +338,31 @@ async def create_user(
 ):
     """
     创建用户（管理员）
+
+    GC-6: role='admin' 时强制 quota=-1（unlimited sentinel），model_group_ids='[]'
+    （admin 的 effective 分组由 ProxyService.get_effective_model_group_ids
+    计算层短路给全部 active 分组，不必真存全量）。
     """
     # 检查用户名
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
-    
+
     # 检查邮箱
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(status_code=400, detail="邮箱已被注册")
-    
+
     # 创建用户
     import json
+    is_admin = user_data.role == "admin"
     user = User(
         user_id=f"usr_{secrets.token_hex(8)}",
         username=user_data.username,
         email=user_data.email,
         password=user_data.password,  # already SHA256 hashed by frontend
         role=UserRole(user_data.role) if user_data.role else UserRole.user,
-        quota=user_data.quota,
+        quota=-1 if is_admin else user_data.quota,
         status=UserStatus.active,
-        model_group_ids=json.dumps(user_data.model_group_ids or [])
+        model_group_ids=json.dumps([]) if is_admin else json.dumps(user_data.model_group_ids or [])
     )
     
     db.add(user)
@@ -362,17 +409,26 @@ async def update_user(
 ):
     """
     更新用户（管理员）
+
+    GC-5 / GC-7: 角色 transition 优先于 admin 内部属性锁：
+    - role 从非 admin 改为 admin：自动 quota=-1（promoted_to_admin）
+    - role 从 admin 改为非 admin：自动 quota=0, model_group_ids='[]'
+      （demoted_from_admin）
+    - 已是 admin 且没有 transition：禁止内部属性编辑（保留旧 400 行为）
     """
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    # 不能编辑管理员用户
-    if user.role == UserRole.admin:
-        raise HTTPException(status_code=400, detail="不能编辑管理员用户")
-
     import json
     changed = {}
+
+    # GC-5 / GC-6: role transition + 自动副作用
+    # 必须在 admin 锁之前；写入同一个 changed 字典供审计日志使用
+    transitioned = False
+    if user_data.role is not None:
+        transitioned = _apply_role_transition(user, user_data.role, changed)
+
     if user_data.username is not None and user_data.username != user.username:
         if db.query(User).filter(User.username == user_data.username, User.user_id != user_id).first():
             raise HTTPException(status_code=400, detail="用户名已存在")
@@ -383,9 +439,19 @@ async def update_user(
             raise HTTPException(status_code=400, detail="邮箱已被注册")
         changed["email"] = user_data.email
         user.email = user_data.email
-    if user_data.role is not None:
-        changed["role"] = user_data.role
-        user.role = UserRole(user_data.role)
+    # GC-7: admin 内部属性锁（保留旧行为，但允许 transition 通过）
+    # transitioned=True 时：transition 已生效，user.role 可能已是 admin（promote）
+    # 或不是 admin（demote）。两种都不该再被这条锁拦截。
+    if user.role == UserRole.admin and not transitioned:
+        internal_changes = (
+            user_data.username is not None
+            or user_data.email is not None
+            or user_data.quota is not None
+            or user_data.model_group_ids is not None
+            or user_data.status is not None
+        )
+        if internal_changes:
+            raise HTTPException(status_code=400, detail="不能编辑管理员用户")
     if user_data.status is not None:
         changed["status"] = user_data.status
         user.status = UserStatus(user_data.status)
@@ -471,7 +537,14 @@ async def adjust_user_quota(
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
+    # GC-7: 管理员账户额度由角色自动管理，不接受手工 +/- 或 set_unlimited
+    if user.role == UserRole.admin:
+        raise HTTPException(
+            status_code=400,
+            detail="管理员账户额度由角色自动管理，不支持手工调整",
+        )
+
     before = user.quota
     after = before
     log_detail = {
