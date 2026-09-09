@@ -1,5 +1,7 @@
 """
-供应商配额模型
+渠道配额模型 (ChannelQuota)
+
+替代原 ProviderQuota
 """
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Numeric, Text
 from sqlalchemy.sql import func
@@ -20,12 +22,12 @@ class SyncStatus(enum.Enum):
     failed = "failed"
 
 
-class ProviderQuota(Base):
-    """供应商配额记录表"""
-    __tablename__ = "provider_quotas"
+class ChannelQuota(Base):
+    """渠道配额记录表"""
+    __tablename__ = "channel_quotas"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    provider_id = Column(String(32), nullable=False, index=True, comment="供应商ID")
+    channel_id = Column(String(32), nullable=False, index=True, comment="渠道ID")
     quota_type = Column(Enum(QuotaType), nullable=False, comment="配额类型")
     quota_limit = Column(BigInteger, default=0, comment="配额限制")
     quota_used = Column(BigInteger, default=0, comment="已使用量")

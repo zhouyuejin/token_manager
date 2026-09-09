@@ -20,157 +20,146 @@ from app.services.email_service import (
 # 全局调度器
 scheduler = AsyncIOScheduler()
 
-# 存储每个供应商的同步任务ID
-_provider_jobs = {}
+# 存储每个渠道的同步任务ID
+_channel_jobs = {}
 
 # 记录上次发送额度不足通知的用户（避免重复发送）
 _quota_low_notified_users = set()
 
 
-async def sync_single_provider(provider_id: str):
-    """同步单个供应商的配额"""
-    logger.info(f"[Scheduler] 开始同步供应商 {provider_id} 的配额")
+async def sync_single_channel(channel_id: str):
+    """同步单个渠道的配额"""
+    logger.info(f"[Scheduler] 开始同步渠道 {channel_id} 的配额")
     db = SessionLocal()
     try:
-        from app.models.provider import Provider
-        from app.models.provider import ProviderStatus
+        from app.models.channel import Channel, ChannelStatus
         
-        provider = db.query(Provider).filter(
-            Provider.provider_id == provider_id
-        ).first()
+        channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
         
-        if not provider:
-            logger.warning(f"供应商 {provider_id} 不存在")
+        if not channel:
+            logger.warning(f"渠道 {channel_id} 不存在")
             return
         
-        if provider.status != ProviderStatus.active:
-            logger.warning(f"供应商 {provider.name} 状态不是 active，当前状态: {provider.status}")
+        if channel.status != ChannelStatus.active:
+            logger.warning(f"渠道 {channel.name} 状态不是 active，当前状态: {channel.status}")
             return
         
-        if provider.sync_enabled != 1:
-            logger.warning(f"供应商 {provider.name} 未启用自动同步 (sync_enabled={provider.sync_enabled})")
+        if not channel.sync_enabled:
+            logger.warning(f"渠道 {channel.name} 未启用自动同步 (sync_enabled={channel.sync_enabled})")
             return
         
-        logger.info(f"[Scheduler] 供应商 {provider.name} 检查通过，开始同步")
+        logger.info(f"[Scheduler] 渠道 {channel.name} 检查通过，开始同步")
         
         sync_service = create_sync_service(db)
-        success = await sync_service.sync_provider_quota(provider)
+        success = await sync_service.sync_channel_quota(channel)
         
         if success:
-            # 更新最后同步时间
-            provider.last_sync_at = datetime.now()
+            channel.last_sync_at = datetime.now()
             db.commit()
-            logger.info(f"供应商 {provider.name} 配额同步成功")
+            logger.info(f"渠道 {channel.name} 配额同步成功")
         else:
-            logger.warning(f"供应商 {provider.name} 配额同步失败")
+            logger.warning(f"渠道 {channel.name} 配额同步失败")
     except Exception as e:
-        logger.error(f"同步供应商 {provider_id} 配额时出错: {e}")
+        logger.error(f"同步渠道 {channel_id} 配额时出错: {e}")
     finally:
         db.close()
 
 
-async def sync_all_providers():
-    """同步所有启用了自动同步的供应商配额"""
-    logger.info("开始同步所有启用了自动同步的供应商配额...")
+async def sync_all_channels():
+    """同步所有启用了自动同步的渠道配额"""
+    logger.info("开始同步所有启用了自动同步的渠道配额...")
     
     db = SessionLocal()
     try:
-        from app.models.provider import Provider
+        from app.models.channel import Channel
         
-        providers = db.query(Provider).filter(
-            Provider.status == "active",
-            Provider.sync_enabled == 1
+        channels = db.query(Channel).filter(
+            Channel.status == "active",
+            Channel.sync_enabled == True
         ).all()
         
-        # 为每个启用了自动同步的供应商创建独立任务
-        for provider in providers:
-            job_id = f"sync_provider_{provider.provider_id}"
-            interval_seconds = provider.sync_interval or 300  # 默认5分钟
+        for channel in channels:
+            job_id = f"sync_channel_{channel.channel_id}"
+            interval_seconds = channel.sync_interval or 300
             interval_minutes = interval_seconds // 60
             
-            if job_id not in _provider_jobs:
+            if job_id not in _channel_jobs:
                 scheduler.add_job(
-                    sync_single_provider,
+                    sync_single_channel,
                     trigger=IntervalTrigger(minutes=interval_minutes),
                     id=job_id,
-                    name=f"同步供应商配额-{provider.name}",
+                    name=f"同步渠道配额-{channel.name}",
                     replace_existing=True,
-                    kwargs={"provider_id": provider.provider_id}
+                    kwargs={"channel_id": channel.channel_id}
                 )
-                _provider_jobs[job_id] = provider.provider_id
-                logger.info(f"为供应商 {provider.name} 创建同步任务，间隔 {interval_minutes} 分钟")
+                _channel_jobs[job_id] = channel.channel_id
+                logger.info(f"为渠道 {channel.name} 创建同步任务，间隔 {interval_minutes} 分钟")
         
-        # 清理已禁用的供应商任务
-        active_provider_ids = {p.provider_id for p in providers}
-        for job_id, provider_id in list(_provider_jobs.items()):
-            if provider_id not in active_provider_ids:
+        active_channel_ids = {c.channel_id for c in channels}
+        for job_id, ch_id in list(_channel_jobs.items()):
+            if ch_id not in active_channel_ids:
                 try:
                     scheduler.remove_job(job_id)
-                    del _provider_jobs[job_id]
-                    logger.info(f"已移除供应商 {provider_id} 的同步任务")
+                    del _channel_jobs[job_id]
+                    logger.info(f"已移除渠道 {ch_id} 的同步任务")
                 except Exception:
                     pass
         
-        logger.info(f"同步任务调度完成，共 {len(_provider_jobs)} 个任务")
+        logger.info(f"同步任务调度完成，共 {len(_channel_jobs)} 个任务")
     except Exception as e:
-        logger.error(f"同步所有供应商配额失败: {e}")
+        logger.error(f"同步所有渠道配额失败: {e}")
     finally:
         db.close()
 
 
-async def sync_provider_quotas():
-    """同步所有供应商配额（兼容旧接口）"""
-    logger.info("开始同步供应商配额...")
+async def sync_channel_quotas():
+    """同步所有渠道配额"""
+    logger.info("开始同步渠道配额...")
     
     db = SessionLocal()
     try:
         sync_service = create_sync_service(db)
-        result = await sync_service.sync_all_providers()
-        logger.info(f"供应商配额同步完成: {result}")
+        result = await sync_service.sync_all_channels()
+        logger.info(f"渠道配额同步完成: {result}")
     except Exception as e:
-        logger.error(f"同步供应商配额失败: {e}")
+        logger.error(f"同步渠道配额失败: {e}")
     finally:
         db.close()
 
 
-def update_provider_sync_job(provider_id: str, provider_name: str, sync_enabled: bool, sync_interval: int):
-    """更新供应商的同步任务"""
-    job_id = f"sync_provider_{provider_id}"
-    interval_minutes = max(1, sync_interval // 60)  # 至少1分钟
+def update_channel_sync_job(channel_id: str, channel_name: str, sync_enabled: bool, sync_interval: int):
+    """更新渠道的同步任务"""
+    job_id = f"sync_channel_{channel_id}"
+    interval_minutes = max(1, sync_interval // 60)
     
-    logger.info(f"[Scheduler] 更新供应商 {provider_name} 同步任务: enabled={sync_enabled}, interval={sync_interval}秒 ({interval_minutes}分钟)")
+    logger.info(f"[Scheduler] 更新渠道 {channel_name} 同步任务: enabled={sync_enabled}, interval={sync_interval}秒")
     
     if sync_enabled:
-        # 添加或更新任务
         scheduler.add_job(
-            sync_single_provider,
+            sync_single_channel,
             trigger=IntervalTrigger(minutes=interval_minutes),
             id=job_id,
-            name=f"同步供应商配额-{provider_name}",
+            name=f"同步渠道配额-{channel_name}",
             replace_existing=True,
-            kwargs={"provider_id": provider_id}
+            kwargs={"channel_id": channel_id}
         )
-        _provider_jobs[job_id] = provider_id
-        logger.info(f"[Scheduler] 已添加供应商 {provider_name} 的同步任务，间隔 {interval_minutes} 分钟")
+        _channel_jobs[job_id] = channel_id
     else:
-        # 移除任务
         try:
             scheduler.remove_job(job_id)
-            if job_id in _provider_jobs:
-                del _provider_jobs[job_id]
-            logger.info(f"已移除供应商 {provider_name} 的同步任务")
+            if job_id in _channel_jobs:
+                del _channel_jobs[job_id]
         except Exception:
             pass
 
 
-def remove_provider_sync_job(provider_id: str):
-    """移除供应商的同步任务"""
-    job_id = f"sync_provider_{provider_id}"
+def remove_channel_sync_job(channel_id: str):
+    """移除渠道的同步任务"""
+    job_id = f"sync_channel_{channel_id}"
     try:
         scheduler.remove_job(job_id)
-        if job_id in _provider_jobs:
-            del _provider_jobs[job_id]
-        logger.info(f"已移除供应商 {provider_id} 的同步任务")
+        if job_id in _channel_jobs:
+            del _channel_jobs[job_id]
     except Exception:
         pass
 
@@ -185,7 +174,6 @@ def check_quota_low_alert():
     try:
         from app.models.user import User, UserStatus
         
-        # 查询所有启用了额度不足通知且状态正常的用户
         users = db.query(User).filter(
             User.quota_low_alert == True,
             User.status == UserStatus.active
@@ -198,13 +186,10 @@ def check_quota_low_alert():
                 
             percent_remaining = ((user.quota - user.quota_used) / user.quota) * 100
             
-            # 当剩余额度低于20%时发送通知
             if percent_remaining < 20:
                 user_key = f"{user.user_id}_{date.today()}"
                 
-                # 如果今天还没有发送过通知
                 if user_key not in _quota_low_notified_users:
-                    # 异步发送邮件
                     asyncio.create_task(
                         send_quota_low_alert(
                             to_email=user.email,
@@ -216,7 +201,6 @@ def check_quota_low_alert():
                     )
                     _quota_low_notified_users.add(user_key)
                     notified_count += 1
-                    logger.info(f"已向用户 {user.username} 发送额度不足通知")
         
         logger.info(f"额度不足检查完成，共通知 {notified_count} 位用户")
     except Exception as e:
@@ -233,20 +217,16 @@ def send_daily_reports():
     try:
         from app.models.user import User, UserStatus
         from app.models.quota_record import QuotaRecord
-        from datetime import datetime, timedelta
         
-        # 查询所有启用了每日报表的用户
         users = db.query(User).filter(
             User.daily_report == True,
             User.status == UserStatus.active
         ).all()
         
-        # 获取今天的开始时间
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         
         sent_count = 0
         for user in users:
-            # 计算今日使用量（从 quota_records 表统计）
             daily_usage = db.query(QuotaRecord).filter(
                 QuotaRecord.user_id == user.user_id,
                 QuotaRecord.created_at >= today_start
@@ -254,13 +234,11 @@ def send_daily_reports():
             
             daily_used = sum(record.amount for record in daily_usage)
             
-            # 获取模型使用统计
             model_usage = {}
             for record in daily_usage:
                 model_name = record.model_name or "Unknown"
                 model_usage[model_name] = model_usage.get(model_name, 0) + record.amount
             
-            # 异步发送邮件
             asyncio.create_task(
                 send_daily_report(
                     to_email=user.email,
@@ -272,7 +250,6 @@ def send_daily_reports():
                 )
             )
             sent_count += 1
-            logger.info(f"已向用户 {user.username} 发送每日用量报表")
         
         logger.info(f"每日报表发送完成，共发送 {sent_count} 份")
     except Exception as e:
@@ -283,19 +260,14 @@ def send_daily_reports():
 
 def setup_scheduler():
     """设置定时任务"""
-    # 每5分钟检查并更新所有供应商的同步任务
     scheduler.add_job(
-        sync_all_providers,
+        sync_all_channels,
         trigger=IntervalTrigger(minutes=5),
-        id="sync_all_providers",
-        name="管理供应商同步任务",
+        id="sync_all_channels",
+        name="管理渠道同步任务",
         replace_existing=True
     )
     
-    # GC-9: reset_daily_usage / reset_monthly_usage 已移除（per-key 限额字段已删）
-    # 限流由 User.quota 统一负责，没有「每日/每月清零」概念
-
-    # 每小时检查一次额度不足
     scheduler.add_job(
         check_quota_low_alert,
         trigger=CronTrigger(minute=0),
@@ -304,7 +276,6 @@ def setup_scheduler():
         replace_existing=True
     )
     
-    # 每天早上8点发送每日用量报表
     scheduler.add_job(
         send_daily_reports,
         trigger=CronTrigger(hour=8, minute=0),
@@ -321,16 +292,15 @@ def start_scheduler():
     setup_scheduler()
     scheduler.start()
     
-    # 启动后立即同步一次所有供应商的任务
     try:
         import asyncio
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            asyncio.ensure_future(sync_all_providers())
+            asyncio.ensure_future(sync_all_channels())
         else:
-            loop.run_until_complete(sync_all_providers())
+            loop.run_until_complete(sync_all_channels())
     except Exception as e:
-        logger.warning(f"启动时同步供应商任务失败: {e}")
+        logger.warning(f"启动时同步渠道任务失败: {e}")
     
     logger.info("定时任务已启动")
 
@@ -341,35 +311,22 @@ def stop_scheduler():
     logger.info("定时任务已停止")
 
 
-# === 额度变动通知功能 ===
-
 async def notify_quota_change(
     user_id: str,
     change_amount: int,
     change_type: str,
     reason: str = ""
 ):
-    """
-    发送额度变动通知（供外部调用）
-    
-    Args:
-        user_id: 用户ID
-        change_amount: 变动额度
-        change_type: 变动类型 (increase/decrease)
-        reason: 变动原因
-    """
+    """发送额度变动通知"""
     db = SessionLocal()
     try:
         from app.models.user import User, UserStatus
         
         user = db.query(User).filter(User.user_id == user_id).first()
         if not user:
-            logger.warning(f"用户 {user_id} 不存在")
             return False
         
-        # 检查用户是否启用了额度变动通知
         if not user.quota_change_alert or user.status != UserStatus.active:
-            logger.info(f"用户 {user.username} 未启用额度变动通知，跳过")
             return False
         
         await send_quota_change_notification(
@@ -381,9 +338,7 @@ async def notify_quota_change(
             reason=reason
         )
         
-        logger.info(f"已向用户 {user.username} 发送额度变动通知")
         return True
-        
     except Exception as e:
         logger.error(f"发送额度变动通知失败: {e}")
         return False
