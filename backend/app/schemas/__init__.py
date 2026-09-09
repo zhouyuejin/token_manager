@@ -6,7 +6,7 @@ from app.schemas.user import (
     UserInfo, PasswordChange
 )
 from app.schemas.api_key import (
-    ApiKeyBase, ApiKeyCreate, ApiKeyUpdate, ApiKeyResponse,
+    ApiKeyCreate, ApiKeyUpdate, ApiKeyResponse,
     ApiKeyListResponse, ApiKeyStatusUpdate, ApiKeyCreatedResponse
 )
 from app.schemas.stats import (

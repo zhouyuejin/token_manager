@@ -76,10 +76,6 @@ def test_non_admin_get_effective_group_ids_unchanged():
 
 def _make_api_key():
     k = MagicMock()
-    k.daily_limit = 0
-    k.daily_used = 0
-    k.monthly_limit = 0
-    k.monthly_used = 0
     return k
 
 

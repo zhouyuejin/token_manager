@@ -166,9 +166,6 @@ class TestCreateApiKeyLogs:
             headers=headers,
             json={
                 "name": "my-key",
-                "daily_limit": 100,
-                "monthly_limit": 1000,
-                "qps_limit": 5,
             },
         )
         assert response.status_code == 200
@@ -186,9 +183,6 @@ class TestCreateApiKeyLogs:
             assert log.ip_address is not None
             detail = json.loads(log.detail)
             assert detail["name"] == "my-key"
-            assert detail["daily_limit"] == 100
-            assert detail["monthly_limit"] == 1000
-            assert detail["qps_limit"] == 5
             # 敏感字段 api_key 明文不应出现在详情里
             assert "api_key" not in detail
         finally:
@@ -202,7 +196,7 @@ class TestUpdateApiKeyLogs:
         resp = client.post(
             "/api/v1/api-keys",
             headers=headers,
-            json={"name": "orig-name", "daily_limit": 10, "monthly_limit": 100, "qps_limit": 1},
+            json={"name": "orig-name"},
         )
         assert resp.status_code == 200
         return resp.json()["key_id"]
@@ -215,7 +209,7 @@ class TestUpdateApiKeyLogs:
         response = client.put(
             f"/api/v1/api-keys/{key_id}",
             headers=headers,
-            json={"name": "new-name", "qps_limit": 20},
+            json={"name": "new-name"},
         )
         assert response.status_code == 200
 
@@ -230,7 +224,7 @@ class TestUpdateApiKeyLogs:
             assert log.operator_name == "alice"
             assert log.ip_address is not None
             detail = json.loads(log.detail)
-            assert detail == {"name": "new-name", "qps_limit": 20}
+            assert detail == {"name": "new-name"}
         finally:
             db.close()
 

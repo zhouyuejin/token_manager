@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
-import { 
-  Table, Button, Tag, Space, Modal, Form, Input, Progress, 
-  InputNumber, Popconfirm 
+import {
+  Table, Button, Tag, Space, Modal, Form, Input,
+  Popconfirm
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
 import { getApiKeys, createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
@@ -52,9 +52,6 @@ const ApiKeysPage = () => {
     setEditingKey(record)
     editForm.setFieldsValue({
       name: record.name,
-      daily_limit: record.daily_limit,
-      monthly_limit: record.monthly_limit,
-      qps_limit: record.qps_limit,
     })
     setEditModalVisible(true)
   }
@@ -128,91 +125,9 @@ const ApiKeysPage = () => {
         </Tag>
       )
     },
-    { 
-      title: '日限额', 
-      dataIndex: 'daily_limit', 
-      key: 'daily_limit',
-      render: (val: number, record: ApiKey) => (
-        <span style={{ 
-          fontFamily: "'Space Grotesk', sans-serif", 
-          color: token.colorText 
-        }}>
-          {val > 0 ? val.toLocaleString() : '不限'}
-        </span>
-      )
-    },
-    { 
-      title: '日使用', 
-      dataIndex: 'daily_used', 
-      key: 'daily_used',
-      render: (val: number, record: ApiKey) => {
-        const percent = record.daily_limit > 0 ? (val / record.daily_limit) * 100 : 0
-        const isWarning = percent > 80
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ 
-              fontFamily: "'Space Grotesk', sans-serif", 
-              color: isWarning ? '#F59E0B' : '#10B981' 
-            }}>
-              {val.toLocaleString()}
-            </span>
-            {record.daily_limit > 0 && (
-              <Progress 
-                percent={Math.min(percent, 100)} 
-                size="small" 
-                showInfo={false}
-                strokeColor={isWarning ? '#F59E0B' : '#10B981'}
-                style={{ width: 60, margin: 0 }}
-              />
-            )}
-          </div>
-        )
-      }
-    },
-    { 
-      title: '月限额', 
-      dataIndex: 'monthly_limit', 
-      key: 'monthly_limit',
-      render: (val: number) => (
-        <span style={{ 
-          fontFamily: "'Space Grotesk', sans-serif", 
-          color: token.colorText 
-        }}>
-          {val > 0 ? val.toLocaleString() : '不限'}
-        </span>
-      )
-    },
-    { 
-      title: '本月使用', 
-      dataIndex: 'monthly_used', 
-      key: 'monthly_used',
-      render: (val: number, record: ApiKey) => {
-        const percent = record.monthly_limit > 0 ? (val / record.monthly_limit) * 100 : 0
-        const isWarning = percent > 80
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ 
-              fontFamily: "'Space Grotesk', sans-serif", 
-              color: isWarning ? '#F59E0B' : '#10B981' 
-            }}>
-              {val.toLocaleString()}
-            </span>
-            {record.monthly_limit > 0 && (
-              <Progress 
-                percent={Math.min(percent, 100)} 
-                size="small" 
-                showInfo={false}
-                strokeColor={isWarning ? '#F59E0B' : '#10B981'}
-                style={{ width: 60, margin: 0 }}
-              />
-            )}
-          </div>
-        )
-      }
-    },
-    { 
-      title: '创建时间', 
-      dataIndex: 'created_at', 
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
       key: 'created_at',
       render: (val: string) => (
         <span style={{ color: token.colorTextSecondary }}>
@@ -398,48 +313,20 @@ const ApiKeysPage = () => {
             </Button>
           </div>
         ) : (
-          <Form form={form} onFinish={handleCreate} layout="vertical" initialValues={{ qps_limit: 10 }}>
-            <Form.Item 
-              name="name" 
-              label={<span style={{ color: token.colorText }}>Key名称</span>} 
+          <Form form={form} onFinish={handleCreate} layout="vertical">
+            <Form.Item
+              name="name"
+              label={<span style={{ color: token.colorText }}>Key名称</span>}
               rules={[{ required: true, message: '请输入Key名称' }]}
             >
-              <Input 
-                placeholder="请输入Key名称" 
+              <Input
+                placeholder="请输入Key名称"
                 style={{
                   height: 40,
                   background: token.colorBgContainer,
                   border: `1px solid ${token.colorBorder}`,
                   borderRadius: 10,
                 }}
-              />
-            </Form.Item>
-
-            <Form.Item 
-              name="daily_limit" 
-              label={<span style={{ color: token.colorText }}>日限额</span>}
-            >
-              <InputNumber 
-                min={0} 
-                placeholder="0表示不限" 
-              />
-            </Form.Item>
-            <Form.Item 
-              name="monthly_limit" 
-              label={<span style={{ color: token.colorText }}>月限额</span>}
-            >
-              <InputNumber 
-                min={0} 
-                placeholder="0表示不限" 
-              />
-            </Form.Item>
-            <Form.Item 
-              name="qps_limit" 
-              label={<span style={{ color: token.colorText }}>QPS限制</span>}
-            >
-              <InputNumber 
-                min={1} 
-                max={100}
               />
             </Form.Item>
           </Form>
@@ -466,13 +353,13 @@ const ApiKeysPage = () => {
         style={{ top: 100 }}
       >
         <Form form={editForm} onFinish={handleUpdate} layout="vertical">
-          <Form.Item 
-            name="name" 
-            label={<span style={{ color: token.colorText }}>Key名称</span>} 
+          <Form.Item
+            name="name"
+            label={<span style={{ color: token.colorText }}>Key名称</span>}
             rules={[{ required: true, message: '请输入Key名称' }]}
           >
-            <Input 
-              placeholder="请输入Key名称" 
+            <Input
+              placeholder="请输入Key名称"
               style={{
                 height: 40,
                 background: token.colorBgContainer,
@@ -481,37 +368,9 @@ const ApiKeysPage = () => {
               }}
             />
           </Form.Item>
-
-          <Form.Item 
-            name="daily_limit" 
-            label={<span style={{ color: token.colorText }}>日限额</span>}
-          >
-            <InputNumber 
-              min={0} 
-              placeholder="0表示不限" 
-            />
-          </Form.Item>
-          <Form.Item 
-            name="monthly_limit" 
-            label={<span style={{ color: token.colorText }}>月限额</span>}
-          >
-            <InputNumber 
-              min={0} 
-              placeholder="0表示不限" 
-            />
-          </Form.Item>
-          <Form.Item 
-            name="qps_limit" 
-            label={<span style={{ color: token.colorText }}>QPS限制</span>}
-          >
-            <InputNumber 
-              min={1} 
-              max={100} 
-            />
-          </Form.Item>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
-              <Button 
+              <Button
                 onClick={() => setEditModalVisible(false)}
                 style={{
                   borderRadius: 10,

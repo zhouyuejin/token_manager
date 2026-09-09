@@ -180,22 +180,6 @@ class ProxyService:
                 "message": f"额度不足，当前剩余 {quota_remain} tokens，请联系管理员充值。"
             }
 
-        # 情况三：日限额超
-        if api_key.daily_limit > 0 and api_key.daily_used + estimated_tokens > api_key.daily_limit:
-            return {
-                "allowed": False,
-                "reason": "daily_limit_exceeded",
-                "message": f"今日用量已达上限（{api_key.daily_limit} tokens），请明日再试。"
-            }
-
-        # 情况四：月限额超
-        if api_key.monthly_limit > 0 and api_key.monthly_used + estimated_tokens > api_key.monthly_limit:
-            return {
-                "allowed": False,
-                "reason": "monthly_limit_exceeded",
-                "message": f"本月用量已达上限（{api_key.monthly_limit} tokens）。"
-            }
-
         return {"allowed": True}
 
 
@@ -456,13 +440,7 @@ class ProxyService:
         
         # 扣减用户额度
         user.quota_used += total_tokens
-        
-        # 扣减API Key日用量
-        api_key.daily_used += total_tokens
-        
-        # 扣减API Key月用量
-        api_key.monthly_used += total_tokens
-        
+
         # 更新最后使用时间
         api_key.last_used_at = datetime.now()
         

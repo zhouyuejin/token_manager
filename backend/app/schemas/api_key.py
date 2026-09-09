@@ -3,24 +3,13 @@ API Key相关Schema
 
 Task 5: 删除所有 model_group_ids / model_groups 字段。
 API Key 不再保留独立分组权限，统一由用户分组决定。
+GC-9: per-key 限额完全移除。daily_limit / monthly_limit / qps_limit 不再是 ApiKey 的字段。
+限流由 User.quota (USD) 单一来源负责（见 proxy_service.check_quota）。
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
-
-
-class ApiKeyBase(BaseModel):
-    """API Key基础字段"""
-    name: str = Field(
-        validation_alias='key_name',  # 接收时用 key_name
-        serialization_alias='name'      # 返回时用 name
-    )
-    daily_limit: int = 0
-    monthly_limit: int = 0
-    qps_limit: int = 10
-    
-    model_config = {'populate_by_name': True}
 
 
 # ---------- User-facing schemas ----------
@@ -31,9 +20,6 @@ class ApiKeyCreate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    daily_limit: int = 0
-    monthly_limit: int = 0
-    qps_limit: int = 10
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -46,9 +32,6 @@ class ApiKeyUpdate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    daily_limit: Optional[int] = None
-    monthly_limit: Optional[int] = None
-    qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
@@ -64,11 +47,6 @@ class ApiKeyResponse(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    daily_limit: int
-    daily_used: int
-    monthly_limit: int
-    monthly_used: int
-    qps_limit: int
     status: str
     created_at: UtcDateTime
     last_used_at: Optional[UtcDateTime] = None
@@ -96,7 +74,7 @@ class ApiKeyCreatedResponse(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    
+
     model_config = {'populate_by_name': True}
 
 
@@ -109,9 +87,6 @@ class ApiKeyAdminCreate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    daily_limit: int = 0
-    monthly_limit: int = 0
-    qps_limit: int = 10
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -124,9 +99,6 @@ class ApiKeyAdminUpdate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    daily_limit: Optional[int] = None
-    monthly_limit: Optional[int] = None
-    qps_limit: Optional[int] = None
     ip_whitelist: Optional[List[str]] = None
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
@@ -142,11 +114,6 @@ class ApiKeyAdminResponse(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
-    daily_limit: int
-    daily_used: int
-    monthly_limit: int
-    monthly_used: int
-    qps_limit: int
     status: str
     created_at: UtcDateTime
     last_used_at: Optional[UtcDateTime] = None
