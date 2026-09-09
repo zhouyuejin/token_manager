@@ -25,6 +25,7 @@ const UsersPage = () => {
   const [quotaForm] = Form.useForm()
   // GC-8: 监听 role 字段；admin 时隐藏 quota / model_group_ids 表单项
   const watchedRole = Form.useWatch('role', form)
+  const watchedQuotaMode = Form.useWatch('quota_mode', form)
   const message = useMessage()
   const { token, isDark } = useThemeToken()
 
@@ -68,7 +69,13 @@ const UsersPage = () => {
       const payload = { ...values }
       if (payload.role === 'admin') {
         delete payload.quota
+        delete payload.quota_mode
         delete payload.model_group_ids
+      } else if (payload.quota_mode === 'unlimited') {
+        payload.quota = -1
+        delete payload.quota_mode
+      } else {
+        delete payload.quota_mode
       }
       await createUser(payload)
       message.success('创建成功')
@@ -397,9 +404,21 @@ const UsersPage = () => {
             </Select>
           </Form.Item>
           <Form.Item
-            name="quota"
+            name="quota_mode"
             label={<span style={{ color: token.colorTextSecondary }}>额度</span>}
+            initialValue="limited"
             hidden={watchedRole === 'admin'}
+          >
+            <Radio.Group buttonStyle="solid">
+              <Radio.Button value="limited">有限额</Radio.Button>
+              <Radio.Button value="unlimited">无限制</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item
+            name="quota"
+            label={<span style={{ color: token.colorTextSecondary }}>额度数量</span>}
+            hidden={watchedRole === 'admin' || watchedQuotaMode === 'unlimited'}
+            rules={[{ required: watchedQuotaMode !== 'unlimited', message: '请输入额度' }]}
           >
             <InputNumber 
               placeholder="请输入额度"
@@ -589,7 +608,7 @@ const UsersPage = () => {
           {(quotaMode === 'set_unlimited' || quotaMode === 'cancel_unlimited') && (
             <Alert
               message="无限制说明"
-              description="设为无限制后，用户调用 LLM 不再受额度限制（API Key 日/月限额仍生效）"
+              description="设为无限制后，用户调用 LLM 不再受额度限制"
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
