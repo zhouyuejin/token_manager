@@ -50,7 +50,7 @@ const getPageTitle = (pathname: string): string => {
     "/stats": "仪表盘",
     "/notifications": "消息通知",
     "/admin/users": "用户管理",
-    "/admin/providers": "供应商管理",
+    "/admin/channels": "渠道管理",
     "/admin/models": "模型管理",
     "/admin/model-groups": "模型分组",
     "/admin/logs/operations": "操作日志",
@@ -165,9 +165,9 @@ const MainLayout = () => {
                 label: "用户管理",
               },
               {
-                key: "/admin/providers",
+                key: "/admin/channels",
                 icon: <CloudOutlined />,
-                label: "供应商管理",
+                label: "渠道管理",
               },
               {
                 key: "/admin/models",

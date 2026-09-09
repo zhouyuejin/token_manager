@@ -359,6 +359,54 @@ async def create_channel(data: ChannelCreate, request: Request, db: Session = De
     )
 
 
+# ========== 渠道配额 ==========
+
+@router.get("/channels/quotas", response_model=ChannelQuotaListResponse)
+async def list_channel_quotas(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """所有渠道配额"""
+    quotas = db.query(ChannelQuota).all()
+    items = []
+    for q in quotas:
+        ch = db.query(Channel).filter(Channel.channel_id == q.channel_id).first()
+        items.append(ChannelQuotaResponse(
+            channel_id=q.channel_id, channel_name=ch.name if ch else None,
+            hourly=QuotaDetail(limit=q.quota_limit, used=q.quota_used, remain=q.quota_remain, percent=float(q.quota_percent), last_sync=str(q.sync_at)) if q.quota_type == QuotaType.hourly else None,
+            weekly=QuotaDetail(limit=q.quota_limit, used=q.quota_used, remain=q.quota_remain, percent=float(q.quota_percent), last_sync=str(q.sync_at)) if q.quota_type == QuotaType.weekly else None
+        ))
+    return ChannelQuotaListResponse(total=len(items), items=items)
+
+
+@router.get("/channels/{channel_id}/quota")
+async def get_channel_quota(channel_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """单个渠道配额"""
+    ch = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not ch:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    
+    quotas = db.query(ChannelQuota).filter(ChannelQuota.channel_id == channel_id).all()
+    hourly = next((q for q in quotas if q.quota_type == QuotaType.hourly), None)
+    weekly = next((q for q in quotas if q.quota_type == QuotaType.weekly), None)
+    
+    return ChannelQuotaResponse(
+        channel_id=channel_id, channel_name=ch.name,
+        hourly=QuotaDetail(limit=hourly.quota_limit, used=hourly.quota_used, remain=hourly.quota_remain, percent=float(hourly.quota_percent), last_sync=str(hourly.sync_at)) if hourly else None,
+        weekly=QuotaDetail(limit=weekly.quota_limit, used=weekly.quota_used, remain=weekly.quota_remain, percent=float(weekly.quota_percent), last_sync=str(weekly.sync_at)) if weekly else None
+    )
+
+
+@router.post("/channels/{channel_id}/quota/sync")
+async def sync_channel_quota(channel_id: str, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """手动同步渠道配额"""
+    ch = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not ch:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    
+    from app.services.sync_service import create_sync_service
+    sync_service = create_sync_service(db)
+    await sync_service.sync_channel_quota(ch)
+    
+    record_operation(db=db, operator=admin, action="sync_quota", target_type="channel", target_id=channel_id, detail={}, ip_address=extract_client_ip(request))
+    return {"message": "同步成功"}
 @router.get("/channels/{channel_id}", response_model=ChannelWithModelsResponse)
 async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """获取渠道详情（含绑定模型）"""
@@ -461,7 +509,7 @@ async def sync_channel_models(channel_id: str, request: Request, db: Session = D
     
     from app.services.model_sync_service import create_model_sync_service
     sync_service = create_model_sync_service(db)
-    result = await sync_service.sync_provider_models(channel)
+    result = await sync_service.sync_channel_models(channel)
     
     record_operation(db=db, operator=admin, action="sync_models", target_type="channel", target_id=channel_id, detail={"count": result.get("count", 0)}, ip_address=extract_client_ip(request))
     return result
@@ -703,54 +751,6 @@ async def update_model_channel(model_id: str, channel_id: str, data: ModelChanne
     return {"message": "更新成功"}
 
 
-# ========== 渠道配额 ==========
-
-@router.get("/channels/quotas", response_model=ChannelQuotaListResponse)
-async def list_channel_quotas(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    """所有渠道配额"""
-    quotas = db.query(ChannelQuota).all()
-    items = []
-    for q in quotas:
-        ch = db.query(Channel).filter(Channel.channel_id == q.channel_id).first()
-        items.append(ChannelQuotaResponse(
-            channel_id=q.channel_id, channel_name=ch.name if ch else None,
-            hourly=QuotaDetail(limit=q.quota_limit, used=q.quota_used, remain=q.quota_remain, percent=float(q.quota_percent), last_sync=str(q.sync_at)) if q.quota_type == QuotaType.hourly else None,
-            weekly=QuotaDetail(limit=q.quota_limit, used=q.quota_used, remain=q.quota_remain, percent=float(q.quota_percent), last_sync=str(q.sync_at)) if q.quota_type == QuotaType.weekly else None
-        ))
-    return ChannelQuotaListResponse(total=len(items), items=items)
-
-
-@router.get("/channels/{channel_id}/quota")
-async def get_channel_quota(channel_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    """单个渠道配额"""
-    ch = db.query(Channel).filter(Channel.channel_id == channel_id).first()
-    if not ch:
-        raise HTTPException(status_code=404, detail="渠道不存在")
-    
-    quotas = db.query(ChannelQuota).filter(ChannelQuota.channel_id == channel_id).all()
-    hourly = next((q for q in quotas if q.quota_type == QuotaType.hourly), None)
-    weekly = next((q for q in quotas if q.quota_type == QuotaType.weekly), None)
-    
-    return ChannelQuotaResponse(
-        channel_id=channel_id, channel_name=ch.name,
-        hourly=QuotaDetail(limit=hourly.quota_limit, used=hourly.quota_used, remain=hourly.quota_remain, percent=float(hourly.quota_percent), last_sync=str(hourly.sync_at)) if hourly else None,
-        weekly=QuotaDetail(limit=weekly.quota_limit, used=weekly.quota_used, remain=weekly.quota_remain, percent=float(weekly.quota_percent), last_sync=str(weekly.sync_at)) if weekly else None
-    )
-
-
-@router.post("/channels/{channel_id}/quota/sync")
-async def sync_channel_quota(channel_id: str, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    """手动同步渠道配额"""
-    ch = db.query(Channel).filter(Channel.channel_id == channel_id).first()
-    if not ch:
-        raise HTTPException(status_code=404, detail="渠道不存在")
-    
-    from app.services.sync_service import create_sync_service
-    sync_service = create_sync_service(db)
-    await sync_service.sync_provider_quota(ch)
-    
-    record_operation(db=db, operator=admin, action="sync_quota", target_type="channel", target_id=channel_id, detail={}, ip_address=extract_client_ip(request))
-    return {"message": "同步成功"}
 
 
 # ========== 兼容性路由 (GC-7) ==========

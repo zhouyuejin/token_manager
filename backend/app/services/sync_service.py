@@ -2,6 +2,7 @@
 用量同步服务 - 渠道配额同步
 """
 import json
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, Any, Optional
 import httpx

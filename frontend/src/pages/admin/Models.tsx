@@ -7,7 +7,7 @@ import {
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined } from '@ant-design/icons'
 import { getModels, createModel, updateModel, deleteModel, ModelMapping } from '../../api/models'
-import { getProviders, Provider, syncProviderModels } from '../../api/providers'
+import { getChannels, Channel, syncChannelModels } from '../../api/channels'
 
 // 上游模型类型
 interface UpstreamModel {
@@ -21,7 +21,7 @@ interface UpstreamModel {
 const ModelsPage = () => {
   const [loading, setLoading] = useState(false)
   const [models, setModels] = useState<ModelMapping[]>([])
-  const [providers, setProviders] = useState<Provider[]>([])
+  const [channels, setChannels] = useState<Channel[]>([])
   const [modalVisible, setModalVisible] = useState(false)
   const [editModel, setEditModel] = useState<ModelMapping | null>(null)
   const [form] = Form.useForm()
@@ -31,7 +31,7 @@ const ModelsPage = () => {
 
   // 获取模型弹窗状态
   const [fetchModalVisible, setFetchModalVisible] = useState(false)
-  const [selectedProviderId, setSelectedProviderId] = useState<string>('')
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('')
   const [upstreamModels, setUpstreamModels] = useState<UpstreamModel[]>([])
   const [fetchLoading, setFetchLoading] = useState(false)
   const [selectedModels, setSelectedModels] = useState<string[]>([])
@@ -46,10 +46,10 @@ const ModelsPage = () => {
     try {
       const [modelsData, providersData] = await Promise.all([
         getModels(),
-        getProviders()
+        getChannels()
       ])
       setModels(modelsData.items || [])
-      setProviders(providersData.items || [])
+      setChannels(providersData.items || [])
     } catch (error) {
       console.error(error)
     } finally {
@@ -116,9 +116,9 @@ const ModelsPage = () => {
   }
 
   // 获取供应商名称
-  const getProviderName = (providerId: string) => {
-    const provider = providers.find(p => p.provider_id === providerId)
-    return provider?.name || providerId
+  const getChannelName = (channelId: string) => {
+    const channel = channels.find(p => p.channel_id === channelId)
+    return channel?.name || channelId
   }
 
   // 格式化价格显示
@@ -134,26 +134,26 @@ const ModelsPage = () => {
   // 打开获取模型弹窗
   const openFetchModal = () => {
     setFetchModalVisible(true)
-    setSelectedProviderId('')
+    setSelectedChannelId('')
     setUpstreamModels([])
     setSelectedModels([])
   }
 
   // 选择供应商后拉取上游模型
-  const handleSelectProvider = async (providerId: string) => {
-    setSelectedProviderId(providerId)
+  const handleSelectChannel = async (channelId: string) => {
+    setSelectedChannelId(channelId)
     setFetchLoading(true)
     setSelectedModels([])
     
     try {
       // 调用同步模型API
-      const result = await syncProviderModels(providerId)
+      const result = await syncChannelModels(channelId)
       if (result.success && result.models) {
-        // 从Provider数据中获取模型列表
-        const provider = providers.find(p => p.provider_id === providerId)
-        if (provider && provider.models) {
-          setUpstreamModels(provider.models)
-          setPagination({ ...pagination, total: provider.models.length })
+        // 从Channel数据中获取模型列表
+        const channel = channels.find(p => p.channel_id === channelId)
+        if (channel && channel.models) {
+          setUpstreamModels(channel.models)
+          setPagination({ ...pagination, total: channel.models.length })
         } else {
           setUpstreamModels([])
           setPagination({ ...pagination, total: 0 })
@@ -204,8 +204,8 @@ const ModelsPage = () => {
       return
     }
 
-    const provider = providers.find(p => p.provider_id === selectedProviderId)
-    if (!provider) {
+    const channel = channels.find(p => p.channel_id === selectedChannelId)
+    if (!channel) {
       message.error('供应商不存在')
       return
     }
@@ -217,7 +217,7 @@ const ModelsPage = () => {
         if (!model) continue
 
         // 生成平台模型ID
-        const platformModelId = `${provider.type}-${modelId}`
+        const platformModelId = `${channel.type}-${modelId}`
         
         // 检查是否已存在
         const existing = models.find(m => m.model_id === platformModelId)
@@ -227,7 +227,7 @@ const ModelsPage = () => {
           // @ts-ignore
           model_id: platformModelId,
           display_name: model.name || modelId,
-          provider_id: provider.provider_id,
+          provider_id: channel.channel_id,
           provider_model: modelId,
           price_type: 'token',
           price_per_1k_input: 0,
@@ -319,7 +319,7 @@ const ModelsPage = () => {
               dataIndex: 'provider_id', 
               key: 'provider_id',
               render: (id: string) => (
-                <Tag color="blue" style={{ borderRadius: 6 }}>{getProviderName(id)}</Tag>
+                <Tag color="blue" style={{ borderRadius: 6 }}>{getChannelName(id)}</Tag>
               )
             },
             { 
@@ -429,8 +429,8 @@ const ModelsPage = () => {
                   <>
                     <Form.Item name="provider_id" label={<span style={{ color: token.colorTextSecondary }}>供应商</span>} rules={[{ required: true, message: '请选择供应商' }]}>
                       <Select placeholder="选择供应商">
-                        {providers.map(p => (
-                          <Select.Option key={p.provider_id} value={p.provider_id}>{p.name} ({p.type})</Select.Option>
+                        {channels.map(p => (
+                          <Select.Option key={p.channel_id} value={p.channel_id}>{p.name} ({p.type})</Select.Option>
                         ))}
                       </Select>
                     </Form.Item>
@@ -521,7 +521,7 @@ const ModelsPage = () => {
       <Modal
         title={<span style={{ color: token.colorText }}><CloudDownloadOutlined style={{ marginRight: 8 }} />获取模型</span>}
         open={fetchModalVisible}
-        onCancel={() => { setFetchModalVisible(false); setSelectedProviderId(''); setUpstreamModels([]); setSelectedModels([]); }}
+        onCancel={() => { setFetchModalVisible(false); setSelectedChannelId(''); setUpstreamModels([]); setSelectedModels([]); }}
         footer={null}
         width={900}
       >
@@ -530,11 +530,11 @@ const ModelsPage = () => {
           <Select 
             style={{ width: 300 }}
             placeholder="请选择供应商"
-            value={selectedProviderId || undefined}
-            onChange={handleSelectProvider}
+            value={selectedChannelId || undefined}
+            onChange={handleSelectChannel}
           >
-            {providers.filter(p => p.status === 'active').map(p => (
-              <Select.Option key={p.provider_id} value={p.provider_id}>
+            {channels.filter(p => p.status === 'active').map(p => (
+              <Select.Option key={p.channel_id} value={p.channel_id}>
                 {p.name} ({p.type})
               </Select.Option>
             ))}
@@ -604,7 +604,7 @@ const ModelsPage = () => {
               </Space>
             </div>
           </>
-        ) : selectedProviderId && !fetchLoading ? (
+        ) : selectedChannelId && !fetchLoading ? (
           <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
             该供应商暂无模型，请确保供应商配置正确
           </div>

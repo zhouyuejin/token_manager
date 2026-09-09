@@ -2,6 +2,7 @@
 Chat API - 对话管理接口
 """
 import json
+import secrets
 from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
@@ -55,7 +56,7 @@ class ChatMessageResponse(BaseModel):
     role: str
     content: str
     model: str
-    tokens: int = 0
+    tokens: Optional[int] = 0
     created_at: Any
 
 
@@ -83,7 +84,7 @@ class ChatSendMessageResponse(BaseModel):
     role: str
     content: str
     model: str
-    tokens: int = 0
+    tokens: Optional[int] = 0
 
 
 class ModelGroupInfo(BaseModel):
@@ -185,8 +186,8 @@ async def create_conversation(
     data: ChatConversationCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """创建新对话"""
-    conv = ChatConversation(user_id=current_user.user_id, title=data.title or "新对话",
-                            model=data.model, channel_id=data.channel_id, system_prompt=data.system_prompt)
+    conv = ChatConversation(conversation_id=secrets.token_hex(16), user_id=current_user.user_id, title=data.title or "新对话",
+                            model_id=data.model, channel_id=data.channel_id, system_prompt=data.system_prompt)
     db.add(conv)
     db.commit()
     db.refresh(conv)
@@ -308,18 +309,45 @@ async def send_message(
             db.commit()
     
     # 保存用户消息
-    user_msg = ChatMessage(conversation_id=conversation_id, role=MessageRole.user,
+    user_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.user.value,
                           content=data.messages[-1].content if data.messages else "", model=model)
     db.add(user_msg)
     db.commit()
     db.refresh(user_msg)
     
-    # 构建请求
+    # 构建请求：清理历史 messages（兼容旧数据 + 上游 alternation 约束）
     messages_for_api = []
     if conv.system_prompt:
         messages_for_api.append({"role": "system", "content": conv.system_prompt})
+
+    def _normalize_role(r):
+        s = r.value if hasattr(r, "value") else str(r)
+        # 旧数据残留 "MessageRole.user" 这种字符串 → 取最后一段
+        if "." in s:
+            s = s.rsplit(".", 1)[-1]
+        return s
+
     history = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).order_by(ChatMessage.created_at.asc()).all()
-    messages_for_api.extend([{"role": m.role.value if hasattr(m.role, 'value') else str(m.role), "content": m.content} for m in history])
+    cleaned = [
+        {"role": _normalize_role(m.role), "content": m.content or ""}
+        for m in history
+        if m.content is not None  # 跳过空内容
+    ]
+    # 合并连续同 role 的消息（上游要求 user/assistant 严格交替）
+    for item in cleaned:
+        role = item["role"]
+        if role not in ("user", "assistant", "system"):
+            continue
+        if messages_for_api and messages_for_api[-1]["role"] == role:
+            messages_for_api[-1]["content"] += "\n" + item["content"]
+        else:
+            messages_for_api.append(dict(item))
+
+    # 收尾：首条必须是 user 或 system；末尾必须是 user（让模型回复）
+    while messages_for_api and messages_for_api[0]["role"] == "assistant":
+        messages_for_api.pop(0)
+    if messages_for_api and messages_for_api[-1]["role"] != "user":
+        messages_for_api.pop()
     
     request_data = {"model": model, "messages": messages_for_api, "temperature": data.temperature, "max_tokens": data.max_tokens, "stream": data.stream}
     request_data = {k: v for k, v in request_data.items() if v is not None}
@@ -344,7 +372,7 @@ async def send_message(
         
         tokens = proxy_service.calculate_tokens(request_data, result.get("data"))
         
-        assistant_msg = ChatMessage(conversation_id=conversation_id, role=MessageRole.assistant, content=content, model=model, tokens=tokens.get("total_tokens", 0))
+        assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=model, tokens=tokens.get("total_tokens", 0))
         db.add(assistant_msg)
         
         proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=result.get("channel_id"),
@@ -373,12 +401,11 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
                         delta = data["choices"][0].get("delta", {})
                         if "content" in delta:
                             content += delta["content"]
-                            yield chunk + "\n\n"
-                except:
+                except Exception:
                     pass
             yield chunk + "\n\n"
         
-        assistant_msg = ChatMessage(conversation_id=conversation_id, role=MessageRole.assistant, content=content, model=request_data["model"], tokens=len(content) // 4)
+        assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=request_data["model"], tokens=len(content) // 4)
         db.add(assistant_msg)
         tokens = {"total_tokens": len(content) // 4, "prompt_tokens": 0, "completion_tokens": len(content) // 4}
         proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=None, model=request_data["model"],

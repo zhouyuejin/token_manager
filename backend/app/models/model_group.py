@@ -54,43 +54,13 @@ class ModelGroup(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    # 反向关系：与 Model 的多对多
+    models = relationship(
+        "Model",
+        secondary="model_group_model_mappings",
+        back_populates="model_groups",
+    )
 
-
-def migrate_provider_group_bindings_to_models(db) -> int:
-    """
-    将旧 provider_model_groups(provider_id, group_id) 关系展开为新的
-    model_group_model_mappings(group_id, model_id) 关系。
-
-    规则：对每一行 (P, G)，找到 provider_id == P 的所有 ModelMapping，
-    在新表中插入 (G, model_id)。重复 (G, model_id) 由 UNIQUE 约束去重。
-
-    返回新插入的行数（去重后）。
-    """
-    from sqlalchemy import text
-    rows = db.execute(text(
-        "SELECT pm.group_id, mm.model_id "
-        "FROM provider_model_groups pm "
-        "JOIN model_mappings mm ON mm.provider_id = pm.provider_id"
-    )).fetchall()
-    inserted = 0
-    seen = set()
-    for group_id, model_id in rows:
-        if (group_id, model_id) in seen:
-            continue
-        seen.add((group_id, model_id))
-        exists = db.execute(text(
-            "SELECT 1 FROM model_group_model_mappings "
-            "WHERE group_id=:g AND model_id=:m LIMIT 1"
-        ), {"g": group_id, "m": model_id}).first()
-        if exists:
-            continue
-        db.execute(text(
-            "INSERT INTO model_group_model_mappings (group_id, model_id, created_at) "
-            "VALUES (:g, :m, CURRENT_TIMESTAMP)"
-        ), {"g": group_id, "m": model_id})
-        inserted += 1
-    db.commit()
-    return inserted
 
 
 def get_unique_default_group(db) -> Optional["ModelGroup"]:
