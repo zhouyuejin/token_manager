@@ -317,7 +317,7 @@ async def list_channels(
             endpoint=ch.endpoint, api_key=ch.api_key, extra_keys=extra_keys, key_strategy=ch.key_strategy,
             priority=ch.priority, timeout=ch.timeout,
             status=ch.status.value if hasattr(ch.status, 'value') else str(ch.status),
-            health_status=ch.health_status.value if hasattr(ch.health_status, 'value') else str(ch.health_status),
+            health_status=str(ch.health_status) if ch.health_status else None,
             last_check_at=ch.last_check_at, cooldown_until=ch.cooldown_until,
             quota_type=ch.quota_type, quota_hourly=ch.quota_hourly, quota_weekly=ch.quota_weekly,
             sync_enabled=ch.sync_enabled, sync_interval=ch.sync_interval, last_sync_at=ch.last_sync_at,
@@ -497,7 +497,7 @@ async def list_models(
             price_per_request=float(m.price_per_request) if m.price_per_request else 0,
             status=m.status.value if hasattr(m.status, 'value') else str(m.status),
             created_at=m.created_at, bound_channels_count=bound_count,
-            model_groups=[g.name for g in m.model_groups if g.status == "active"]
+            model_groups=[]
         ))
     
     return ModelListResponse(total=total, items=items)
@@ -556,8 +556,8 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
             enabled=mc.enabled, created_at=mc.created_at,
             channel=ChannelResponse(
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
-                endpoint=ch.endpoint, priority=ch.priority, timeout=ch.timeout,
-                status=ch.status.value, health_status=ch.health_status.value
+                endpoint=ch.endpoint, api_key=ch.api_key, priority=ch.priority, timeout=ch.timeout,
+                status=ch.status.value if ch.status else "active", health_status=str(ch.health_status) if ch.health_status else None
             ) if ch else None
         ))
     
@@ -570,7 +570,7 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
         price_per_request=float(model.price_per_request) if model.price_per_request else 0,
         status=model.status.value if hasattr(model.status, 'value') else str(model.status),
         created_at=model.created_at, bound_channels_count=len(mc_list),
-        model_groups=[g.name for g in model.model_groups if g.status == "active"],
+        model_groups=[],
         bound_channels=bound_channels
     )
 

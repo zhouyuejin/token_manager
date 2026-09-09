@@ -130,7 +130,7 @@ class ChannelResponse(BaseModel):
     priority: int
     timeout: int
     status: str
-    health_status: str
+    health_status: Optional[str] = None
     last_check_at: Optional[UtcDateTime] = None
     cooldown_until: Optional[UtcDateTime] = None
     quota_type: Optional[str] = "none"
