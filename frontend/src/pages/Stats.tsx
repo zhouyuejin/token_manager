@@ -244,26 +244,6 @@ const StatsPage = () => {
         </Tag>
       )
     },
-    { 
-      title: '今日使用', 
-      dataIndex: 'daily_used', 
-      key: 'daily_used',
-      render: (val: number) => (
-        <span style={{ color: token.colorText, fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
-          {val?.toLocaleString() || '0'}
-        </span>
-      )
-    },
-    { 
-      title: '本月使用', 
-      dataIndex: 'monthly_used', 
-      key: 'monthly_used',
-      render: (val: number) => (
-        <span style={{ color: token.colorText, fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
-          {val?.toLocaleString() || '0'}
-        </span>
-      )
-    },
   ]
 
   return (

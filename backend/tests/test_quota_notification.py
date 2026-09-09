@@ -113,10 +113,6 @@ def _create_provider_and_model(db, user):
         key_name="test-key",
         api_key=hash_password_sha256("test_secret_key"),
         status="active",
-        daily_limit=0,
-        daily_used=0,
-        monthly_limit=0,
-        monthly_used=0,
     )
     db.add(api_key)
     db.commit()
@@ -261,53 +257,6 @@ class TestCheckQuotaErrors:
         assert resp.status_code == 403
         detail = resp.json()["detail"]
         assert "额度不足" in detail
-
-    @patch("app.services.proxy_service.ProxyService.forward_stream_request")
-    def test_daily_limit_exceeded_returns_403(self, mock_forward):
-        """日限额超时返回 403，reason=daily_limit_exceeded"""
-        mock_forward.return_value = iter([])
-        db = TestingSessionLocal()
-        try:
-            user = _create_user(db, "qdail", "qdail@test.com", quota=1000)
-            _, _, api_key = _create_provider_and_model(db, user)
-            api_key.daily_limit = 100
-            api_key.daily_used = 100
-            db.commit()
-            api_key_str = api_key.api_key
-        finally:
-            db.close()
-
-        resp = client.post(
-            "/api/v1/chat/completions",
-            json={"model": "test-model-001", "messages": [{"role": "user", "content": "hi"}]},
-            headers={"X-API-Key": api_key_str},
-        )
-        assert resp.status_code == 403
-        assert "日用量已达上限" in resp.json()["detail"]
-
-    @patch("app.services.proxy_service.ProxyService.forward_stream_request")
-    def test_monthly_limit_exceeded_returns_403(self, mock_forward):
-        """月限额超时时返回 403，reason=monthly_limit_exceeded"""
-        mock_forward.return_value = iter([])
-        db = TestingSessionLocal()
-        try:
-            user = _create_user(db, "qmonth", "qmonth@test.com", quota=1000)
-            _, _, api_key = _create_provider_and_model(db, user)
-            api_key.monthly_limit = 100
-            api_key.monthly_used = 100
-            db.commit()
-            api_key_str = api_key.api_key
-        finally:
-            db.close()
-
-        resp = client.post(
-            "/api/v1/chat/completions",
-            json={"model": "test-model-001", "messages": [{"role": "user", "content": "hi"}]},
-            headers={"X-API-Key": api_key_str},
-        )
-        assert resp.status_code == 403
-        assert "本月用量已达上限" in resp.json()["detail"]
-
 
 # =============================================================================
 # Test 5: 管理员调整额度通知

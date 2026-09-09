@@ -4,11 +4,6 @@ export interface ApiKey {
   key_id: string
   api_key: string
   name: string
-  daily_limit: number
-  daily_used: number
-  monthly_limit: number
-  monthly_used: number
-  qps_limit: number
   ip_whitelist: string[]
   status: string
   created_at: string
@@ -17,9 +12,6 @@ export interface ApiKey {
 
 export interface CreateApiKeyParams {
   name: string
-  daily_limit?: number
-  monthly_limit?: number
-  qps_limit?: number
   ip_whitelist?: string[]
 }
 

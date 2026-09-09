@@ -103,14 +103,9 @@ async def get_balance(request: Request, db: Session = Depends(get_db)):
     
     # 计算剩余额度
     quota_remain = user.quota - user.quota_used
-    
-    return {
-        "balance": quota_remain,
-        "daily_used": api_key.daily_used,
-        "daily_limit": api_key.daily_limit,
-        "monthly_used": api_key.monthly_used,
-        "monthly_limit": api_key.monthly_limit
-    }
+
+    # GC-9: per-key 限额已移除，仅返回余额
+    return {"balance": quota_remain}
 
 
 @router.post("/chat/completions")

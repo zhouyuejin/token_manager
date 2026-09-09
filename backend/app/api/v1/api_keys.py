@@ -6,7 +6,6 @@ API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）
 """
 import secrets
 import json
-from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -41,24 +40,6 @@ def generate_api_key() -> str:
     return f"tmk_{secrets.token_hex(16)}"
 
 
-def check_and_reset_daily(api_key: ApiKey, db: Session):
-    """检查并重置每日用量"""
-    today = datetime.now().date()
-    reset_date = api_key.daily_reset_at.date() if api_key.daily_reset_at else None
-    if reset_date is None or reset_date != today:
-        api_key.daily_used = 0
-        api_key.daily_reset_at = datetime.now()
-
-
-def check_and_reset_monthly(api_key: ApiKey, db: Session):
-    """检查并重置每月用量"""
-    today = datetime.now().date()
-    reset_date = api_key.monthly_reset_at.date() if api_key.monthly_reset_at else None
-    if reset_date is None or reset_date.month != today.month or reset_date.year != today.year:
-        api_key.monthly_used = 0
-        api_key.monthly_reset_at = datetime.now()
-
-
 # ========== 用户接口 ==========
 
 @router.get("", response_model=ApiKeyListResponse)
@@ -72,23 +53,13 @@ async def list_api_keys(
     api_keys = db.query(ApiKey).filter(
         ApiKey.user_id == current_user.user_id
     ).all()
-    
-    for key in api_keys:
-        check_and_reset_daily(key, db)
-        check_and_reset_monthly(key, db)
-    db.commit()
-    
+
     items = [
         ApiKeyResponse(
             key_id=key.key_id,
             user_id=key.user_id,
             api_key=key.api_key,
             name=key.key_name,
-            daily_limit=key.daily_limit,
-            daily_used=key.daily_used,
-            monthly_limit=key.monthly_limit,
-            monthly_used=key.monthly_used,
-            qps_limit=key.qps_limit,
             status=key.status.value,
             created_at=key.created_at,
             last_used_at=key.last_used_at,
@@ -119,11 +90,6 @@ async def create_api_key(
         user_id=current_user.user_id,
         api_key=api_key,
         key_name=api_key_data.name,
-        daily_limit=api_key_data.daily_limit,
-        monthly_limit=api_key_data.monthly_limit,
-        qps_limit=api_key_data.qps_limit,
-        daily_reset_at=datetime.now().date(),
-        monthly_reset_at=datetime.now().date(),
         status=ApiKeyStatus.active
     )
 
@@ -139,9 +105,6 @@ async def create_api_key(
         target_id=key_id,
         detail={
             "name": new_api_key.key_name,
-            "daily_limit": new_api_key.daily_limit,
-            "monthly_limit": new_api_key.monthly_limit,
-            "qps_limit": new_api_key.qps_limit,
         },
         ip_address=extract_client_ip(request),
     )
@@ -179,15 +142,6 @@ async def update_api_key(
     if api_key_data.name is not None:
         changed["name"] = api_key_data.name
         api_key.key_name = api_key_data.name
-    if api_key_data.daily_limit is not None:
-        changed["daily_limit"] = api_key_data.daily_limit
-        api_key.daily_limit = api_key_data.daily_limit
-    if api_key_data.monthly_limit is not None:
-        changed["monthly_limit"] = api_key_data.monthly_limit
-        api_key.monthly_limit = api_key_data.monthly_limit
-    if api_key_data.qps_limit is not None:
-        changed["qps_limit"] = api_key_data.qps_limit
-        api_key.qps_limit = api_key_data.qps_limit
     if api_key_data.ip_whitelist is not None:
         changed["ip_whitelist"] = api_key_data.ip_whitelist
         api_key.ip_whitelist = json.dumps(api_key_data.ip_whitelist)
@@ -308,11 +262,6 @@ async def admin_list_api_keys(
             user_id=key.user_id,
             api_key=key.api_key,
             name=key.key_name,
-            daily_limit=key.daily_limit,
-            daily_used=key.daily_used,
-            monthly_limit=key.monthly_limit,
-            monthly_used=key.monthly_used,
-            qps_limit=key.qps_limit,
             status=key.status.value,
             created_at=key.created_at,
             last_used_at=key.last_used_at,
@@ -345,11 +294,6 @@ async def admin_create_api_key(
         user_id=target_user_id,
         api_key=api_key,
         key_name=api_key_data.name,
-        daily_limit=api_key_data.daily_limit,
-        monthly_limit=api_key_data.monthly_limit,
-        qps_limit=api_key_data.qps_limit,
-        daily_reset_at=datetime.now().date(),
-        monthly_reset_at=datetime.now().date(),
         status=ApiKeyStatus.active
     )
 
@@ -398,11 +342,6 @@ async def admin_get_api_key(
         user_id=api_key.user_id,
         api_key=api_key.api_key,
         name=api_key.key_name,
-        daily_limit=api_key.daily_limit,
-        daily_used=api_key.daily_used,
-        monthly_limit=api_key.monthly_limit,
-        monthly_used=api_key.monthly_used,
-        qps_limit=api_key.qps_limit,
         status=api_key.status.value,
         created_at=api_key.created_at,
         last_used_at=api_key.last_used_at,
@@ -433,15 +372,6 @@ async def admin_update_api_key(
     if api_key_data.name is not None and api_key.key_name != api_key_data.name:
         changed["name"] = api_key_data.name
         api_key.key_name = api_key_data.name
-    if api_key_data.daily_limit is not None and api_key.daily_limit != api_key_data.daily_limit:
-        changed["daily_limit"] = api_key_data.daily_limit
-        api_key.daily_limit = api_key_data.daily_limit
-    if api_key_data.monthly_limit is not None and api_key.monthly_limit != api_key_data.monthly_limit:
-        changed["monthly_limit"] = api_key_data.monthly_limit
-        api_key.monthly_limit = api_key_data.monthly_limit
-    if api_key_data.qps_limit is not None and api_key.qps_limit != api_key_data.qps_limit:
-        changed["qps_limit"] = api_key_data.qps_limit
-        api_key.qps_limit = api_key_data.qps_limit
     if api_key_data.ip_whitelist is not None:
         changed["ip_whitelist"] = api_key_data.ip_whitelist
         api_key.ip_whitelist = json.dumps(api_key_data.ip_whitelist)

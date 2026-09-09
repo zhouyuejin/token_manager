@@ -89,12 +89,8 @@ def test_unlimited_user_passes_check_quota():
         quota_used=999,
     )
 
-    # Mock api_key（check_quota 读取 daily/monthly_limit）
+    # GC-9: per-key 限额已移除，mock api_key 只需保留 check_quota 实际依赖的字段（这里没有）
     mock_key = MagicMock()
-    mock_key.daily_limit = 0
-    mock_key.daily_used = 0
-    mock_key.monthly_limit = 0
-    mock_key.monthly_used = 0
 
     svc = ProxyService(db=None)
     result = svc.check_quota(user, mock_key, estimated_tokens=1000)
@@ -126,8 +122,6 @@ def test_deduct_quota_does_not_overwrite_unlimited_sentinel():
     )
 
     mock_key = MagicMock()
-    mock_key.daily_used = 0
-    mock_key.monthly_used = 0
     mock_key.last_used_at = None
 
     # Mock db.commit 避免真实数据库操作

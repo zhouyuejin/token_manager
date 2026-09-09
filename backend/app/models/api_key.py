@@ -3,8 +3,10 @@ API Key模型
 
 Task 5: 删除 model_groups 关系。
 API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）。
+GC-9: 删 daily_limit / daily_used / daily_reset_at / monthly_limit / monthly_used / monthly_reset_at / qps_limit。
+限流由 User.quota (USD) 统一负责（见 proxy_service.check_quota）。
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Integer, Boolean, Text
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -27,16 +29,7 @@ class ApiKey(Base):
     user_id = Column(String(32), nullable=False, index=True, comment="所属用户")
     api_key = Column(String(64), unique=True, nullable=False, index=True, comment="API Key")
     key_name = Column(String(100), nullable=True, comment="Key名称")
-    
-    # 限流配置
-    daily_limit = Column(BigInteger, default=0, comment="每日额度限制")
-    daily_used = Column(BigInteger, default=0, comment="当日已用额度")
-    daily_reset_at = Column(DateTime, nullable=True, comment="每日重置时间")
-    monthly_limit = Column(BigInteger, default=0, comment="每月额度限制")
-    monthly_used = Column(BigInteger, default=0, comment="当月已用额度")
-    monthly_reset_at = Column(DateTime, nullable=True, comment="每月重置时间")
-    qps_limit = Column(Integer, default=10, comment="每秒请求限制")
-    
+
     # IP白名单
     ip_whitelist = Column(Text, nullable=True, comment="IP白名单JSON")
     

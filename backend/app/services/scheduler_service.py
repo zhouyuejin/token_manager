@@ -175,62 +175,6 @@ def remove_provider_sync_job(provider_id: str):
         pass
 
 
-def reset_daily_usage():
-    """重置每日用量"""
-    logger.info("开始重置每日用量...")
-    
-    db = SessionLocal()
-    try:
-        from app.models.api_key import ApiKey
-        from datetime import date, datetime
-        
-        today = date.today()
-        
-        # 重置所有API Key的日用量
-        api_keys = db.query(ApiKey).all()
-        for key in api_keys:
-            # 确保daily_reset_at是date类型进行比较
-            reset_date = key.daily_reset_at.date() if key.daily_reset_at else None
-            if reset_date is None or reset_date != today:
-                key.daily_used = 0
-                key.daily_reset_at = datetime.now()
-        
-        db.commit()
-        logger.info(f"已重置 {len(api_keys)} 个API Key的日用量")
-    except Exception as e:
-        logger.error(f"重置每日用量失败: {e}")
-    finally:
-        db.close()
-
-
-def reset_monthly_usage():
-    """重置每月用量"""
-    logger.info("开始重置每月用量...")
-    
-    db = SessionLocal()
-    try:
-        from app.models.api_key import ApiKey
-        from datetime import date, datetime
-        
-        today = date.today()
-        
-        # 重置所有API Key的月用量
-        api_keys = db.query(ApiKey).all()
-        for key in api_keys:
-            # 确保monthly_reset_at是date类型进行比较
-            reset_date = key.monthly_reset_at.date() if key.monthly_reset_at else None
-            if reset_date is None or reset_date.month != today.month or reset_date.year != today.year:
-                key.monthly_used = 0
-                key.monthly_reset_at = datetime.now()
-        
-        db.commit()
-        logger.info(f"已重置 {len(api_keys)} 个API Key的月用量")
-    except Exception as e:
-        logger.error(f"重置每月用量失败: {e}")
-    finally:
-        db.close()
-
-
 def check_quota_low_alert():
     """检查额度不足并发送通知"""
     logger.info("开始检查额度不足用户...")
@@ -348,24 +292,9 @@ def setup_scheduler():
         replace_existing=True
     )
     
-    # 每天凌晨0点重置每日用量
-    scheduler.add_job(
-        reset_daily_usage,
-        trigger=CronTrigger(hour=0, minute=0),
-        id="reset_daily_usage",
-        name="重置每日用量",
-        replace_existing=True
-    )
-    
-    # 每月1号凌晨0点重置每月用量
-    scheduler.add_job(
-        reset_monthly_usage,
-        trigger=CronTrigger(day=1, hour=0, minute=0),
-        id="reset_monthly_usage",
-        name="重置每月用量",
-        replace_existing=True
-    )
-    
+    # GC-9: reset_daily_usage / reset_monthly_usage 已移除（per-key 限额字段已删）
+    # 限流由 User.quota 统一负责，没有「每日/每月清零」概念
+
     # 每小时检查一次额度不足
     scheduler.add_job(
         check_quota_low_alert,
