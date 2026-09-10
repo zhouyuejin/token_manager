@@ -210,50 +210,46 @@ const ModelGroups: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 200,
-      fixed: 'right' as const,
       render: (_: any, record: ModelGroup) => {
         const isDefault = record.is_default === 1
         const isActive = record.status === 'active'
         const useDanger = noActiveDefault && !isDefault && isActive
 
         return (
-          <Space size="small">
+          <Space>
             {isActive && (
               isDefault ? (
                 <Popconfirm
                   title="确认取消默认分组？"
                   onConfirm={() => handleUnsetDefault(record.group_id)}
                 >
-                  <Button type="link" danger size="small" style={{ padding: '4px 8px' }}>
+                  <Button type="text" danger>
                     取消默认
                   </Button>
                 </Popconfirm>
               ) : (
                 <Button
-                  type="link"
-                  size="small"
+                  type="text"
                   danger={useDanger}
                   onClick={() => handleSetDefault(record.group_id)}
-                  style={{ padding: '4px 8px' }}
                 >
                   设为默认
                 </Button>
               )
             )}
-            <Button 
-              type="link" 
-              icon={<EditOutlined />} 
+            <Button
+              type="text"
+              icon={<EditOutlined />}
               onClick={() => handleEdit(record)}
-              style={{ padding: '4px 8px' }}
+              style={{ color: '#3B82F6' }}
             >
               编辑
             </Button>
-            <Popconfirm 
-              title="确认删除此分组？" 
+            <Popconfirm
+              title="确认删除此分组？"
               onConfirm={() => handleDelete(record.group_id)}
             >
-              <Button type="link" danger icon={<DeleteOutlined />} style={{ padding: '4px 8px' }}>
+              <Button type="text" danger icon={<DeleteOutlined />}>
                 删除
               </Button>
             </Popconfirm>

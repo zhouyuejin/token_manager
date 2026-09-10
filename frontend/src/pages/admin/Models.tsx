@@ -69,7 +69,7 @@ const ModelsPage = () => {
 
   const handleCreate = async (values: any) => {
     try {
-      await createModel(values)
+      await createModel(parseAliases(values))
       message.success('创建成功')
       setModalVisible(false)
       form.resetFields()
@@ -83,7 +83,7 @@ const ModelsPage = () => {
   const handleUpdate = async (values: any) => {
     if (!editModel) return
     try {
-      await updateModel(editModel.model_id, values)
+      await updateModel(editModel.model_id, parseAliases(values))
       message.success('更新成功')
       setModalVisible(false)
       setEditModel(null)
@@ -93,6 +93,21 @@ const ModelsPage = () => {
     } catch (error) {
       console.error(error)
     }
+  }
+
+  // aliases 表单上是逗号分隔字符串（如 "gpt4, gpt-4o"），后端 ModelCreate 要求 List[str]。
+  // 空串 → 删字段；否则按逗号拆分并去空白；任一解析失败都抛错。
+  const parseAliases = (values: any) => {
+    const payload = { ...values }
+    if (typeof payload.aliases !== 'string') return payload
+    const trimmed = payload.aliases.trim()
+    if (!trimmed) {
+      delete payload.aliases
+      return payload
+    }
+    const list = trimmed.split(',').map((s) => s.trim()).filter(Boolean)
+    payload.aliases = list
+    return payload
   }
 
   const handleDelete = async (modelId: string) => {
@@ -263,19 +278,14 @@ const ModelsPage = () => {
       // 调用同步模型API
       const result = await syncChannelModels(channelId)
       if (result.success && result.models) {
-        // 从Channel数据中获取模型列表
-        const channel = channels.find(p => p.channel_id === channelId)
-        if (channel && channel.models) {
-          setUpstreamModels(channel.models)
-          setPagination({ ...pagination, total: channel.models.length })
-        } else {
-          setUpstreamModels([])
-          setPagination({ ...pagination, total: 0 })
-        }
+        // 同步接口返回的 models 即为该渠道的上游模型列表
+        setUpstreamModels(result.models)
+        setPagination({ ...pagination, total: result.models.length })
         message.success(`成功获取 ${result.count} 个模型`)
       } else {
         message.error(result.message || '获取模型失败')
         setUpstreamModels([])
+        setPagination({ ...pagination, total: 0 })
       }
     } catch (error) {
       message.error('获取模型失败')

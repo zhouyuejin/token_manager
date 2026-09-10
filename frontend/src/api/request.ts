@@ -109,8 +109,19 @@ request.interceptors.response.use(
     } else if (status === 429) {
       $message.error('请求过于频繁，请稍后重试')
     } else if (error.response?.data) {
-      const data = error.response.data as { detail?: string }
-      $message.error(data.detail || error.message || '网络错误')
+      // Pydantic 422 把 detail 写成 [{loc, msg, type, ...}, ...] 数组，
+      // 不能直接当 React 节点渲染（会触发 "Objects are not valid as a React child"）。
+      const detail = (data: any): string => {
+        if (typeof data?.detail === 'string') return data.detail
+        if (Array.isArray(data?.detail)) {
+          return data.detail
+            .map((e: any) => `${(e?.loc || []).join('.')}: ${e?.msg || ''}`)
+            .filter(Boolean)
+            .join('; ')
+        }
+        return ''
+      }
+      $message.error(detail(error.response.data) || error.message || '网络错误')
     } else {
       $message.error(error.message || '网络错误')
     }
