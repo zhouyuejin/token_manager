@@ -32,6 +32,7 @@ import { useTheme } from "../../theme";
 import NotificationDropdown from "../NotificationDropdown";
 import { useNotificationStore } from "../../store/notification";
 import { getApiKeys } from "../../api/apiKeys";
+import { useDefaultModelGroupWarning } from "../../hooks/useDefaultModelGroupWarning";
 
 const { Sider } = Layout;
 
@@ -96,6 +97,9 @@ const MainLayout = () => {
   const location = useLocation();
   const { token, user, logout } = useAuthStore();
   const { unreadCount } = useNotificationStore();
+  const isAdmin = user?.role === "admin";
+  const { needsAttention: showDefaultGroupDot } =
+    useDefaultModelGroupWarning(isAdmin);
 
   // 判断是否为亮色主题
   const isLightTheme = theme === "light";
@@ -139,8 +143,6 @@ const MainLayout = () => {
     }
   }, [collapsed]);
 
-  const isAdmin = user?.role === "admin";
-
   const menuItems: MenuProps["items"] = [
     isAdmin
       ? {
@@ -177,7 +179,30 @@ const MainLayout = () => {
               {
                 key: "/admin/model-groups",
                 icon: <UnorderedListOutlined />,
-                label: "模型分组",
+                label: (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    模型分组
+                    {showDefaultGroupDot && (
+                      <span
+                        aria-label="缺少默认模型分组"
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: "#ff4d4f",
+                          display: "inline-block",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                  </span>
+                ),
               },
               {
                 key: "/admin/logs/operations",
