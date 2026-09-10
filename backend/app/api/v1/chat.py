@@ -74,7 +74,7 @@ class ChatSendMessageRequest(BaseModel):
     messages: List[MessageItem]
     model: Optional[str] = None
     temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 1000
+    max_tokens: Optional[int] = None
     stream: Optional[bool] = False
 
 
@@ -295,8 +295,12 @@ async def send_message(
     group_check = proxy_service.check_model_group_access(api_key, current_user, model)
     if not group_check["allowed"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=group_check["message"])
-    
-    quota_check = proxy_service.check_quota(current_user, api_key, 1000)
+
+    # 估算本次请求所需 tokens：prompt 字符数/4 + 用户指定的 max_tokens。
+    # max_tokens 为 None 时（前端未传）用 100 作为短回复的保守兜底，避免小 quota 用户被拒。
+    prompt_chars = sum(len(m.content or "") for m in data.messages) + len(conv.system_prompt or "")
+    estimated_tokens = (prompt_chars // 4) + (data.max_tokens if data.max_tokens is not None else 100)
+    quota_check = proxy_service.check_quota(current_user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=quota_check["message"])
     

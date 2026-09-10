@@ -34,7 +34,7 @@ class ChatCompletionRequest(BaseModel):
     model: str
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 1000
+    max_tokens: Optional[int] = None
     stream: Optional[bool] = False
     top_p: Optional[float] = 1.0
     frequency_penalty: Optional[float] = 0.0
@@ -124,7 +124,10 @@ async def chat_completions(
         raise HTTPException(status_code=403, detail=group_check["message"])
 
     # 2. 检查额度
-    estimated_tokens = 1000
+    # 估算本次请求所需 tokens：prompt 字符数/4 + 用户指定的 max_tokens。
+    # max_tokens 为 None 时（未指定）用 100 作为短回复的保守兜底，避免小 quota 用户被拒。
+    prompt_chars = sum(len(m.content or "") for m in chat_request.messages)
+    estimated_tokens = (prompt_chars // 4) + (chat_request.max_tokens if chat_request.max_tokens is not None else 100)
     quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
         raise HTTPException(status_code=403, detail=quota_check["message"])
