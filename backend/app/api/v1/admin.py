@@ -553,6 +553,7 @@ async def list_models(
     items = []
     for m in models:
         bound_count = db.query(ModelChannel).filter(ModelChannel.model_id == m.model_id).count()
+        group_names = [g.name for g in m.model_groups]
         items.append(ModelResponse(
             model_id=m.model_id, display_name=m.display_name, description=m.description,
             aliases=json.loads(m.aliases) if m.aliases else None,
@@ -562,7 +563,7 @@ async def list_models(
             price_per_request=float(m.price_per_request) if m.price_per_request else 0,
             status=m.status.value if hasattr(m.status, 'value') else str(m.status),
             created_at=m.created_at, bound_channels_count=bound_count,
-            model_groups=[]
+            model_groups=group_names
         ))
     
     return ModelListResponse(total=total, items=items)
@@ -600,7 +601,7 @@ async def create_model(data: ModelCreate, request: Request, db: Session = Depend
         aliases=data.aliases, price_type=data.price_type,
         price_per_1k_input=data.price_per_1k_input, price_per_1k_output=data.price_per_1k_output,
         price_per_request=data.price_per_request, status=data.status, created_at=model.created_at,
-        bound_channels_count=0, model_groups=[]
+        bound_channels_count=0, model_groups=[g.name for g in model.model_groups]
     )
 
 
@@ -635,7 +636,7 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
         price_per_request=float(model.price_per_request) if model.price_per_request else 0,
         status=model.status.value if hasattr(model.status, 'value') else str(model.status),
         created_at=model.created_at, bound_channels_count=len(mc_list),
-        model_groups=[],
+        model_groups=[g.name for g in model.model_groups],
         bound_channels=bound_channels
     )
 
