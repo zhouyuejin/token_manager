@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
-import { 
-  Table, Button, Tag, Space, Modal, Form, Input, Select, 
-  Popconfirm, Card, Switch, Alert 
+import {
+  Table, Button, Tag, Space, Modal, Form, Input, Select,
+  Popconfirm, Card, Switch, Alert
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { 
@@ -12,6 +12,9 @@ import {
   ModelGroup 
 } from '../../api/modelGroups'
 import { getModels, ModelMapping } from '../../api/models'
+import {
+  useDefaultModelGroupWarning,
+} from '../../hooks/useDefaultModelGroupWarning'
 
 const { TextArea } = Input
 
@@ -24,6 +27,7 @@ const ModelGroups: React.FC = () => {
   const [form] = Form.useForm()
   const message = useMessage()
   const { token, isDark } = useThemeToken()
+  const { needsAttention, refresh } = useDefaultModelGroupWarning()
 
   useEffect(() => {
     fetchGroups()
@@ -73,6 +77,7 @@ const ModelGroups: React.FC = () => {
       await deleteModelGroup(groupId)
       message.success('删除成功')
       fetchGroups()
+      refresh()
     } catch (error: any) {
       const detail = error?.response?.data?.detail
       if (typeof detail === 'string' && detail.includes('该分组已绑定')) {
@@ -88,6 +93,7 @@ const ModelGroups: React.FC = () => {
       await setModelGroupDefault(groupId)
       message.success('已设为默认分组')
       fetchGroups()
+      refresh()
     } catch (error) {
       message.error('设置失败')
     }
@@ -98,6 +104,7 @@ const ModelGroups: React.FC = () => {
       await unsetModelGroupDefault(groupId)
       message.success('已取消默认分组')
       fetchGroups()
+      refresh()
     } catch (error) {
       message.error('取消失败')
     }
@@ -124,6 +131,7 @@ const ModelGroups: React.FC = () => {
       
       setModalVisible(false)
       fetchGroups()
+      refresh()
     } catch (error) {
       console.error(error)
     }
@@ -136,8 +144,7 @@ const ModelGroups: React.FC = () => {
     })
   }
 
-  const hasActiveDefault = groups.some(g => g.is_default === 1 && g.status === 'active')
-  const noActiveDefault = !hasActiveDefault
+  const noActiveDefault = needsAttention
 
   const columns = [
     {
@@ -260,26 +267,24 @@ const ModelGroups: React.FC = () => {
     <div style={{ padding: '24px' }}>
       {noActiveDefault && (
         <Alert
-          type="error"
+          banner
+          type="warning"
           showIcon
-          message="当前没有已启用的默认模型分组，新用户将无法正常使用 API Key。"
-          description={
-            groups.length === 0 ? (
-              <Button
-                type="primary"
-                danger
-                onClick={handleCreate}
-                style={{ marginTop: 8 }}
-              >
-                立即创建分组
-              </Button>
-            ) : (
-              <span style={{ color: 'rgba(0,0,0,0.45)' }}>
-                请在下方列表中设置一个分组为默认分组，或创建一个新分组并设为默认。
-              </span>
-            )
+          message={
+            <span>
+              缺少已启用的默认模型分组，新用户将无法正常使用 API Key。
+              {groups.length === 0 ? (
+                <Button type="link" size="small" onClick={handleCreate}>
+                  立即创建分组
+                </Button>
+              ) : (
+                <span style={{ marginLeft: 8, color: 'rgba(0,0,0,0.45)' }}>
+                  请在下方将一个分组设为默认。
+                </span>
+              )}
+            </span>
           }
-          style={{ marginBottom: 16, borderRadius: 8 }}
+          style={{ marginBottom: 12, borderRadius: 8 }}
         />
       )}
 
