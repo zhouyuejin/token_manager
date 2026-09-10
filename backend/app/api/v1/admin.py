@@ -28,6 +28,7 @@ from app.schemas.admin import (
     ChannelCreate, ChannelUpdate, ChannelResponse, ChannelListResponse,
     ChannelWithModelsResponse,
     ChannelQuotaResponse, ChannelQuotaListResponse, QuotaDetail,
+    ChannelTestRequest, ChannelTestResponse,
     ModelCreate, ModelUpdate, ModelResponse, ModelListResponse,
     ModelWithChannelsResponse, ModelChannelCreate, ModelChannelUpdate, ModelChannelResponse,
     UserUsage, ChannelUsage, ModelUsageStats, DailyUsageStats,
@@ -317,7 +318,7 @@ async def list_channels(
             endpoint=ch.endpoint, api_key=ch.api_key, extra_keys=extra_keys, key_strategy=ch.key_strategy,
             priority=ch.priority, timeout=ch.timeout,
             status=ch.status.value if hasattr(ch.status, 'value') else str(ch.status),
-            health_status=str(ch.health_status) if ch.health_status else None,
+            health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None),
             last_check_at=ch.last_check_at, cooldown_until=ch.cooldown_until,
             quota_type=ch.quota_type, quota_hourly=ch.quota_hourly, quota_weekly=ch.quota_weekly,
             sync_enabled=ch.sync_enabled, sync_interval=ch.sync_interval, last_sync_at=ch.last_sync_at,
@@ -356,6 +357,22 @@ async def create_channel(data: ChannelCreate, request: Request, db: Session = De
         status=channel.status.value, health_status=channel.health_status.value,
         quota_type=channel.quota_type, quota_hourly=channel.quota_hourly, quota_weekly=channel.quota_weekly,
         sync_enabled=channel.sync_enabled, sync_interval=channel.sync_interval
+    )
+
+
+@router.post("/channels/test-connection", response_model=ChannelTestResponse)
+async def test_channel_connection(
+    data: ChannelTestRequest,
+    admin: User = Depends(require_admin)
+):
+    """测试渠道连接（无需入库，新建/编辑前都可调用）"""
+    from app.services.channel_test_service import ChannelTestService
+    service = ChannelTestService()
+    return await service.test_connection(
+        type_=data.type,
+        endpoint=data.endpoint,
+        api_key=data.api_key,
+        timeout=data.timeout,
     )
 
 
@@ -605,7 +622,7 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
             channel=ChannelResponse(
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
                 endpoint=ch.endpoint, api_key=ch.api_key, priority=ch.priority, timeout=ch.timeout,
-                status=ch.status.value if ch.status else "active", health_status=str(ch.health_status) if ch.health_status else None
+                status=ch.status.value if ch.status else "active", health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None)
             ) if ch else None
         ))
     
@@ -687,7 +704,7 @@ async def list_model_channels(model_id: str, db: Session = Depends(get_db), admi
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
                 endpoint=ch.endpoint, api_key=ch.api_key,
                 priority=ch.priority, timeout=ch.timeout,
-                status=ch.status.value, health_status=str(ch.health_status) if ch.health_status else None
+                status=ch.status.value, health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None)
             ) if ch else None,
         ))
     return items

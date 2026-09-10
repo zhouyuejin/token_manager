@@ -84,3 +84,16 @@ export const syncChannelModels = (channelId: string) =>
   post<{ success: boolean; count: number; models: any[]; message: string }>(
     `/admin/channels/${channelId}/sync-models`
   )
+
+export const testChannelConnection = (data: {
+  type: string
+  endpoint: string
+  api_key: string
+  timeout?: number
+}) => post<{
+  success: boolean
+  status_code?: number | null
+  latency_ms: number
+  message: string
+  url?: string | null
+}>('/admin/channels/test-connection', data)

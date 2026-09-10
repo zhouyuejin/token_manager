@@ -183,6 +183,25 @@ class ProviderListResponse(ChannelListResponse):
     pass
 
 
+# ========== 渠道连接测试 ==========
+
+class ChannelTestRequest(BaseModel):
+    """测试渠道连接请求（无需入库）"""
+    type: str = Field(default="openai", description="渠道类型")
+    endpoint: str = Field(..., description="API 端点")
+    api_key: str = Field(..., description="API Key")
+    timeout: int = Field(default=30, ge=5, le=120, description="超时秒数")
+
+
+class ChannelTestResponse(BaseModel):
+    """测试渠道连接结果"""
+    success: bool
+    status_code: Optional[int] = None
+    latency_ms: int = 0
+    message: str
+    url: Optional[str] = None
+
+
 # ========== 模型管理 (Model) ==========
 
 class ModelCreate(BaseModel):
