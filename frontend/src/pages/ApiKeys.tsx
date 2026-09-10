@@ -6,13 +6,14 @@ import {
   Popconfirm
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
-import { getApiKeys, createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
+import { createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
 import { useSwrData } from '../hooks/useSwr'
 import dayjs from 'dayjs'
 
 const ApiKeysPage = () => {
-  const [loading, setLoading] = useState(false)
-  const [keys, setKeys] = useState<ApiKey[]>([])
+  // 使用 SWR 获取 API Keys
+  const { data: keysData, isLoading, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>('/api-keys')
+  const keysList = keysData?.items || []
   const [modalVisible, setModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
@@ -21,9 +22,6 @@ const ApiKeysPage = () => {
   const [editForm] = Form.useForm()
   const message = useMessage()
   const { token, isDark } = useThemeToken()
-
-  // 使用 SWR 获取 API Keys
-  const { data: keysData, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>('/api-keys')
 
   const fetchKeys = async () => {
     mutateKeys()
@@ -195,9 +193,9 @@ const ApiKeysPage = () => {
 
       <Table
         columns={columns}
-        dataSource={keys}
+        dataSource={keysList}
         rowKey="key_id"
-        loading={loading}
+        loading={isLoading}
         style={{ 
           background: token.colorBgContainer,
           borderRadius: 12,
