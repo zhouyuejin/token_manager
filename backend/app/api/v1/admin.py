@@ -128,12 +128,30 @@ async def get_admin_usage_stats(
         func.count(UsageLog.id).label('requests')
     ).filter(base_filter).group_by(UsageLog.model).all()
     
-    model_ids = [s.model for s in model_stats]
-    model_info = {m.model_id: m for m in db.query(Model).filter(Model.model_id.in_(model_ids)).all()} if model_ids else {}
+    # UsageLog.model 存储的是 upstream_model，需要通过 ModelChannel 映射到 model_id
+    upstream_models = [s.model for s in model_stats]
+    
+    # 先通过 ModelChannel 获取 upstream_model -> model_id 的映射
+    upstream_to_model_id = {}
+    if upstream_models:
+        channel_mappings = db.query(
+            ModelChannel.upstream_model,
+            ModelChannel.model_id
+        ).filter(
+            ModelChannel.upstream_model.in_(upstream_models)
+        ).all()
+        upstream_to_model_id = {up: mid for up, mid in channel_mappings}
+    
+    # 获取所有需要查询的 model_id
+    target_model_ids = list(set(upstream_to_model_id.values()))
+    
+    model_info = {m.model_id: m for m in db.query(Model).filter(Model.model_id.in_(target_model_ids)).all()} if target_model_ids else {}
     
     by_model = []
     for s in model_stats:
-        info = model_info.get(s.model)
+        # 通过 upstream_model 找到对应的 model_id，再找到模型信息
+        internal_model_id = upstream_to_model_id.get(s.model)
+        info = model_info.get(internal_model_id) if internal_model_id else None
         if info:
             cost = (float(s.prompt_tokens or 0) / 1000 * float(info.price_per_1k_input or 0) + 
                     float(s.completion_tokens or 0) / 1000 * float(info.price_per_1k_output or 0))

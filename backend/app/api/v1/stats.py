@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.api_key import ApiKey
 from app.models.usage_log import UsageLog
 from app.models.model import Model as ModelMapping, ModelStatus as ModelMappingStatus
+from app.models.model_channel import ModelChannel
 from app.dependencies import get_current_user
 from app.schemas.stats import UsageStatsResponse, ModelUsage, DailyUsage
 
@@ -87,28 +88,44 @@ async def get_usage_stats(
     ).group_by(UsageLog.model).all()
     
     # 获取模型显示名称和价格
-    model_ids = [stat.model for stat in model_stats]
+    # UsageLog.model 存储的是 upstream_model，需要通过 ModelChannel 映射到 model_id
+    upstream_models = [stat.model for stat in model_stats]
+    
+    # 先通过 ModelChannel 获取 upstream_model -> model_id 的映射
+    upstream_to_model_id = {}
+    if upstream_models:
+        channel_mappings = db.query(
+            ModelChannel.upstream_model,
+            ModelChannel.model_id
+        ).filter(
+            ModelChannel.upstream_model.in_(upstream_models)
+        ).all()
+        upstream_to_model_id = {up: mid for up, mid in channel_mappings}
+    
+    # 获取所有需要查询的 model_id
+    target_model_ids = list(set(upstream_to_model_id.values()))
+    
     model_mappings = []
-    if model_ids:
+    if target_model_ids:
         model_mappings = db.query(
             ModelMapping.model_id, 
             ModelMapping.display_name,
             ModelMapping.price_per_1k_input,
             ModelMapping.price_per_1k_output
         ).filter(
-            ModelMapping.model_id.in_(model_ids)
+            ModelMapping.model_id.in_(target_model_ids)
         ).all()
     model_info_map = {m.model_id: m for m in model_mappings}
     
     by_model = []
     for stat in model_stats:
-        model_info = model_info_map.get(stat.model)
+        # 通过 upstream_model 找到对应的 model_id，再找到模型信息
+        internal_model_id = upstream_to_model_id.get(stat.model)
+        model_info = model_info_map.get(internal_model_id) if internal_model_id else None
         # 计算成本：(输入token数/1000)*输入单价 + (输出token数/1000)*输出单价
         if model_info:
-            # 检查价格是否存在（不为 None）
             input_price = float(model_info.price_per_1k_input) if model_info.price_per_1k_input is not None else 0
             output_price = float(model_info.price_per_1k_output) if model_info.price_per_1k_output is not None else 0
-            # 将 Decimal 转换为 float
             prompt_tokens = float(stat.prompt_tokens) if stat.prompt_tokens else 0
             completion_tokens = float(stat.completion_tokens) if stat.completion_tokens else 0
             input_cost = prompt_tokens / 1000 * input_price
