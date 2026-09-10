@@ -392,3 +392,44 @@ class AdminStatsResponse(BaseModel):
 ChannelWithModelsResponse.model_rebuild()
 ModelWithChannelsResponse.model_rebuild()
 ChannelQuotaResponse.model_rebuild()
+
+
+# ========== 渠道-模型绑定管理 (以渠道为中心) ==========
+
+class ChannelModelCreate(BaseModel):
+    """绑定模型到渠道"""
+    model_id: str
+    upstream_model: str
+    priority: int = 0
+    weight: int = 100
+    enabled: bool = True
+
+
+class ChannelModelUpdate(BaseModel):
+    """更新渠道绑定配置"""
+    upstream_model: Optional[str] = None
+    priority: Optional[int] = None
+    weight: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+class ChannelModelResponse(BaseModel):
+    """渠道绑定模型响应"""
+    id: int
+    model_id: str
+    channel_id: str
+    upstream_model: str
+    priority: int = 0
+    weight: int = 100
+    enabled: bool = True
+    created_at: Optional[UtcDateTime] = None
+    # 模型信息（嵌套）
+    model: Optional["ModelResponse"] = None
+
+
+class ChannelModelListResponse(BaseModel):
+    """渠道绑定模型列表响应"""
+    channel_id: str
+    channel_name: str
+    total: int
+    items: List["ChannelModelResponse"] = []

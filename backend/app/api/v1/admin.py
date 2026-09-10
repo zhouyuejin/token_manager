@@ -31,6 +31,7 @@ from app.schemas.admin import (
     ChannelTestRequest, ChannelTestResponse,
     ModelCreate, ModelUpdate, ModelResponse, ModelListResponse,
     ModelWithChannelsResponse, ModelChannelCreate, ModelChannelUpdate, ModelChannelResponse,
+    ChannelModelCreate, ChannelModelUpdate, ChannelModelResponse, ChannelModelListResponse,
     UserUsage, ChannelUsage, ModelUsageStats, DailyUsageStats,
 )
 from app.services.operation_log_service import record_operation
@@ -442,6 +443,32 @@ async def sync_channel_quota(channel_id: str, request: Request, db: Session = De
     
     record_operation(db=db, operator=admin, action="sync_quota", target_type="channel", target_id=channel_id, detail={}, ip_address=extract_client_ip(request))
     return {"message": "同步成功"}
+@router.put("/channels/{channel_id}/quota")
+async def update_channel_quota(channel_id: str, data: ChannelUpdate, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """更新渠道配额配置"""
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    
+    update_data = data.dict(exclude_unset=True)
+    changed = {}
+    
+    for field in ['quota_hourly', 'quota_weekly', 'sync_enabled', 'sync_interval', 'quota_config']:
+        if field in update_data:
+            value = update_data[field]
+            if field == 'quota_config' and value:
+                value = json.dumps(value)
+            setattr(channel, field, value)
+            changed[field] = value
+    
+    if changed:
+        db.commit()
+        db.refresh(channel)
+        record_operation(db=db, operator=admin, action="update_quota", target_type="channel", target_id=channel_id, detail=changed, ip_address=extract_client_ip(request))
+    
+    return {"message": "更新成功"}
+
+
 @router.get("/channels/{channel_id}", response_model=ChannelWithModelsResponse)
 async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """获取渠道详情（含绑定模型）"""
@@ -816,6 +843,144 @@ async def update_model_channel(model_id: str, channel_id: str, data: ModelChanne
     db.commit()
     record_operation(db=db, operator=admin, action="update_channel_binding", target_type="model", target_id=model_id, detail=changed, ip_address=extract_client_ip(request))
     return {"message": "更新成功"}
+
+
+
+
+# ========== 渠道-模型绑定管理 (以渠道为中心) ==========
+
+@router.get("/channels/{channel_id}/models", response_model=ChannelModelListResponse)
+async def get_channel_models(channel_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """获取渠道绑定的模型列表"""
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    
+    mc_list = db.query(ModelChannel).filter(ModelChannel.channel_id == channel_id).all()
+    model_ids = {mc.model_id for mc in mc_list}
+    models_map = {
+        m.model_id: m
+        for m in db.query(Model).filter(Model.model_id.in_(model_ids)).all()
+    } if model_ids else {}
+    
+    items = []
+    for mc in mc_list:
+        model = models_map.get(mc.model_id)
+        items.append(ChannelModelResponse(
+            id=mc.id, model_id=mc.model_id, channel_id=mc.channel_id,
+            upstream_model=mc.upstream_model, priority=mc.priority,
+            weight=mc.weight, enabled=mc.enabled, created_at=mc.created_at,
+            model=ModelResponse(
+                model_id=model.model_id, display_name=model.display_name,
+                description=model.description, price_type=model.price_type.value if hasattr(model.price_type, 'value') else str(model.price_type),
+                price_per_1k_input=float(model.price_per_1k_input) if model.price_per_1k_input else 0,
+                price_per_1k_output=float(model.price_per_1k_output) if model.price_per_1k_output else 0,
+                price_per_request=float(model.price_per_request) if model.price_per_request else 0,
+                status=model.status.value if hasattr(model.status, 'value') else str(model.status),
+                created_at=model.created_at
+            ) if model else None
+        ))
+    
+    return ChannelModelListResponse(
+        channel_id=channel_id, channel_name=channel.name,
+        total=len(items), items=items
+    )
+
+
+@router.post("/channels/{channel_id}/models")
+async def add_channel_model(channel_id: str, data: ChannelModelCreate, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """绑定模型到渠道"""
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    
+    model = db.query(Model).filter(Model.model_id == data.model_id).first()
+    if not model:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    
+    existing = db.query(ModelChannel).filter(
+        ModelChannel.channel_id == channel_id,
+        ModelChannel.model_id == data.model_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="该模型已绑定到此渠道")
+    
+    mc = ModelChannel(
+        channel_id=channel_id, model_id=data.model_id,
+        upstream_model=data.upstream_model, priority=data.priority,
+        weight=data.weight, enabled=data.enabled
+    )
+    db.add(mc)
+    db.commit()
+    db.refresh(mc)
+    
+    record_operation(db=db, operator=admin, action="bind_model", target_type="channel", target_id=channel_id, detail={"model_id": data.model_id}, ip_address=extract_client_ip(request))
+    return {"message": "绑定成功", "id": mc.id}
+
+
+@router.delete("/channels/{channel_id}/models/{model_id}")
+async def remove_channel_model(channel_id: str, model_id: str, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """解绑模型"""
+    mc = db.query(ModelChannel).filter(
+        ModelChannel.channel_id == channel_id,
+        ModelChannel.model_id == model_id
+    ).first()
+    if not mc:
+        raise HTTPException(status_code=404, detail="绑定不存在")
+    
+    db.delete(mc)
+    db.commit()
+    
+    record_operation(db=db, operator=admin, action="unbind_model", target_type="channel", target_id=channel_id, detail={"model_id": model_id}, ip_address=extract_client_ip(request))
+    return {"message": "解绑成功"}
+
+
+@router.patch("/channels/{channel_id}/models/{model_id}")
+async def update_channel_model(channel_id: str, model_id: str, data: ChannelModelUpdate, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """更新渠道绑定配置"""
+    mc = db.query(ModelChannel).filter(
+        ModelChannel.channel_id == channel_id,
+        ModelChannel.model_id == model_id
+    ).first()
+    if not mc:
+        raise HTTPException(status_code=404, detail="绑定不存在")
+    
+    changed = {}
+    for field, value in data.model_dump(exclude_unset=True).items():
+        if value is not None and getattr(mc, field) != value:
+            changed[field] = value
+            setattr(mc, field, value)
+    
+    db.commit()
+    record_operation(db=db, operator=admin, action="update_model_binding", target_type="channel", target_id=channel_id, detail=changed, ip_address=extract_client_ip(request))
+    return {"message": "更新成功"}
+
+
+@router.put("/channels/{channel_id}/models")
+async def replace_channel_models(channel_id: str, data: List[ChannelModelCreate], request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """批量更新渠道的模型绑定（用于拖拽排序）"""
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    
+    # 删除旧的
+    db.query(ModelChannel).filter(ModelChannel.channel_id == channel_id).delete()
+    
+    # 添加新的
+    for mc_data in data:
+        model = db.query(Model).filter(Model.model_id == mc_data.model_id).first()
+        if not model:
+            continue
+        mc = ModelChannel(
+            channel_id=channel_id, model_id=mc_data.model_id,
+            upstream_model=mc_data.upstream_model, priority=mc_data.priority,
+            weight=mc_data.weight, enabled=mc_data.enabled
+        )
+        db.add(mc)
+    
+    db.commit()
+    record_operation(db=db, operator=admin, action="replace_models", target_type="channel", target_id=channel_id, detail={"count": len(data)}, ip_address=extract_client_ip(request))
+    return {"message": "更新成功", "count": len(data)}
 
 
 

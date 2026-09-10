@@ -97,3 +97,53 @@ export const testChannelConnection = (data: {
   message: string
   url?: string | null
 }>('/admin/channels/test-connection', data)
+
+// ========== 渠道-模型绑定管理 (以渠道为中心) ==========
+
+export interface ChannelModelBinding {
+  id: number
+  model_id: string
+  channel_id: string
+  upstream_model: string
+  priority: number
+  weight: number
+  enabled: boolean
+  created_at?: string
+  model?: Model
+}
+
+export interface ChannelModelListResponse {
+  channel_id: string
+  channel_name: string
+  total: number
+  items: ChannelModelBinding[]
+}
+
+export const getChannelModelBindings = (channelId: string) =>
+  get<ChannelModelListResponse>(`/admin/channels/${channelId}/models`)
+
+export const bindModelToChannel = (channelId: string, data: {
+  model_id: string
+  upstream_model: string
+  priority?: number
+  weight?: number
+  enabled?: boolean
+}) => post(`/admin/channels/${channelId}/models`, data)
+
+export const unbindModelFromChannel = (channelId: string, modelId: string) =>
+  del(`/admin/channels/${channelId}/models/${modelId}`)
+
+export const updateChannelModelBinding = (channelId: string, modelId: string, data: {
+  upstream_model?: string
+  priority?: number
+  weight?: number
+  enabled?: boolean
+}) => patch(`/admin/channels/${channelId}/models/${modelId}`, data)
+
+export const replaceChannelModelBindings = (channelId: string, data: Array<{
+  model_id: string
+  upstream_model: string
+  priority: number
+  weight: number
+  enabled: boolean
+}>) => put(`/admin/channels/${channelId}/models`, data)

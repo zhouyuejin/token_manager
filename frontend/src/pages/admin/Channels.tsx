@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
@@ -46,6 +47,7 @@ const calcQuotaStats = (quota: any) => {
 
 const ChannelsPage = () => {
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
   const [channels, setChannels] = useState<Channel[]>([])
   const [quotas, setQuotas] = useState<Record<string, any>>({})
   const [createModalVisible, setCreateModalVisible] = useState(false)
@@ -198,15 +200,8 @@ const ChannelsPage = () => {
     }
   }
 
-  const openModelModal = async (channel: Channel) => {
-    setSelectedChannel(channel)
-    try {
-      const res = await getChannelModels(channel.channel_id)
-      setSelectedChannelModels(res.items || [])
-      setModelModalVisible(true)
-    } catch {
-      message.error('获取模型列表失败')
-    }
+  const openModelModal = (channel: Channel) => {
+    navigate(`/admin/channels/${channel.channel_id}/bindings`)
   }
 
   const handleSyncModels = async () => {
