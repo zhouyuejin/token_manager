@@ -1,8 +1,9 @@
 import useSWR, { SWRConfiguration, KeyedMutator } from 'swr'
 import { get } from '../api/request'
 
-// 全局 fetcher
-export const fetcher = <T>(url: string): Promise<T> => get<T>(url)
+// 全局 fetcher —— request.get 类型层面返回 AxiosResponse<T>，
+// 但 request.ts 的响应拦截器已解包为 response.data，故此处收窄为 Promise<T>
+export const fetcher = <T>(url: string) => get<T>(url) as unknown as Promise<T>
 
 // 默认配置
 export const swrConfig: SWRConfiguration = {
