@@ -1,4 +1,4 @@
-import { get, post, put, del } from './request'
+import { get, post, put, patch, del } from './request'
 
 export interface Model {
   model_id: string
@@ -62,6 +62,3 @@ export const unbindChannel = (modelId: string, channelId: string) =>
 export const updateModelChannel = (modelId: string, channelId: string, data: Partial<ModelChannel>) =>
   patch(`/admin/models/${modelId}/channels/${channelId}`, data)
 
-function patch(url: string, data: any) {
-  return put(url, data) // FastAPI 的 PATCH 等同于 PUT
-}

@@ -3,10 +3,11 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
-  Select, Popconfirm, Tabs, Row, Col, InputNumber, Radio, Checkbox
+  Select, Popconfirm, Tabs, Row, Col, InputNumber, Radio, Checkbox,
+  Drawer, Switch, Divider
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined } from '@ant-design/icons'
-import { getModels, createModel, updateModel, deleteModel, ModelMapping } from '../../api/models'
+import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined } from '@ant-design/icons'
+import { getModels, createModel, updateModel, deleteModel, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
 import { getChannels, Channel, syncChannelModels } from '../../api/channels'
 
 // 上游模型类型
@@ -36,6 +37,15 @@ const ModelsPage = () => {
   const [fetchLoading, setFetchLoading] = useState(false)
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 })
+
+  // 渠道绑定 Drawer 状态
+  const [bindingsDrawerOpen, setBindingsDrawerOpen] = useState(false)
+  const [bindingsTarget, setBindingsTarget] = useState<ModelMapping | null>(null)
+  const [bindings, setBindings] = useState<ModelChannel[]>([])
+  const [bindingsLoading, setBindingsLoading] = useState(false)
+  const [bindingFormOpen, setBindingFormOpen] = useState(false)
+  const [editingBinding, setEditingBinding] = useState<ModelChannel | null>(null)
+  const [bindingForm] = Form.useForm()
 
   useEffect(() => {
     fetchData()
@@ -114,6 +124,110 @@ const ModelsPage = () => {
     setPriceType('token')
     setModalVisible(true)
   }
+
+  // ===== 渠道绑定管理 =====
+  const openBindingsDrawer = async (record: ModelMapping) => {
+    setBindingsTarget(record)
+    setBindingsDrawerOpen(true)
+    setBindingsLoading(true)
+    try {
+      const list = await getModelChannels(record.model_id)
+      setBindings(list)
+    } catch (e) {
+      message.error('加载绑定失败')
+    } finally {
+      setBindingsLoading(false)
+    }
+  }
+
+  const closeBindingsDrawer = () => {
+    setBindingsDrawerOpen(false)
+    setBindingsTarget(null)
+    setBindings([])
+  }
+
+  const reloadBindings = async () => {
+    if (!bindingsTarget) return
+    setBindingsLoading(true)
+    try {
+      const list = await getModelChannels(bindingsTarget.model_id)
+      setBindings(list)
+      fetchData() // 刷新列表中的 bound_channels_count
+    } catch (e) {
+      message.error('刷新失败')
+    } finally {
+      setBindingsLoading(false)
+    }
+  }
+
+  const openAddBinding = () => {
+    setEditingBinding(null)
+    bindingForm.resetFields()
+    bindingForm.setFieldsValue({ priority: 0, weight: 100, enabled: true })
+    setBindingFormOpen(true)
+  }
+
+  const openEditBinding = (b: ModelChannel) => {
+    setEditingBinding(b)
+    bindingForm.setFieldsValue({
+      channel_id: b.channel_id,
+      upstream_model: b.upstream_model,
+      priority: b.priority,
+      weight: b.weight,
+      enabled: b.enabled,
+    })
+    setBindingFormOpen(true)
+  }
+
+  const submitBinding = async () => {
+    if (!bindingsTarget) return
+    try {
+      const values = await bindingForm.validateFields()
+      if (editingBinding) {
+        await updateModelChannel(bindingsTarget.model_id, editingBinding.channel_id, {
+          upstream_model: values.upstream_model,
+          priority: values.priority,
+          weight: values.weight,
+          enabled: values.enabled,
+        })
+        message.success('绑定已更新')
+      } else {
+        if (bindings.some(b => b.channel_id === values.channel_id)) {
+          message.error('该渠道已绑定到此模型')
+          return
+        }
+        await bindChannelToModel(bindingsTarget.model_id, values)
+        message.success('绑定已添加')
+      }
+      setBindingFormOpen(false)
+      reloadBindings()
+    } catch (e: any) {
+      if (e?.errorFields) return
+      message.error(e?.response?.data?.detail || '操作失败')
+    }
+  }
+
+  const handleUnbind = async (b: ModelChannel) => {
+    if (!bindingsTarget) return
+    try {
+      await unbindChannel(bindingsTarget.model_id, b.channel_id)
+      message.success('已解绑')
+      reloadBindings()
+    } catch (e) {
+      message.error('解绑失败')
+    }
+  }
+
+  const handleToggleBinding = async (b: ModelChannel, enabled: boolean) => {
+    if (!bindingsTarget) return
+    try {
+      await updateModelChannel(bindingsTarget.model_id, b.channel_id, { enabled })
+      reloadBindings()
+    } catch (e) {
+      message.error('更新失败')
+    }
+  }
+
 
   // 获取渠道名称
   const getChannelName = (channelId: string) => {
@@ -197,7 +311,7 @@ const ModelsPage = () => {
     }
   }
 
-  // 批量创建模型
+  // 批量创建模型 + 建立渠道绑定
   const handleBatchCreate = async () => {
     if (selectedModels.length === 0) {
       message.warning('请选择要添加的模型')
@@ -210,39 +324,68 @@ const ModelsPage = () => {
       return
     }
 
-    try {
-      let successCount = 0
-      for (const modelId of selectedModels) {
-        const model = upstreamModels.find(m => m.model_id === modelId)
-        if (!model) continue
+    let createdCount = 0
+    let boundCount = 0
+    const errors: string[] = []
 
-        // 生成平台模型ID
-        const platformModelId = `${channel.type}-${modelId}`
-        
-        // 检查是否已存在
-        const existing = models.find(m => m.model_id === platformModelId)
-        if (existing) continue
+    for (const upstreamModelId of selectedModels) {
+      const upstreamModel = upstreamModels.find(m => m.model_id === upstreamModelId)
+      if (!upstreamModel) continue
 
-        await createModel({
-          // @ts-ignore
-          model_id: platformModelId,
-          display_name: model.name || modelId,
-          price_type: 'token',
-          price_per_1k_input: 0,
-          price_per_1k_output: 0,
-          price_per_request: 0,
-          status: 'active'
-        })
-        successCount++
+      // 平台模型 ID：以渠道类型为前缀，避免不同渠道上游模型名撞车
+      const platformModelId = `${channel.type}-${upstreamModelId}`
+
+      // 1) 确保 Model 记录存在
+      let modelExists = models.find(m => m.model_id === platformModelId)
+      if (!modelExists) {
+        try {
+          const created = await createModel({
+            // @ts-ignore
+            model_id: platformModelId,
+            display_name: upstreamModel.name || upstreamModelId,
+            price_type: 'token',
+            price_per_1k_input: 0,
+            price_per_1k_output: 0,
+            price_per_request: 0,
+            status: 'active',
+          })
+          modelExists = created as ModelMapping
+          createdCount++
+        } catch (e: any) {
+          // 已存在的话也会走 createModel 的 catch 路径，先跳过绑定
+          errors.push(`创建 ${platformModelId} 失败: ${e?.response?.data?.detail || e?.message}`)
+          continue
+        }
       }
 
-      message.success(`成功添加 ${successCount} 个模型`)
-      setFetchModalVisible(false)
-      setSelectedModels([])
-      fetchData()
-    } catch (error) {
-      message.error('批量创建失败')
+      // 2) 建立渠道绑定
+      try {
+        await bindChannelToModel(platformModelId, {
+          channel_id: channel.channel_id,
+          upstream_model: upstreamModelId,
+          priority: 0,
+          weight: 100,
+          enabled: true,
+        })
+        boundCount++
+      } catch (e: any) {
+        // 已绑定会返回 4xx 错误，跳过即可
+        const detail = e?.response?.data?.detail || ''
+        if (!detail.includes('已绑定') && !detail.includes('duplicate')) {
+          errors.push(`绑定 ${platformModelId} → ${channel.name}: ${detail || '失败'}`)
+        }
+      }
     }
+
+    if (errors.length > 0) {
+      message.warning(`新建 ${createdCount} 个、绑定 ${boundCount} 个；${errors.length} 个失败，详见控制台`)
+      console.error('[批量导入] 错误明细:', errors)
+    } else {
+      message.success(`成功新建 ${createdCount} 个模型并绑定 ${boundCount} 个渠道`)
+    }
+    setFetchModalVisible(false)
+    setSelectedModels([])
+    fetchData()
   }
 
   // 获取当前页的模型
@@ -317,9 +460,15 @@ const ModelsPage = () => {
               key: 'bound_channels_count',
               width: 110,
               render: (_: any, record: ModelMapping) => (
-                <Tag color="blue" style={{ borderRadius: 6 }}>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<LinkOutlined />}
+                  onClick={() => openBindingsDrawer(record)}
+                  style={{ padding: 0 }}
+                >
                   {record.bound_channels_count ?? 0} 个
-                </Tag>
+                </Button>
               )
             },
             { 
@@ -509,7 +658,7 @@ const ModelsPage = () => {
       >
         <div style={{ marginBottom: 16 }}>
           <span style={{ color: token.colorTextSecondary, marginRight: 8 }}>选择渠道：</span>
-          <Select 
+          <Select
             style={{ width: 300 }}
             placeholder="请选择渠道"
             value={selectedChannelId || undefined}
@@ -521,6 +670,9 @@ const ModelsPage = () => {
               </Select.Option>
             ))}
           </Select>
+          <div style={{ marginTop: 8, fontSize: 12, color: token.colorTextSecondary }}>
+            从上游拉取的模型将以 <code>{'{channel.type}'}-{'{model_id}'}</code> 为平台 ID 自动创建，并自动绑定到所选渠道
+          </div>
         </div>
 
         {upstreamModels.length > 0 ? (
@@ -581,7 +733,7 @@ const ModelsPage = () => {
                   disabled={selectedModels.length === 0}
                   style={{ background: token.colorPrimary, border: 'none' }}
                 >
-                  批量创建 ({selectedModels.length})
+                  导入并绑定 ({selectedModels.length})
                 </Button>
               </Space>
             </div>
@@ -590,11 +742,179 @@ const ModelsPage = () => {
           <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
             该渠道暂无模型，请确保渠道配置正确
           </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
-            请先选择渠道
-          </div>
-        )}
+        ) : null}
+      </Modal>
+
+      {/* ===== 渠道绑定 Drawer ===== */}
+      <Drawer
+        title={
+          bindingsTarget && (
+            <Space>
+              <LinkOutlined />
+              <span>{bindingsTarget.display_name || bindingsTarget.model_id} · 渠道绑定</span>
+              <Tag color="blue">{bindings.length} 个</Tag>
+            </Space>
+          )
+        }
+        open={bindingsDrawerOpen}
+        onClose={closeBindingsDrawer}
+        width={720}
+        destroyOnHidden
+        extra={
+          <Button type="primary" icon={<PlusOutlined />} onClick={openAddBinding}>
+            添加绑定
+          </Button>
+        }
+      >
+        <Table<ModelChannel>
+          rowKey="id"
+          size="small"
+          loading={bindingsLoading}
+          dataSource={bindings}
+          pagination={false}
+          locale={{ emptyText: '尚未绑定任何渠道，点击右上角"添加绑定"开始' }}
+          columns={[
+            {
+              title: '渠道',
+              dataIndex: 'channel_id',
+              width: 200,
+              render: (id: string) => {
+                const ch = channels.find(c => c.channel_id === id)
+                return (
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{ch?.name || id}</div>
+                    <Tag color="default" style={{ fontSize: 11 }}>{ch?.type || 'unknown'}</Tag>
+                  </div>
+                )
+              },
+            },
+            {
+              title: '上游模型名',
+              dataIndex: 'upstream_model',
+              render: (text: string) => (
+                <span style={{ color: '#10B981', fontFamily: 'monospace' }}>{text}</span>
+              ),
+            },
+            {
+              title: '优先级',
+              dataIndex: 'priority',
+              width: 70,
+              align: 'center',
+            },
+            {
+              title: '权重',
+              dataIndex: 'weight',
+              width: 70,
+              align: 'center',
+            },
+            {
+              title: '启用',
+              dataIndex: 'enabled',
+              width: 70,
+              align: 'center',
+              render: (enabled: boolean, record: ModelChannel) => (
+                <Switch
+                  size="small"
+                  checked={enabled}
+                  onChange={(v) => handleToggleBinding(record, v)}
+                />
+              ),
+            },
+            {
+              title: '操作',
+              key: 'actions',
+              width: 140,
+              render: (_: any, record: ModelChannel) => (
+                <Space size="small">
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => openEditBinding(record)}
+                  >
+                    编辑
+                  </Button>
+                  <Popconfirm
+                    title="确认解绑？"
+                    onConfirm={() => handleUnbind(record)}
+                  >
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                    >
+                      解绑
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </Drawer>
+
+      {/* ===== 添加/编辑绑定 Modal ===== */}
+      <Modal
+        title={editingBinding ? '编辑绑定' : '添加绑定'}
+        open={bindingFormOpen}
+        onCancel={() => setBindingFormOpen(false)}
+        onOk={submitBinding}
+        okText={editingBinding ? '保存' : '绑定'}
+        destroyOnHidden
+      >
+        <Form form={bindingForm} layout="vertical" preserve={false}>
+          <Form.Item
+            name="channel_id"
+            label="渠道"
+            rules={[{ required: true, message: '请选择渠道' }]}
+          >
+            <Select
+              placeholder="选择渠道"
+              disabled={!!editingBinding}
+              showSearch
+              optionFilterProp="children"
+            >
+              {channels.map(c => (
+                <Select.Option key={c.channel_id} value={c.channel_id}>
+                  {c.name} ({c.type})
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item
+            name="upstream_model"
+            label="上游模型名"
+            rules={[{ required: true, message: '请填写上游模型名' }]}
+            extra="该渠道上对应的上游模型 ID（如 gpt-4o、claude-3-opus-20240229）"
+          >
+            <Input placeholder="如: gpt-4o, claude-3-opus" />
+          </Form.Item>
+          <Divider style={{ margin: '12px 0' }} />
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="priority"
+                label="优先级"
+                extra="数值大者优先生效"
+              >
+                <InputNumber style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="weight"
+                label="权重"
+                extra="同优先级时按权重分配流量"
+              >
+                <InputNumber min={1} max={1000} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="enabled" label="启用" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   )

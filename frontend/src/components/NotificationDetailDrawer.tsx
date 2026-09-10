@@ -122,7 +122,7 @@ export default function NotificationDetailDrawer({
       placement="right"
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
       styles={{
         wrapper: { background: token.colorBgElevated },
         body: { padding: '20px 24px 28px' },

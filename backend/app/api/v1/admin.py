@@ -17,7 +17,7 @@ from app.core.database import get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.channel import Channel, ChannelType, ChannelStatus, ChannelHealthStatus
 from app.models.channel_quota import ChannelQuota, QuotaType, SyncStatus
-from app.models.model import Model, ModelStatus
+from app.models.model import Model, ModelStatus, PriceType
 from app.models.model_channel import ModelChannel
 from app.models.usage_log import UsageLog
 from app.dependencies import get_current_user, require_admin
@@ -563,7 +563,7 @@ async def create_model(data: ModelCreate, request: Request, db: Session = Depend
     model = Model(
         model_id=data.model_id, display_name=data.display_name or data.model_id,
         description=data.description, aliases=json.dumps(data.aliases) if data.aliases else None,
-        price_type=Model.price_type.type if hasattr(Model.price_type, 'type') else data.price_type,
+        price_type=PriceType(data.price_type),
         price_per_1k_input=data.price_per_1k_input, price_per_1k_output=data.price_per_1k_output,
         price_per_request=data.price_per_request, status=ModelStatus(data.status)
     )
@@ -661,6 +661,37 @@ async def delete_model(model_id: str, request: Request, db: Session = Depends(ge
 
 
 # ========== 模型-渠道绑定管理 ==========
+
+@router.get("/models/{model_id}/channels", response_model=List[ModelChannelResponse])
+async def list_model_channels(model_id: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """获取模型已绑定的渠道列表"""
+    model = db.query(Model).filter(Model.model_id == model_id).first()
+    if not model:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    rows = db.query(ModelChannel).filter(ModelChannel.model_id == model_id).all()
+    channel_ids = {r.channel_id for r in rows}
+    channels_map = {
+        ch.channel_id: ch
+        for ch in db.query(Channel).filter(Channel.channel_id.in_(channel_ids)).all()
+    } if channel_ids else {}
+
+    items = []
+    for mc in rows:
+        ch = channels_map.get(mc.channel_id)
+        items.append(ModelChannelResponse(
+            id=mc.id, model_id=mc.model_id, channel_id=mc.channel_id,
+            upstream_model=mc.upstream_model, priority=mc.priority,
+            weight=mc.weight, enabled=mc.enabled, created_at=mc.created_at,
+            channel=ChannelResponse(
+                channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
+                endpoint=ch.endpoint, api_key=ch.api_key,
+                priority=ch.priority, timeout=ch.timeout,
+                status=ch.status.value, health_status=str(ch.health_status) if ch.health_status else None
+            ) if ch else None,
+        ))
+    return items
+
 
 @router.put("/models/{model_id}/channels")
 async def replace_model_channels(model_id: str, data: List[ModelChannelCreate], request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
