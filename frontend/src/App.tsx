@@ -43,27 +43,16 @@ function App() {
     }
   }, [userData])
 
-  // 处理认证状态
+  // 处理认证状态 - 只有 user 加载完成或 token 缺失时才标记完成
   useEffect(() => {
-    if (token && userData) {
+    if (!token) {
       setAuthChecked(true)
-    } else if (token && userError) {
-      setAuthChecked(true)
-    } else if (!token) {
+    } else if (userData || userError) {
       setAuthChecked(true)
     }
   }, [token, userData, userError])
 
-  // 认证状态由 SWR 数据驱动，不再单独调用 checkAuth
-  // token 刷新由 request.ts 中的拦截器处理
-  useEffect(() => {
-    if (token) {
-      setAuthChecked(true)
-    } else {
-      setAuthChecked(true)
-    }
-  }, [token])
-
+  // 修复：只在 user 完全加载后才进行角色判断重定向
   useEffect(() => {
     if (token && user) {
       if (user.role === 'admin' && window.location.pathname === '/stats') {
@@ -72,7 +61,9 @@ function App() {
     }
   }, [token, user, navigate])
 
-  const isAdmin = user?.role === 'admin'
+  // 关键：user 加载中时保持当前路由
+  const isUserLoaded = !!user
+  const isAdmin = isUserLoaded && user?.role === 'admin'
 
   if (token && !authChecked) {
     return (
@@ -99,7 +90,19 @@ function App() {
             <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<Settings />} />
             
-            <Route path="admin" element={isAdmin ? <AdminLayout><Outlet /></AdminLayout> : <Navigate to="/stats" />}>
+            {/* 
+              修复：admin 路由判断逻辑
+              - user 未加载: 保持当前路由，不重定向
+              - isAdmin: 允许访问 admin 页面
+              - 其他情况: 重定向到 /stats
+            */}
+            <Route path="admin" element={
+              !isUserLoaded 
+                ? <AdminLayout><Outlet /></AdminLayout>
+                : isAdmin 
+                  ? <AdminLayout><Outlet /></AdminLayout>
+                  : <Navigate to="/stats" />
+            }>
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="channels" element={<AdminChannels />} />
