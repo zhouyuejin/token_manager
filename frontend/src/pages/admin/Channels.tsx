@@ -5,11 +5,11 @@ import {
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
   Select, Popconfirm, Row, Col, Progress, Collapse, Tooltip, Card
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, SettingOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, SettingOutlined, ApiOutlined } from '@ant-design/icons'
 import { 
   getChannels, createChannel, updateChannel, deleteChannel,
   getAllChannelQuotas, syncChannelQuota, updateChannelQuota, Channel, 
-  getChannelModels, syncChannelModels
+  getChannelModels, syncChannelModels, testChannelConnection
 } from '../../api/channels'
 import { getModels, Model, bindChannelToModel, unbindChannel, getModelChannels } from '../../api/models'
 
@@ -60,6 +60,7 @@ const ChannelsPage = () => {
   const { token } = useThemeToken()
   const [allModels, setAllModels] = useState<Model[]>([])
   const [bindLoading, setBindLoading] = useState(false)
+  const [testLoading, setTestLoading] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -115,6 +116,38 @@ const ChannelsPage = () => {
       fetchData()
     } catch {
       message.error('更新失败')
+    }
+  }
+
+  const handleTestConnection = async () => {
+    const v = form.getFieldsValue(['type', 'endpoint', 'api_key'])
+    if (!v.endpoint || !v.api_key) {
+      message.warning('请先填写 API 端点和 API Key')
+      return
+    }
+    const hide = message.loading('正在测试连接...', 0)
+    setTestLoading(true)
+    try {
+      const res = await testChannelConnection({
+        type: v.type || 'openai',
+        endpoint: v.endpoint,
+        api_key: v.api_key,
+        timeout: 30,
+      })
+      hide()
+      if (res.success) {
+        const latency = res.latency_ms != null ? ` (${res.latency_ms}ms)` : ''
+        message.success(`连接成功${latency}`)
+      } else {
+        const code = res.status_code != null ? ` (HTTP ${res.status_code})` : ''
+        message.error(`${res.message}${code}`, 5)
+      }
+    } catch (e: any) {
+      hide()
+      const detail = e?.response?.data?.detail || e?.message || '请求失败'
+      message.error(typeof detail === 'string' ? detail : '请求参数错误', 5)
+    } finally {
+      setTestLoading(false)
     }
   }
 
@@ -241,7 +274,7 @@ const ChannelsPage = () => {
             form.setFieldsValue(record)
             setEditModalVisible(true)
           }} /></Tooltip>
-          <Tooltip title="同步配额"><Button size="small" icon={<SyncOutlined spin />} onClick={() => handleSync(record.channel_id)} /></Tooltip>
+          <Tooltip title="同步配额"><Button size="small" icon={<SyncOutlined />} onClick={() => handleSync(record.channel_id)} /></Tooltip>
           <Tooltip title="配置"><Button size="small" icon={<SettingOutlined />} onClick={() => {
             setSelectedChannel(record)
             configForm.setFieldsValue({
@@ -260,7 +293,7 @@ const ChannelsPage = () => {
     }
   ]
 
-  return (
+return (
     <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
         <h2>渠道管理</h2>
@@ -294,7 +327,20 @@ const ChannelsPage = () => {
             </Col>
           </Row>
           <Form.Item name="endpoint" label="API 端点"><Input placeholder="https://api.openai.com/v1" /></Form.Item>
-          <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}><Input.Password /></Form.Item>
+          <Form.Item label="API Key" required>
+            <Row gutter={8}>
+              <Col flex="auto">
+                <Form.Item name="api_key" noStyle rules={[{ required: true, message: '请输入 API Key' }]}>
+                  <Input.Password placeholder="sk-..." />
+                </Form.Item>
+              </Col>
+              <Col>
+                <Button icon={<ApiOutlined />} loading={testLoading} onClick={handleTestConnection}>
+                  测试连接
+                </Button>
+              </Col>
+            </Row>
+          </Form.Item>
           <Form.Item name="extra_keys" label="额外 Keys (JSON 数组)"><Input.TextArea rows={2} placeholder='["sk-xxx1", "sk-xxx2"]' /></Form.Item>
           <Row gutter={16}>
             <Col span={8}>
@@ -338,7 +384,20 @@ const ChannelsPage = () => {
             </Col>
           </Row>
           <Form.Item name="endpoint" label="API 端点"><Input /></Form.Item>
-          <Form.Item name="api_key" label="API Key"><Input.Password /></Form.Item>
+          <Form.Item label="API Key">
+            <Row gutter={8}>
+              <Col flex="auto">
+                <Form.Item name="api_key" noStyle>
+                  <Input.Password placeholder="不修改请留空" />
+                </Form.Item>
+              </Col>
+              <Col>
+                <Button icon={<ApiOutlined />} loading={testLoading} onClick={handleTestConnection}>
+                  测试连接
+                </Button>
+              </Col>
+            </Row>
+          </Form.Item>
           <Form.Item name="extra_keys" label="额外 Keys"><Input.TextArea rows={2} /></Form.Item>
           <Row gutter={16}>
             <Col span={8}>
