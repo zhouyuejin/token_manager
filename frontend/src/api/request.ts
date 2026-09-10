@@ -129,5 +129,8 @@ export const post = <T = any>(url: string, data?: any, config?: AxiosRequestConf
 export const put = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
   request.put<any, T>(url, data, config)
 
+export const patch = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+  request.patch<any, T>(url, data, config)
+
 export const del = <T = any>(url: string, config?: AxiosRequestConfig) =>
   request.delete<any, T>(url, config)
