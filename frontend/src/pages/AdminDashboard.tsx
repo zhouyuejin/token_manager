@@ -14,6 +14,7 @@ import {
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
 import { getAdminStats, AdminStats } from '../api/admin'
+import { useSwrDataWithParams } from '../hooks/useSwr'
 
 const { RangePicker } = DatePicker
 const { Text } = Typography
@@ -38,39 +39,39 @@ const TOP_USERS_DISPLAY = 10
 
 const AdminDashboard: React.FC = () => {
   const { token, isDark } = useThemeToken()
-  const [loading, setLoading] = useState(false)
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [systemStats, setSystemStats] = useState<SystemStats>({})
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().subtract(7, 'day'),
     dayjs()
   ])
 
-  useEffect(() => {
-    fetchData()
-  }, [dateRange])
+  // 使用 SWR 获取统计数据
+  const statsParams = {
+    start_date: dateRange[0].format('YYYY-MM-DD'),
+    end_date: dateRange[1].format('YYYY-MM-DD'),
+  }
+  const { data: statsData, isLoading } = useSwrDataWithParams<AdminStats>(
+    token ? '/admin/stats/usage' : null,
+    token ? statsParams : null
+  )
 
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const statsParams = {
-        start_date: dateRange[0].format('YYYY-MM-DD'),
-        end_date: dateRange[1].format('YYYY-MM-DD'),
-      }
-      
-      const statsData = await getAdminStats(statsParams)
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [systemStats, setSystemStats] = useState<SystemStats>({})
+  const loading = isLoading
+
+  // 同步 SWR 数据到 state
+  useEffect(() => {
+    if (statsData) {
       setStats(statsData)
-      
       setSystemStats({
         total_users: statsData.by_user?.length || 0,
         total_api_keys: 0,
         total_providers: statsData.by_provider?.length || 0,
       })
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
     }
+  }, [statsData])
+
+  const fetchData = async () => {
+    // SWR 会自动处理重新获取
   }
 
   // 计算总费用
