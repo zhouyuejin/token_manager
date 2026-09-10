@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { List, Button, Empty, Spin, Avatar, Dropdown, App, message } from 'antd'
 import { PlusOutlined, DeleteOutlined, MoreOutlined, MessageOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
-import { getConversations, deleteConversation, ChatConversation } from '../../api/chat'
+import { deleteConversation, ChatConversation } from '../../api/chat'
+import { useSwrDataWithParams } from '../../hooks/useSwr'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
@@ -67,10 +68,10 @@ const ConversationItem = memo(function ConversationItem({
           }}
           icon={<MessageOutlined />}
         />
-        
+
         {/* 标题和时间 - 增加宽度 */}
         <div style={{ marginLeft: '12px', flex: 1, minWidth: 0 }}>
-          <div 
+          <div
             style={{
               color: token.colorText,
               fontWeight: selected ? 500 : 400,
@@ -113,26 +114,19 @@ const ConversationList: React.FC<ConversationListProps> = ({
   onNewChat,
 }) => {
   const { token, isDark } = useThemeToken()
-  const [conversations, setConversations] = useState<ChatConversation[]>([])
-  const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const { message, modal } = App.useApp()
 
-  const fetchConversations = async () => {
-    setLoading(true)
-    try {
-      const res = await getConversations(1, 50)
-      setConversations(res.items)
-    } catch (error) {
-      console.error('获取对话列表失败:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchConversations()
-  }, [])
+  // 使用 SWR 获取对话列表,dedupingInterval 默认 5s 自动合并重复请求
+  const {
+    data: conversationsData,
+    mutate: mutateConversations,
+    isLoading,
+  } = useSwrDataWithParams<{ total: number; items: ChatConversation[] }>(
+    '/chats',
+    { page: 1, page_size: 50 },
+  )
+  const conversations = conversationsData?.items ?? []
 
   const handleDelete = useCallback(
     async (e: React.MouseEvent | React.KeyboardEvent, conversationId: string) => {
@@ -147,7 +141,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
           try {
             await deleteConversation(conversationId)
             message.success('删除成功')
-            setConversations(prev => prev.filter(c => c.conversation_id !== conversationId))
+            mutateConversations()
             if (selectedId === conversationId) {
               onNewChat()
             }
@@ -159,22 +153,22 @@ const ConversationList: React.FC<ConversationListProps> = ({
         },
       })
     },
-    [modal, selectedId, onNewChat]
+    [modal, selectedId, onNewChat, mutateConversations]
   )
 
   return (
     <div className="conversation-list" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 标题区域 */}
-      <div 
-        style={{ 
-          padding: '20px 16px 16px', 
+      <div
+        style={{
+          padding: '20px 16px 16px',
           borderBottom: `1px solid ${token.colorBorder}`,
           background: token.colorBgContainer,
         }}
       >
-        <span style={{ 
-          color: token.colorText, 
-          fontSize: '16px', 
+        <span style={{
+          color: token.colorText,
+          fontSize: '16px',
           fontWeight: 600,
         }}>
           历史对话
@@ -199,7 +193,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
       {/* 对话列表 */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {loading ? (
+        {isLoading ? (
           <div style={{ textAlign: 'center', padding: '20px' }}>
             <Spin />
           </div>
