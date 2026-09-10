@@ -48,9 +48,7 @@ const calcQuotaStats = (quota: any) => {
 const ChannelsPage = () => {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [quotas, setQuotas] = useState<Record<string, any>>({})
-  const [createModalVisible, setCreateModalVisible] = useState(false)
+      const [createModalVisible, setCreateModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [configModalVisible, setConfigModalVisible] = useState(false)
   const [modelModalVisible, setModelModalVisible] = useState(false)
@@ -64,28 +62,24 @@ const ChannelsPage = () => {
   const [bindLoading, setBindLoading] = useState(false)
   const [testLoading, setTestLoading] = useState(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  // 使用 SWR 获取数据
+  const { data: channelsData, mutate: mutateChannels } = useSwrData<{total: number; items: Channel[]}>('/admin/channels')
+  const { data: quotasData, mutate: mutateQuotas } = useSwrData<{total: number; items: any[]}>('/admin/channels/quotas')
+  const { data: modelsData, mutate: mutateModels } = useSwrData<{total: number; items: Model[]}>('/admin/models')
+
+  const channelsList = channelsData?.items || []
+  const modelsList = modelsData?.items || []
+
+  // 将 quotas 转换为 map
+  const quotasMap: Record<string, any> = {}
+  if (quotasData?.items) {
+    quotasData.items.forEach((item: any) => { quotasMap[item.channel_id] = item })
+  }
 
   const fetchData = async () => {
-    setLoading(true)
-    try {
-      const [channelsRes, quotasRes, modelsRes] = await Promise.all([
-        getChannels(),
-        getAllChannelQuotas(),
-        getModels()
-      ])
-      setAllModels(modelsRes.items || [])
-      setChannels(channelsRes.items || [])
-      const quotaMap: Record<string, any> = {}
-      quotasRes.items?.forEach((item: any) => { quotaMap[item.channel_id] = item })
-      setQuotas(quotaMap)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
+    mutateChannels()
+    mutateQuotas()
+    mutateModels()
   }
 
   const handleSync = async (channelId: string) => {
@@ -266,7 +260,7 @@ const ChannelsPage = () => {
     { 
       title: '配额', key: 'quota', width: 200,
       render: (_: any, record: Channel) => {
-        const quota = quotas[record.channel_id]
+        const quota = quotasMap[record.channel_id]
         const stats = calcQuotaStats(quota)
         if (!stats) return <span style={{ color: '#999' }}>未配置</span>
         return (

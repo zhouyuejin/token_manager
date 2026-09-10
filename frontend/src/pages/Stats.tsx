@@ -4,6 +4,7 @@ import { Card, Row, Col, Statistic, DatePicker, Table, Button, Space, Tag } from
 import { DownloadOutlined, ApiOutlined, ThunderboltOutlined, ClockCircleOutlined, CheckCircleOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsageStats, getAdminStats } from '../api/stats'
 import { getApiKeys } from '../api/apiKeys'
+import { useSwrData } from '../hooks/useSwr'
 import { useAuthStore } from '../store/auth'
 import dayjs from 'dayjs'
 import ReactECharts from 'echarts-for-react'
@@ -96,6 +97,9 @@ const StatsPage = () => {
     fetchData()
   }, [dateRange])
 
+  // 使用 SWR 获取 API Keys（独立于 dateRange）
+  const { data: keysData, mutate: mutateKeys } = useSwrData<{total: number; items: any[]}>('/api-keys')
+
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -103,12 +107,9 @@ const StatsPage = () => {
         start_date: dateRange[0].format('YYYY-MM-DD'),
         end_date: dateRange[1].format('YYYY-MM-DD'),
       }
-      
-      // 获取个人用量统计
       const statsData = await getUsageStats(statsParams)
-      const keysData = await getApiKeys()
       setStats(statsData)
-      setKeys(keysData.items || [])
+      // Keys are handled by SWR, no need to set state
     } catch (error) {
       console.error(error)
     } finally {

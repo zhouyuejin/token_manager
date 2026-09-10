@@ -7,6 +7,7 @@ import {
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
 import { getApiKeys, createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
+import { useSwrData } from '../hooks/useSwr'
 import dayjs from 'dayjs'
 
 const ApiKeysPage = () => {
@@ -21,20 +22,11 @@ const ApiKeysPage = () => {
   const message = useMessage()
   const { token, isDark } = useThemeToken()
 
-  useEffect(() => {
-    fetchKeys()
-  }, [])
+  // 使用 SWR 获取 API Keys
+  const { data: keysData, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>('/api-keys')
 
   const fetchKeys = async () => {
-    setLoading(true)
-    try {
-      const data = await getApiKeys()
-      setKeys(data.items || [])
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
+    mutateKeys()
   }
 
   const handleCreate = async (values: any) => {

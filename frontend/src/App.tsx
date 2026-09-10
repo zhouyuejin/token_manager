@@ -21,23 +21,48 @@ import OperationLogs from './pages/admin/OperationLogs'
 import LoginLogs from './pages/admin/LoginLogs'
 import { MessageProvider } from './components/MessageProvider'
 import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
+import { useSwrData } from './hooks/useSwr'
+import { UserInfo } from './api/auth'
 
 function App() {
-  const { token, checkAuth, user } = useAuthStore()
+  const { token, checkAuth, user, setAuth } = useAuthStore()
   const navigate = useNavigate()
   const [authChecked, setAuthChecked] = useState(false)
 
+  // 使用 SWR 获取用户信息，自动缓存和去重
+  const { data: userData, error: userError } = useSwrData<UserInfo>(
+    token ? '/users/me' : null,
+    { revalidateOnFocus: false }
+  )
+
+  // 同步 SWR 数据到 store
   useEffect(() => {
-    let cancelled = false
+    if (userData) {
+      setAuth(token!, useAuthStore.getState().refreshToken || '')
+      useAuthStore.setState({ user: userData })
+    }
+  }, [userData])
+
+  // 处理认证状态
+  useEffect(() => {
+    if (token && userData) {
+      setAuthChecked(true)
+    } else if (token && userError) {
+      setAuthChecked(true)
+    } else if (!token) {
+      setAuthChecked(true)
+    }
+  }, [token, userData, userError])
+
+  // 认证状态由 SWR 数据驱动，不再单独调用 checkAuth
+  // token 刷新由 request.ts 中的拦截器处理
+  useEffect(() => {
     if (token) {
-      Promise.resolve(checkAuth()).finally(() => {
-        if (!cancelled) setAuthChecked(true)
-      })
+      setAuthChecked(true)
     } else {
       setAuthChecked(true)
     }
-    return () => { cancelled = true }
-  }, [token, checkAuth])
+  }, [token])
 
   useEffect(() => {
     if (token && user) {

@@ -31,7 +31,7 @@ import { useThemeToken } from "../../theme/useThemeToken";
 import { useTheme } from "../../theme";
 import NotificationDropdown from "../NotificationDropdown";
 import { useNotificationStore } from "../../store/notification";
-import { getApiKeys } from "../../api/apiKeys";
+import { useSwrData } from "../../hooks/useSwr";
 import { useDefaultModelGroupWarning } from "../../hooks/useDefaultModelGroupWarning";
 
 const { Sider } = Layout;
@@ -121,14 +121,17 @@ const MainLayout = () => {
     }
   }, [token, navigate]);
 
-  // 引导检测：无 API Key 时每次进入都显示引导
+  // 引导检测：使用 SWR 获取 API Keys
+  const { data: apiKeysData } = useSwrData<{total: number; items: any[]}>(
+    token ? "/api-keys" : null,
+    { revalidateOnFocus: false, revalidateOnReconnect: false }
+  );
+
   useEffect(() => {
-    getApiKeys().then(res => {
-      if (!res.items || res.items.length === 0) {
-        setTourOpen(true);
-      }
-    }).catch(() => {});
-  }, []);
+    if (apiKeysData && (!apiKeysData.items || apiKeysData.items.length === 0)) {
+      setTourOpen(true);
+    }
+  }, [apiKeysData]);
 
   const handleTourFinish = () => {
     setTourOpen(false);

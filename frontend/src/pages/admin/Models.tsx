@@ -8,6 +8,7 @@ import {
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined } from '@ant-design/icons'
 import { getModels, createModel, updateModel, deleteModel, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
+import { useSwrData } from '../../hooks/useSwr'
 import { getChannels, Channel, syncChannelModels } from '../../api/channels'
 
 // 上游模型类型
@@ -21,9 +22,7 @@ interface UpstreamModel {
 
 const ModelsPage = () => {
   const [loading, setLoading] = useState(false)
-  const [models, setModels] = useState<ModelMapping[]>([])
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [modalVisible, setModalVisible] = useState(false)
+    const [modalVisible, setModalVisible] = useState(false)
   const [editModel, setEditModel] = useState<ModelMapping | null>(null)
   const [form] = Form.useForm()
   const [priceType, setPriceType] = useState<string>('token')
@@ -47,24 +46,16 @@ const ModelsPage = () => {
   const [editingBinding, setEditingBinding] = useState<ModelChannel | null>(null)
   const [bindingForm] = Form.useForm()
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  // 使用 SWR 获取数据和渠道
+  const { data: modelsData, mutate: mutateModels } = useSwrData<{total: number; items: ModelMapping[]}>('/admin/models')
+  const { data: channelsData, mutate: mutateChannels } = useSwrData<{total: number; items: Channel[]}>('/admin/channels')
+  
+  const modelsList = modelsData?.items || []
+  const channelsList = channelsData?.items || []
 
   const fetchData = async () => {
-    setLoading(true)
-    try {
-      const [modelsData, providersData] = await Promise.all([
-        getModels(),
-        getChannels()
-      ])
-      setModels(modelsData.items || [])
-      setChannels(providersData.items || [])
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
+    mutateModels()
+    mutateChannels()
   }
 
   const handleCreate = async (values: any) => {
@@ -246,7 +237,7 @@ const ModelsPage = () => {
 
   // 获取渠道名称
   const getChannelName = (channelId: string) => {
-    const channel = channels.find(p => p.channel_id === channelId)
+    const channel = channelsList.find(p => p.channel_id === channelId)
     return channel?.name || channelId
   }
 
@@ -328,7 +319,7 @@ const ModelsPage = () => {
       return
     }
 
-    const channel = channels.find(p => p.channel_id === selectedChannelId)
+    const channel = channelsList.find(p => p.channel_id === selectedChannelId)
     if (!channel) {
       message.error('渠道不存在')
       return
@@ -346,7 +337,7 @@ const ModelsPage = () => {
       const platformModelId = `${channel.type}-${upstreamModelId}`
 
       // 1) 确保 Model 记录存在
-      let modelExists = models.find(m => m.model_id === platformModelId)
+      let modelExists = modelsList.find(m => m.model_id === platformModelId)
       if (!modelExists) {
         try {
           const created = await createModel({
@@ -451,7 +442,7 @@ const ModelsPage = () => {
         overflow: 'hidden',
       }}>
         <Table
-          dataSource={models}
+          dataSource={modelsList}
           columns={[
             { 
               title: '平台模型', 
@@ -674,7 +665,7 @@ const ModelsPage = () => {
             value={selectedChannelId || undefined}
             onChange={handleSelectChannel}
           >
-            {channels.filter(p => p.status === 'active').map(p => (
+            {channelsList.filter(p => p.status === 'active').map(p => (
               <Select.Option key={p.channel_id} value={p.channel_id}>
                 {p.name} ({p.type})
               </Select.Option>
@@ -789,7 +780,7 @@ const ModelsPage = () => {
               dataIndex: 'channel_id',
               width: 200,
               render: (id: string) => {
-                const ch = channels.find(c => c.channel_id === id)
+                const ch = channelsList.find(c => c.channel_id === id)
                 return (
                   <div>
                     <div style={{ fontWeight: 500 }}>{ch?.name || id}</div>
@@ -885,7 +876,7 @@ const ModelsPage = () => {
               showSearch
               optionFilterProp="children"
             >
-              {channels.map(c => (
+              {channelsList.map(c => (
                 <Select.Option key={c.channel_id} value={c.channel_id}>
                   {c.name} ({c.type})
                 </Select.Option>
