@@ -115,7 +115,7 @@ const ModelsPage = () => {
     setModalVisible(true)
   }
 
-  // 获取供应商名称
+  // 获取渠道名称
   const getChannelName = (channelId: string) => {
     const channel = channels.find(p => p.channel_id === channelId)
     return channel?.name || channelId
@@ -139,7 +139,7 @@ const ModelsPage = () => {
     setSelectedModels([])
   }
 
-  // 选择供应商后拉取上游模型
+  // 选择渠道后拉取上游模型
   const handleSelectChannel = async (channelId: string) => {
     setSelectedChannelId(channelId)
     setFetchLoading(true)
@@ -206,7 +206,7 @@ const ModelsPage = () => {
 
     const channel = channels.find(p => p.channel_id === selectedChannelId)
     if (!channel) {
-      message.error('供应商不存在')
+      message.error('渠道不存在')
       return
     }
 
@@ -227,8 +227,6 @@ const ModelsPage = () => {
           // @ts-ignore
           model_id: platformModelId,
           display_name: model.name || modelId,
-          provider_id: channel.channel_id,
-          provider_model: modelId,
           price_type: 'token',
           price_per_1k_input: 0,
           price_per_1k_output: 0,
@@ -314,19 +312,15 @@ const ModelsPage = () => {
                 </div>
               )
             },
-            { 
-              title: '供应商', 
-              dataIndex: 'provider_id', 
-              key: 'provider_id',
-              render: (id: string) => (
-                <Tag color="blue" style={{ borderRadius: 6 }}>{getChannelName(id)}</Tag>
+            {
+              title: '绑定渠道',
+              key: 'bound_channels_count',
+              width: 110,
+              render: (_: any, record: ModelMapping) => (
+                <Tag color="blue" style={{ borderRadius: 6 }}>
+                  {record.bound_channels_count ?? 0} 个
+                </Tag>
               )
-            },
-            { 
-              title: '上游模型', 
-              dataIndex: 'provider_model', 
-              key: 'provider_model',
-              render: (text: string) => <span style={{ color: '#10B981' }}>{text}</span>
             },
             { 
               title: '定价', 
@@ -427,18 +421,6 @@ const ModelsPage = () => {
                 label: <span><SettingOutlined /> 基本配置</span>,
                 children: (
                   <>
-                    <Form.Item name="provider_id" label={<span style={{ color: token.colorTextSecondary }}>供应商</span>} rules={[{ required: true, message: '请选择供应商' }]}>
-                      <Select placeholder="选择供应商">
-                        {channels.map(p => (
-                          <Select.Option key={p.channel_id} value={p.channel_id}>{p.name} ({p.type})</Select.Option>
-                        ))}
-                      </Select>
-                    </Form.Item>
-
-                    <Form.Item name="provider_model" label={<span style={{ color: token.colorTextSecondary }}>上游模型ID</span>} rules={[{ required: true, message: '请输入上游模型ID' }]}>
-                      <Input placeholder="如: gpt-4o, claude-3-opus" />
-                    </Form.Item>
-
                     <Form.Item name="display_name" label={<span style={{ color: token.colorTextSecondary }}>显示名称</span>} rules={[{ required: true, message: '请输入显示名称' }]}>
                       <Input placeholder="如: GPT-4o" />
                     </Form.Item>
@@ -526,10 +508,10 @@ const ModelsPage = () => {
         width={900}
       >
         <div style={{ marginBottom: 16 }}>
-          <span style={{ color: token.colorTextSecondary, marginRight: 8 }}>选择供应商：</span>
+          <span style={{ color: token.colorTextSecondary, marginRight: 8 }}>选择渠道：</span>
           <Select 
             style={{ width: 300 }}
-            placeholder="请选择供应商"
+            placeholder="请选择渠道"
             value={selectedChannelId || undefined}
             onChange={handleSelectChannel}
           >
@@ -606,11 +588,11 @@ const ModelsPage = () => {
           </>
         ) : selectedChannelId && !fetchLoading ? (
           <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
-            该供应商暂无模型，请确保供应商配置正确
+            该渠道暂无模型，请确保渠道配置正确
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
-            请先选择供应商
+            请先选择渠道
           </div>
         )}
       </Modal>
