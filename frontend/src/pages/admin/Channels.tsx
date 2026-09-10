@@ -318,7 +318,7 @@ return (
         }}>新建渠道</Button>
       </div>
 
-      <Table columns={columns} dataSource={channels} rowKey="channel_id" loading={loading} />
+      <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading} />
 
       {/* 创建 Modal */}
       <Modal title="新建渠道" open={createModalVisible} onCancel={() => setCreateModalVisible(false)} onOk={() => form.submit()} width={600}>
