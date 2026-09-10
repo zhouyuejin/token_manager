@@ -85,13 +85,18 @@ class AnthropicModelAdapter(BaseModelSyncAdapter):
 class MinimaxModelAdapter(BaseModelSyncAdapter):
     """Minimax模型同步适配器"""
     
+    # MiniMax 官方模型名称映射（API 调用时使用官方名称）
     MODEL_NAME_MAP = {
-        "abab6.5s-chat": "MiniMax-M3", "abab6.5g-chat": "MiniMax-M3-Speed",
-        "abab5.5s-chat": "MiniMax-M2", "abab5.5g-chat": "MiniMax-M2-Speed",
+        "MiniMax-M2.7": "MiniMax-M2.7",
+        "MiniMax-M3": "MiniMax-M3",
+        "MiniMax-M3-Speed": "MiniMax-M3-Speed",
+        # 兼容旧名称（如果 API 返回旧格式）
+        "abab6.5s-chat": "MiniMax-M3",
+        "abab6.5g-chat": "MiniMax-M3-Speed",
     }
     
     async def fetch_models(self) -> List[ModelInfo]:
-        url = f"{self.channel.endpoint}/v1/models"
+        url = f"{self.channel.endpoint}/models"
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.get(url, headers=self.get_headers())
@@ -103,7 +108,12 @@ class MinimaxModelAdapter(BaseModelSyncAdapter):
         return self._get_default_models()
     
     def _get_default_models(self) -> List[ModelInfo]:
-        return [ModelInfo("abab6.5s-chat", "MiniMax-M3", "minimax"), ModelInfo("abab6.5g-chat", "MiniMax-M3-Speed", "minimax")]
+        # MiniMax 官方支持的模型（根据官方文档）
+        return [
+            ModelInfo("MiniMax-M2.7", "MiniMax-M2.7", "minimax"),
+            ModelInfo("MiniMax-M3", "MiniMax-M3", "minimax"),
+            ModelInfo("MiniMax-M3-Speed", "MiniMax-M3-Speed", "minimax"),
+        ]
 
 
 class DeepseekModelAdapter(BaseModelSyncAdapter):
