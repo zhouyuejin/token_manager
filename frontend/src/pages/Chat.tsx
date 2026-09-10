@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { loadModelConfig, saveModelConfig } from '../utils/chatStorage'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Layout, Button, App } from 'antd'
@@ -7,11 +7,11 @@ import MessageList from '../components/Chat/MessageList'
 import InputArea from '../components/Chat/InputArea'
 import {
   createConversation,
-  getMessages,
   sendMessageStream,
   ChatConversation,
   ChatMessage,
 } from '../api/chat'
+import { useSwrDataWithParams } from '../hooks/useSwr'
 
 const { Sider } = Layout
 
@@ -22,34 +22,33 @@ const Chat: React.FC = () => {
   const { message } = App.useApp()
   const [_conversations, setConversations] = useState<ChatConversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [streaming, setStreaming] = useState(false)
-  
+
   // 模型配置
   const [modelConfig, setModelConfig] = useState<{
     modelId?: string
   }>(() => loadModelConfig())
 
-  // 加载对话消息
-  const loadMessages = useCallback(async (conversationId: string) => {
-    setLoading(true)
-    try {
-      const res = await getMessages(conversationId, 1, 100)
-      setMessages(res.items)
-    } catch (error) {
-      console.error('获取消息失败:', error)
-      message.error('加载消息失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [message])
+  // 使用 SWR 获取当前会话消息:同一 URL 在 dedupingInterval 内共享请求,
+  // 避免 select + useEffect 触发两次,以及 StrictMode 双调用
+  const messagesUrl = currentConversationId
+    ? `/chats/${currentConversationId}/messages`
+    : null
+  const messagesParams = currentConversationId ? { page: 1, page_size: 100 } : null
+  const {
+    data: messagesData,
+    mutate: mutateMessages,
+    isLoading: messagesLoading,
+  } = useSwrDataWithParams<{ total: number; items: ChatMessage[] }>(
+    messagesUrl,
+    messagesParams,
+  )
+  const messages = messagesData?.items ?? []
 
   // 选择对话
-  const handleSelectConversation = async (conversationId: string) => {
+  const handleSelectConversation = (conversationId: string) => {
     setCurrentConversationId(conversationId)
-    await loadMessages(conversationId)
   }
 
   // 新建对话,返回新创建的会话 ID(避免在调用方依赖尚未更新的 state)
@@ -59,7 +58,6 @@ const Chat: React.FC = () => {
         model: modelConfig.modelId,
       })
       setCurrentConversationId(res.conversation_id)
-      setMessages([])
       setConversations(prev => [res, ...prev])
       return res.conversation_id
     } catch (error) {
@@ -87,7 +85,7 @@ const Chat: React.FC = () => {
     setSending(true)
     setStreaming(true)
 
-    // 添加用户消息到列表
+    // 乐观更新:添加用户消息 + AI 占位消息
     const tempUserMessage: ChatMessage = {
       message_id: `temp-${Date.now()}`,
       conversation_id: conversationId,
@@ -95,9 +93,6 @@ const Chat: React.FC = () => {
       content,
       created_at: new Date().toISOString(),
     }
-    setMessages(prev => [...prev, tempUserMessage])
-
-    // 添加一个空的 AI 消息占位
     const tempAssistantMessage: ChatMessage = {
       message_id: `temp-ai-${Date.now()}`,
       conversation_id: conversationId,
@@ -105,7 +100,16 @@ const Chat: React.FC = () => {
       content: '',
       created_at: new Date().toISOString(),
     }
-    setMessages(prev => [...prev, tempAssistantMessage])
+    mutateMessages(
+      (prev) => {
+        const items = prev?.items ?? []
+        return {
+          total: items.length + 2,
+          items: [...items, tempUserMessage, tempAssistantMessage],
+        }
+      },
+      { revalidate: false },
+    )
 
     try {
       // 构造消息历史
@@ -167,14 +171,21 @@ const Chat: React.FC = () => {
                   const contentChunk = parsed.choices[0].delta.content
                   fullContent += contentChunk
 
-                  setMessages((prev: ChatMessage[]) => {
-                    const newMessages = [...prev]
-                    const lastMsg = newMessages[newMessages.length - 1]
-                    if (lastMsg?.role === 'assistant') {
-                      lastMsg.content = fullContent
-                    }
-                    return newMessages
-                  })
+                  mutateMessages(
+                    (prev) => {
+                      if (!prev) return prev
+                      const items = [...prev.items]
+                      const lastMsg = items[items.length - 1]
+                      if (lastMsg?.role === 'assistant') {
+                        items[items.length - 1] = {
+                          ...lastMsg,
+                          content: fullContent,
+                        }
+                      }
+                      return { ...prev, items }
+                    },
+                    { revalidate: false },
+                  )
                 }
               } catch {
                 // 忽略解析错误
@@ -184,16 +195,23 @@ const Chat: React.FC = () => {
         }
       }
 
-      // 流式结束，重新获取完整消息
-      await loadMessages(conversationId)
+      // 流式结束,重新拉取完整消息以保证与服务端一致
+      await mutateMessages()
       setStreaming(false)
       setSending(false)
     } catch (error: any) {
       console.error('发送消息失败:', error)
-      // 优先显示后端返回的具体错误信息（如额度不足）
+      // 优先显示后端返回的具体错误信息(如额度不足)
       const detail = error?.message || '发送消息失败'
       message.error(detail)
-      setMessages(prev => prev.slice(0, -2))
+      // 回滚乐观更新
+      mutateMessages(
+        (prev) => {
+          if (!prev) return prev
+          return { ...prev, items: prev.items.slice(0, -2) }
+        },
+        { revalidate: false },
+      )
       setStreaming(false)
       setSending(false)
     }
@@ -207,18 +225,14 @@ const Chat: React.FC = () => {
     const userMessages = messages.filter((m, i) => m.role === 'user' && i < messageIndex)
     if (userMessages.length === 0) return
 
-    setMessages(prev => prev.slice(0, messageIndex))
+    mutateMessages(
+      (prev) => (prev ? { ...prev, items: prev.items.slice(0, messageIndex) } : prev),
+      { revalidate: false },
+    )
 
     const lastUserMessage = userMessages[userMessages.length - 1]
     await handleSendMessage(lastUserMessage.content)
   }
-
-  // 监听对话变化
-  useEffect(() => {
-    if (currentConversationId) {
-      loadMessages(currentConversationId)
-    }
-  }, [currentConversationId, loadMessages])
 
   // 持久化模型选择,刷新后仍然保留
   useEffect(() => {
@@ -262,7 +276,7 @@ const Chat: React.FC = () => {
         <Layout.Content style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <MessageList
             messages={messages}
-            loading={loading}
+            loading={messagesLoading}
             streaming={streaming}
             onRegenerate={handleRegenerate}
           />
