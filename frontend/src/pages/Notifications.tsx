@@ -24,12 +24,12 @@ import {
 import dayjs from 'dayjs'
 import { useNotificationStore, Notification } from '../store/notification'
 import {
-  getNotifications,
   markAsRead,
   markAllAsRead,
   deleteNotification,
   deleteReadNotifications,
 } from '../api/notifications'
+import { useSwrDataWithParams } from '../hooks/useSwr'
 import NotificationDetailDrawer, {
   NOTIFICATION_TYPE_CONFIG,
 } from '../components/NotificationDetailDrawer'
@@ -203,7 +203,6 @@ const NotificationsPage = () => {
   const [type, setType] = useState<string>('')
   const [keyword, setKeyword] = useState('')
 
-  const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [selectedNotif, setSelectedNotif] = useState<Notification | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -224,55 +223,28 @@ const NotificationsPage = () => {
   // 记录最近一次 fetch 返回的首条通知 id，用于探测 WS 推送进来的新条目
   const lastFetchedFirstIdRef = useRef<string | null>(null)
 
-  const refreshNow = async () => {
-    setLoading(true)
-    try {
-      const result = await getNotifications({
-        page,
-        page_size: pageSize,
-        type: type || undefined,
-      })
-      replaceNotifications(result.items, result.unread_count)
-      setTotal(result.total)
-      lastFetchedFirstIdRef.current = result.items[0]?.notif_id ?? null
-      // 重新拉取后重置 banner 的 dismiss 状态，给用户一个干净的"已处理"反馈
-      setBannerDismissed(false)
-    } catch (err) {
-      console.error('刷新通知失败:', err)
-      message.error('刷新失败')
-    } finally {
-      setLoading(false)
-    }
+  // 构建查询参数
+  const queryParams = {
+    page,
+    page_size: pageSize,
+    ...(type ? { type } : {}),
   }
 
-  // page / pageSize / type 任一变化都会重新触发
+  // 使用 SWR 获取通知列表
+  const { data: swrData, isLoading: loading, mutate: refreshNow } = useSwrDataWithParams<{
+    total: number
+    unread_count: number
+    items: Notification[]
+  }>('/notifications', Object.keys(queryParams).length > 0 ? queryParams : null)
+
+  // SWR 数据变化时同步到 store
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    getNotifications({
-      page,
-      page_size: pageSize,
-      type: type || undefined,
-    })
-      .then((result) => {
-        if (cancelled) return
-        replaceNotifications(result.items, result.unread_count)
-        setTotal(result.total)
-        lastFetchedFirstIdRef.current = result.items[0]?.notif_id ?? null
-        setBannerDismissed(false)
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        console.error('加载通知失败:', err)
-        message.error('加载通知失败')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [page, pageSize, type, replaceNotifications, message])
+    if (!swrData) return
+    replaceNotifications(swrData.items, swrData.unread_count)
+    setTotal(swrData.total)
+    lastFetchedFirstIdRef.current = swrData.items[0]?.notif_id ?? null
+    setBannerDismissed(false)
+  }, [swrData, replaceNotifications])
 
   // 计算自上次 fetch 后，store 头部新增了几条 WS 推送的通知
   const newSinceLastFetch = useMemo(() => {
@@ -429,7 +401,7 @@ const NotificationsPage = () => {
             />
             <Button
               icon={<ReloadOutlined />}
-              onClick={refreshNow}
+              onClick={() => refreshNow()}
               style={{ borderRadius: 8 }}
             >
               刷新
@@ -470,7 +442,7 @@ const NotificationsPage = () => {
               <Button
                 type="link"
                 size="small"
-                onClick={refreshNow}
+                onClick={() => refreshNow()}
                 style={{ marginLeft: 8, padding: 0, color: token.colorPrimary }}
               >
                 刷新
