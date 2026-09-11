@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSwrData } from '../../hooks/useSwr'
 import { useNavigate } from 'react-router-dom'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
-  Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
-  Select, Popconfirm, Row, Col, Progress, Tooltip, Card
+  Table, Button, Tag, Space, Modal, Form, InputNumber, Switch, 
+  Popconfirm, Row, Col, Progress, Tooltip
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, SettingOutlined, ApiOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, SettingOutlined } from '@ant-design/icons'
 import { 
   getChannels, deleteChannel,
-  getAllChannelQuotas, syncChannelQuota, updateChannelQuota, Channel, 
-  getChannelModels, syncChannelModels
+  syncChannelQuota, updateChannelQuota, Channel, 
+  syncChannelModels
 } from '../../api/channels'
-import { getModels, Model, bindChannelToModel, unbindChannel, getModelChannels } from '../../api/models'
+import { Model, bindChannelToModel, unbindChannel } from '../../api/models'
 
 const formatRemainTime = (ms: number): string => {
   if (!ms || ms <= 0) return '0秒'
@@ -47,7 +47,7 @@ const calcQuotaStats = (quota: any) => {
 const ChannelsPage = () => {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-      const [configModalVisible, setConfigModalVisible] = useState(false)
+  const [configModalVisible, setConfigModalVisible] = useState(false)
   const [modelModalVisible, setModelModalVisible] = useState(false)
   const [selectedChannelModels, setSelectedChannelModels] = useState<any[]>([])
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
@@ -219,7 +219,7 @@ const ChannelsPage = () => {
   ]
 
 return (
-    <div style={{ padding: 24 }}>
+  <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
         <h2>渠道管理</h2>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/channels/new')}>新建渠道</Button>
