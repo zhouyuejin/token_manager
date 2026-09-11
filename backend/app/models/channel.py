@@ -30,6 +30,25 @@ class ChannelType(enum.Enum):
     bedrock = "bedrock"
 
 
+class UpstreamFormat(enum.Enum):
+    """上游 API 格式"""
+    auto = "auto"
+    chat = "chat"
+    anthropic = "anthropic"
+    gemini = "gemini"
+    responses = "responses"
+    custom = "custom"
+
+
+class AuthType(enum.Enum):
+    """认证方式"""
+    auto = "auto"
+    bearer = "bearer"
+    api_key = "api_key"
+    azure_api_key = "azure_api_key"
+    query_key = "query_key"
+
+
 class ChannelStatus(enum.Enum):
     """渠道状态"""
     active = "active"
@@ -69,6 +88,18 @@ class Channel(Base):
     # 优先级与超时
     priority = Column(Integer, default=0, comment="优先级（数值越大优先级越高）")
     timeout = Column(Integer, default=60, comment="请求超时时间（秒）")
+    upstream_format = Column(
+        String(32), default="chat", nullable=False,
+        comment="上游API格式: chat/anthropic/gemini/responses/auto/custom"
+    )
+    auth_type = Column(
+        String(32), default="auto", nullable=False,
+        comment="认证方式: auto/bearer/api_key/azure_api_key/query_key"
+    )
+    auth_headers = Column(
+        Text, nullable=True,
+        comment="自定义Header JSON"
+    )
     
     # 状态
     status = Column(Enum(ChannelStatus), default=ChannelStatus.active, nullable=False)
