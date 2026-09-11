@@ -95,24 +95,26 @@ const ChannelsPage = () => {
 
   const handleCreate = async (values: any) => {
     try {
-      await createChannel(parseExtraKeys(values))
+      const payload = parseAuthHeaders(parseExtraKeys(values))
+      await createChannel(payload)
       message.success('创建成功')
       setCreateModalVisible(false)
       fetchData()
     } catch {
-      message.error('创建失败')
+      /* error already displayed */
     }
   }
 
   const handleUpdate = async (values: any) => {
     if (!selectedChannel) return
     try {
-      await updateChannel(selectedChannel.channel_id, parseExtraKeys(values))
+      const payload = parseAuthHeaders(parseExtraKeys(values))
+      await updateChannel(selectedChannel.channel_id, payload)
       message.success('更新成功')
       setEditModalVisible(false)
       fetchData()
     } catch {
-      message.error('更新失败')
+      /* error already displayed */
     }
   }
 
@@ -138,6 +140,25 @@ const ChannelsPage = () => {
       throw new Error('invalid extra_keys')
     }
     payload.extra_keys = parsed
+    return payload
+  }
+
+  // auth_headers 在表单上是 JSON 字符串，后端 ChannelCreate 要求 Dict[str, str]。
+  // 空串 → undefined（让后端使用默认空字典）；非空则解析 JSON 对象，失败给提示。
+  const parseAuthHeaders = (values: any) => {
+    const payload = { ...values }
+    if (typeof payload.auth_headers !== 'string') return payload
+    const trimmed = payload.auth_headers.trim()
+    if (!trimmed) {
+      payload.auth_headers = undefined
+      return payload
+    }
+    try {
+      payload.auth_headers = JSON.parse(trimmed)
+    } catch {
+      message.error('额外请求头不是合法 JSON')
+      throw new Error('invalid auth_headers')
+    }
     return payload
   }
 
@@ -374,6 +395,43 @@ return (
               <Form.Item name="timeout" label="超时(秒)" initialValue={60}><InputNumber style={{ width: '100%' }} /></Form.Item>
             </Col>
           </Row>
+          <Collapse ghost>
+            <Panel header="⚙️ 高级选项（一般无需修改）" key="advanced">
+              <Form.Item
+                name="upstream_format"
+                label="上游 API 格式"
+                initialValue="auto"
+                tooltip="默认自动即可。Anthropic 官方API选 anthropic，GCP Gemini 选 gemini。"
+              >
+                <Select>
+                  <Select.Option value="auto">自动</Select.Option>
+                  <Select.Option value="chat">Chat Completions</Select.Option>
+                  <Select.Option value="anthropic">Anthropic Messages</Select.Option>
+                  <Select.Option value="gemini">Gemini generateContent</Select.Option>
+                  <Select.Option value="responses">OpenAI Responses</Select.Option>
+                  <Select.Option value="custom">自定义</Select.Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item name="auth_type" label="认证方式" initialValue="auto" tooltip="默认自动已覆盖大多数场景">
+                <Select>
+                  <Select.Option value="auto">自动</Select.Option>
+                  <Select.Option value="bearer">Bearer</Select.Option>
+                  <Select.Option value="api_key">API Key (x-api-key)</Select.Option>
+                  <Select.Option value="azure_api_key">Azure API Key</Select.Option>
+                  <Select.Option value="query_key">Query Parameter</Select.Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                name="auth_headers"
+                label="额外请求头 (JSON)"
+                tooltip='例如 Anthropic 需要 {"anthropic-version": "2023-06-01"}'
+              >
+                <Input.TextArea rows={3} placeholder='{"anthropic-version": "2023-06-01"}' />
+              </Form.Item>
+            </Panel>
+          </Collapse>
         </Form>
       </Modal>
 
@@ -437,6 +495,43 @@ return (
               <Select.Option value="disabled">禁用</Select.Option>
             </Select>
           </Form.Item>
+          <Collapse ghost>
+            <Panel header="⚙️ 高级选项（一般无需修改）" key="advanced">
+              <Form.Item
+                name="upstream_format"
+                label="上游 API 格式"
+                initialValue="auto"
+                tooltip="默认自动即可。Anthropic 官方API选 anthropic，GCP Gemini 选 gemini。"
+              >
+                <Select>
+                  <Select.Option value="auto">自动</Select.Option>
+                  <Select.Option value="chat">Chat Completions</Select.Option>
+                  <Select.Option value="anthropic">Anthropic Messages</Select.Option>
+                  <Select.Option value="gemini">Gemini generateContent</Select.Option>
+                  <Select.Option value="responses">OpenAI Responses</Select.Option>
+                  <Select.Option value="custom">自定义</Select.Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item name="auth_type" label="认证方式" initialValue="auto" tooltip="默认自动已覆盖大多数场景">
+                <Select>
+                  <Select.Option value="auto">自动</Select.Option>
+                  <Select.Option value="bearer">Bearer</Select.Option>
+                  <Select.Option value="api_key">API Key (x-api-key)</Select.Option>
+                  <Select.Option value="azure_api_key">Azure API Key</Select.Option>
+                  <Select.Option value="query_key">Query Parameter</Select.Option>
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                name="auth_headers"
+                label="额外请求头 (JSON)"
+                tooltip='例如 Anthropic 需要 {"anthropic-version": "2023-06-01"}'
+              >
+                <Input.TextArea rows={3} placeholder='{"anthropic-version": "2023-06-01"}' />
+              </Form.Item>
+            </Panel>
+          </Collapse>
         </Form>
       </Modal>
 
