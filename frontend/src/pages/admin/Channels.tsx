@@ -15,7 +15,6 @@ import {
 } from '../../api/channels'
 import { getModels, Model, bindChannelToModel, unbindChannel, getModelChannels } from '../../api/models'
 
-const { Panel } = Collapse
 
 const formatRemainTime = (ms: number): string => {
   if (!ms || ms <= 0) return '0秒'
@@ -395,8 +394,14 @@ return (
               <Form.Item name="timeout" label="超时(秒)" initialValue={60}><InputNumber style={{ width: '100%' }} /></Form.Item>
             </Col>
           </Row>
-          <Collapse ghost>
-            <Panel header="⚙️ 高级选项（一般无需修改）" key="advanced">
+          <Collapse
+            ghost
+            items={[
+              {
+                key: 'advanced',
+                label: '⚙️ 高级选项（一般无需修改）',
+                children: (
+                  <>
               <Form.Item
                 name="upstream_format"
                 label="上游 API 格式"
@@ -430,8 +435,11 @@ return (
               >
                 <Input.TextArea rows={3} placeholder='{"anthropic-version": "2023-06-01"}' />
               </Form.Item>
-            </Panel>
-          </Collapse>
+                  </>
+                ),
+              },
+            ]}
+          />
         </Form>
       </Modal>
 
@@ -495,8 +503,14 @@ return (
               <Select.Option value="disabled">禁用</Select.Option>
             </Select>
           </Form.Item>
-          <Collapse ghost>
-            <Panel header="⚙️ 高级选项（一般无需修改）" key="advanced">
+          <Collapse
+            ghost
+            items={[
+              {
+                key: 'advanced',
+                label: '⚙️ 高级选项（一般无需修改）',
+                children: (
+                  <>
               <Form.Item
                 name="upstream_format"
                 label="上游 API 格式"
@@ -530,8 +544,11 @@ return (
               >
                 <Input.TextArea rows={3} placeholder='{"anthropic-version": "2023-06-01"}' />
               </Form.Item>
-            </Panel>
-          </Collapse>
+                  </>
+                ),
+              },
+            ]}
+          />
         </Form>
       </Modal>
 
