@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { loadModelConfig, saveModelConfig } from '../utils/chatStorage'
+import { stripThinkTags } from '../utils/thinkTag'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Layout, Button, App } from 'antd'
 import ConversationList from '../components/Chat/ConversationList'
@@ -184,6 +185,10 @@ const Chat: React.FC = () => {
               const contentChunk = parsed.choices[0].delta.content
               fullContent += contentChunk
 
+              // 推理模型(如 MiniMax-M3 / DeepSeek-R1)会把思考过程内联在 content 里
+              // 用 <think>...</think> 包起来。在流式累加器这里过滤掉，避免中途闪一下。
+              const displayContent = stripThinkTags(fullContent)
+
               mutateMessages(
                 (prev) => {
                   if (!prev) return prev
@@ -192,7 +197,7 @@ const Chat: React.FC = () => {
                   if (lastMsg?.role === 'assistant') {
                     items[items.length - 1] = {
                       ...lastMsg,
-                      content: fullContent,
+                      content: displayContent,
                     }
                   }
                   return { ...prev, items }
