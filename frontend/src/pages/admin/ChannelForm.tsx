@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import {
   Card, Button, Space, Form, Input, InputNumber, Select, Row, Col,
@@ -18,7 +17,6 @@ const ChannelForm: React.FC = () => {
   const { channelId } = useParams<{ channelId?: string }>()
   const navigate = useNavigate()
   const message = useMessage()
-  const { token } = useThemeToken()
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
   const [fetchLoading, setFetchLoading] = useState(false)
@@ -291,7 +289,7 @@ const ChannelForm: React.FC = () => {
                     <Form.Item
                       name="auth_headers"
                       label="额外请求头 (JSON)"
-                      tooltip={'"anthropic-version": "2023-06-01"'}
+                      tooltip='例如 Anthropic 需要 {"anthropic-version": "2023-06-01"}'
                     >
                       <Input.TextArea rows={3} placeholder={'{"anthropic-version": "2023-06-01"}'} />
                     </Form.Item>
