@@ -3,6 +3,7 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { Spin, Empty, Avatar } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons'
 import { ChatMessage } from '../../api/chat'
+import { stripThinkTags } from '../../utils/thinkTag'
 import dayjs from 'dayjs'
 
 interface MessageListProps {
@@ -39,10 +40,11 @@ const MessageList: React.FC<MessageListProps> = ({
 
   // 格式化消息内容
   const formatContent = (content: string) => {
-    return content.split('\n').map((line, i) => (
+    const lines = stripThinkTags(content).split('\n')
+    return lines.map((line, i) => (
       <span key={i}>
         {line}
-        {i < content.split('\n').length - 1 && <br />}
+        {i < lines.length - 1 && <br />}
       </span>
     ))
   }
