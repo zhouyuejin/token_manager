@@ -23,6 +23,9 @@ def record_operation(
     """
     写入一条操作日志。不抛异常，失败仅 logger.exception。
     """
+    # target_id 列定义 String(32)，超过会被截断
+    if target_id and len(target_id) > 32:
+        target_id = target_id[:32]
     try:
         log_entry = OperationLog(
             log_id=f"log_{secrets.token_hex(12)}",

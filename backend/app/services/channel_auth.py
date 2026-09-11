@@ -4,6 +4,7 @@
 根据 Channel 配置动态选择认证方式和上游端点。
 """
 import json
+import re
 from typing import Dict, Optional
 from app.models.channel import Channel, ChannelType, AuthType, UpstreamFormat
 
@@ -95,7 +96,13 @@ def build_auth_headers(channel: Channel, api_key: str) -> Dict[str, str]:
 
 def _build_url_for_format(endpoint: str, fmt: UpstreamFormat, model: Optional[str] = None) -> str:
     base = endpoint.rstrip("/")
+    # 火山方舟 coding plan 端点（/api/coding）使用 /v3/chat/completions
+    if "/api/coding" in base:
+        return f"{base}/v3/chat/completions"
     path_template = _FORMAT_PATH.get(fmt, "/v1/chat/completions")
+    # endpoint 已含 /vN（如 /v1、/v3、/v1beta）时去掉路径里的版本前缀，避免 /v1/v1/chat/completions 重复
+    if re.search(r"/v\d+(?:beta)?$", base):
+        path_template = re.sub(r"^/v\d+(?:beta)?/", "/", path_template)
     if fmt == UpstreamFormat.gemini and "{model}" in path_template:
         path = path_template.replace("{model}", model or "default")
     else:

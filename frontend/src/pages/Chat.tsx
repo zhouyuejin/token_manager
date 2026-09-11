@@ -150,6 +150,7 @@ const Chat: React.FC = () => {
       let fullContent = ''
 
       if (reader) {
+        let streamError: Error | null = null
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
@@ -158,41 +159,51 @@ const Chat: React.FC = () => {
           const lines = chunk.split('\n')
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6)
-              if (data === '[DONE]') {
-                setStreaming(false)
-                continue
-              }
+            if (!line.startsWith('data: ')) continue
+            const data = line.slice(6)
+            if (data === '[DONE]') {
+              setStreaming(false)
+              continue
+            }
 
-              try {
-                const parsed = JSON.parse(data)
-                if (parsed.choices?.[0]?.delta?.content) {
-                  const contentChunk = parsed.choices[0].delta.content
-                  fullContent += contentChunk
+            let parsed: any
+            try {
+              parsed = JSON.parse(data)
+            } catch {
+              continue  // 忽略 JSON 解析错误
+            }
 
-                  mutateMessages(
-                    (prev) => {
-                      if (!prev) return prev
-                      const items = [...prev.items]
-                      const lastMsg = items[items.length - 1]
-                      if (lastMsg?.role === 'assistant') {
-                        items[items.length - 1] = {
-                          ...lastMsg,
-                          content: fullContent,
-                        }
-                      }
-                      return { ...prev, items }
-                    },
-                    { revalidate: false },
-                  )
-                }
-              } catch {
-                // 忽略解析错误
-              }
+            // 后端透传的上游错误（如 CodingPlan 订阅过期、模型不可用等）
+            // 必须在内层 try 之外检查，否则会被 swallow
+            if (parsed.error) {
+              streamError = new Error(parsed.error)
+              break
+            }
+
+            if (parsed.choices?.[0]?.delta?.content) {
+              const contentChunk = parsed.choices[0].delta.content
+              fullContent += contentChunk
+
+              mutateMessages(
+                (prev) => {
+                  if (!prev) return prev
+                  const items = [...prev.items]
+                  const lastMsg = items[items.length - 1]
+                  if (lastMsg?.role === 'assistant') {
+                    items[items.length - 1] = {
+                      ...lastMsg,
+                      content: fullContent,
+                    }
+                  }
+                  return { ...prev, items }
+                },
+                { revalidate: false },
+              )
             }
           }
+          if (streamError) break
         }
+        if (streamError) throw streamError
       }
 
       // 流式结束,重新拉取完整消息以保证与服务端一致

@@ -552,18 +552,22 @@ class ProxyService:
 
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
                         if response.status_code != 200:
+                            # stream 上下文需先读 body 才能解析 JSON 错误
                             error_msg = f"HTTP {response.status_code}"
                             try:
-                                error_data = response.json()
+                                error_text = response.read().decode("utf-8")
+                                error_data = json.loads(error_text)
                                 error_msg = (
-                                    error_data.get("error", {}).get("message") or
-                                    error_data.get("message") or
-                                    error_data.get("detail") or
-                                    error_msg
+                                    error_data.get("error", {}).get("message")
+                                    or error_data.get("message")
+                                    or error_data.get("detail")
+                                    or error_text[:300]
+                                    or error_msg
                                 )
-                            except:
+                            except Exception:
                                 pass
-                            yield f'data: {{"error": "{error_msg}"}}\n\n'
+                            safe_error = error_msg.replace("\\", "\\\\").replace('"', '\\"')
+                            yield f'data: {{"error": "{safe_error}"}}\n\n'
                             yield "data: [DONE]\n\n"
                             return
 
