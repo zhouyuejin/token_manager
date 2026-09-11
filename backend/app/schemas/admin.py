@@ -1,7 +1,7 @@
 """
 管理后台相关Schema
 """
-from pydantic import BaseModel, EmailStr, Field, model_validator, computed_field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, model_validator, computed_field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
@@ -96,6 +96,26 @@ class ChannelCreate(BaseModel):
     sync_enabled: Optional[bool] = False
     sync_interval: Optional[int] = 300
     quota_config: Optional[QuotaConfig] = None
+    # 高级配置:上游 API 格式与认证方式
+    upstream_format: str = Field(default="chat", description="上游API格式: chat/anthropic/gemini/responses/auto/custom")
+    auth_type: str = Field(default="auto", description="认证方式: auto/bearer/api_key/azure_api_key/query_key")
+    auth_headers: Optional[Dict[str, str]] = Field(default=None, description="自定义认证 Header")
+
+    @field_validator("upstream_format")
+    @classmethod
+    def _validate_upstream_format(cls, v: str) -> str:
+        allowed = {"chat", "anthropic", "gemini", "responses", "auto", "custom"}
+        if v not in allowed:
+            raise ValueError(f"upstream_format 必须是 {sorted(allowed)} 之一,收到 {v!r}")
+        return v
+
+    @field_validator("auth_type")
+    @classmethod
+    def _validate_auth_type(cls, v: str) -> str:
+        allowed = {"auto", "bearer", "api_key", "azure_api_key", "query_key"}
+        if v not in allowed:
+            raise ValueError(f"auth_type 必须是 {sorted(allowed)} 之一,收到 {v!r}")
+        return v
 
 
 class ChannelUpdate(BaseModel):
@@ -116,6 +136,10 @@ class ChannelUpdate(BaseModel):
     sync_enabled: Optional[bool] = None
     sync_interval: Optional[int] = None
     quota_config: Optional[QuotaConfig] = None
+    # 高级配置
+    upstream_format: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_headers: Optional[Dict[str, str]] = None
 
 
 class ChannelResponse(BaseModel):
@@ -142,6 +166,10 @@ class ChannelResponse(BaseModel):
     quota_config: Optional[QuotaConfig] = None
     # 绑定模型数量（列表页聚合）
     bound_models_count: Optional[int] = None
+    # 高级配置
+    upstream_format: str = "chat"
+    auth_type: str = "auto"
+    auth_headers: Optional[Dict[str, str]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
