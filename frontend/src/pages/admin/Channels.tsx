@@ -1,20 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSwrData } from '../../hooks/useSwr'
 import { useNavigate } from 'react-router-dom'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
-  Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
-  Select, Popconfirm, Row, Col, Progress, Collapse, Tooltip, Card
+  Table, Button, Tag, Space, Modal, Form, InputNumber, Switch, 
+  Popconfirm, Row, Col, Progress, Tooltip
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, CloudOutlined, SettingOutlined, ApiOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, SettingOutlined } from '@ant-design/icons'
 import { 
-  getChannels, createChannel, updateChannel, deleteChannel,
-  getAllChannelQuotas, syncChannelQuota, updateChannelQuota, Channel, 
-  getChannelModels, syncChannelModels, testChannelConnection
+  getChannels, deleteChannel,
+  syncChannelQuota, updateChannelQuota, Channel, 
+  syncChannelModels
 } from '../../api/channels'
-import { getModels, Model, bindChannelToModel, unbindChannel, getModelChannels } from '../../api/models'
-
+import { Model, bindChannelToModel, unbindChannel } from '../../api/models'
 
 const formatRemainTime = (ms: number): string => {
   if (!ms || ms <= 0) return '0秒'
@@ -48,19 +47,15 @@ const calcQuotaStats = (quota: any) => {
 const ChannelsPage = () => {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-      const [createModalVisible, setCreateModalVisible] = useState(false)
-  const [editModalVisible, setEditModalVisible] = useState(false)
   const [configModalVisible, setConfigModalVisible] = useState(false)
   const [modelModalVisible, setModelModalVisible] = useState(false)
   const [selectedChannelModels, setSelectedChannelModels] = useState<any[]>([])
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
-  const [form] = Form.useForm()
   const [configForm] = Form.useForm()
   const message = useMessage()
   const { token } = useThemeToken()
   const [allModels, setAllModels] = useState<Model[]>([])
   const [bindLoading, setBindLoading] = useState(false)
-  const [testLoading, setTestLoading] = useState(false)
 
   // 使用 SWR 获取数据
   const { data: channelsData, mutate: mutateChannels } = useSwrData<{total: number; items: Channel[]}>('/admin/channels')
@@ -89,107 +84,6 @@ const ChannelsPage = () => {
       fetchData()
     } catch {
       message.error('同步失败')
-    }
-  }
-
-  const handleCreate = async (values: any) => {
-    try {
-      const payload = parseAuthHeaders(parseExtraKeys(values))
-      await createChannel(payload)
-      message.success('创建成功')
-      setCreateModalVisible(false)
-      fetchData()
-    } catch {
-      /* error already displayed */
-    }
-  }
-
-  const handleUpdate = async (values: any) => {
-    if (!selectedChannel) return
-    try {
-      const payload = parseAuthHeaders(parseExtraKeys(values))
-      await updateChannel(selectedChannel.channel_id, payload)
-      message.success('更新成功')
-      setEditModalVisible(false)
-      fetchData()
-    } catch {
-      /* error already displayed */
-    }
-  }
-
-  // extra_keys 在表单上是 JSON 字符串，后端 ChannelCreate 要求 List[str]。
-  // 空串 → 删字段；否则解析 JSON 数组，解析失败给出明确提示。
-  const parseExtraKeys = (values: any) => {
-    const payload = { ...values }
-    if (typeof payload.extra_keys !== 'string') return payload
-    const trimmed = payload.extra_keys.trim()
-    if (!trimmed) {
-      delete payload.extra_keys
-      return payload
-    }
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(trimmed)
-    } catch {
-      message.warning('额外 Keys 格式错误，需为 JSON 数组，例如 ["sk-1","sk-2"]')
-      throw new Error('invalid extra_keys')
-    }
-    if (!Array.isArray(parsed) || !parsed.every((k) => typeof k === 'string')) {
-      message.warning('额外 Keys 需为字符串数组')
-      throw new Error('invalid extra_keys')
-    }
-    payload.extra_keys = parsed
-    return payload
-  }
-
-  // auth_headers 在表单上是 JSON 字符串，后端 ChannelCreate 要求 Dict[str, str]。
-  // 空串 → undefined（让后端使用默认空字典）；非空则解析 JSON 对象，失败给提示。
-  const parseAuthHeaders = (values: any) => {
-    const payload = { ...values }
-    if (typeof payload.auth_headers !== 'string') return payload
-    const trimmed = payload.auth_headers.trim()
-    if (!trimmed) {
-      payload.auth_headers = undefined
-      return payload
-    }
-    try {
-      payload.auth_headers = JSON.parse(trimmed)
-    } catch {
-      message.error('额外请求头不是合法 JSON')
-      throw new Error('invalid auth_headers')
-    }
-    return payload
-  }
-
-  const handleTestConnection = async () => {
-    const v = form.getFieldsValue(['type', 'endpoint', 'api_key'])
-    if (!v.endpoint || !v.api_key) {
-      message.warning('请先填写 API 端点和 API Key')
-      return
-    }
-    const hide = message.loading('正在测试连接...', 0)
-    setTestLoading(true)
-    try {
-      const res = await testChannelConnection({
-        type: v.type || 'openai',
-        endpoint: v.endpoint,
-        api_key: v.api_key,
-        timeout: 30,
-      })
-      hide()
-      if (res.success) {
-        const latency = res.latency_ms != null ? ` (${res.latency_ms}ms)` : ''
-        message.success(`连接成功${latency}`)
-      } else {
-        const code = res.status_code != null ? ` (HTTP ${res.status_code})` : ''
-        message.error(`${res.message}${code}`, 5)
-      }
-    } catch (e: any) {
-      hide()
-      const detail = e?.response?.data?.detail || e?.message || '请求失败'
-      message.error(typeof detail === 'string' ? detail : '请求参数错误', 5)
-    } finally {
-      setTestLoading(false)
     }
   }
 
@@ -304,11 +198,7 @@ const ChannelsPage = () => {
       title: '操作', key: 'action', width: 200,
       render: (_: any, record: Channel) => (
         <Space>
-          <Tooltip title="编辑"><Button size="small" icon={<EditOutlined />} onClick={() => {
-            setSelectedChannel(record)
-            form.setFieldsValue(record)
-            setEditModalVisible(true)
-          }} /></Tooltip>
+          <Tooltip title="编辑"><Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/channels/${record.channel_id}/edit`)} /></Tooltip>
           <Tooltip title="同步配额"><Button size="small" icon={<SyncOutlined />} onClick={() => handleSync(record.channel_id)} /></Tooltip>
           <Tooltip title="配置"><Button size="small" icon={<SettingOutlined />} onClick={() => {
             setSelectedChannel(record)
@@ -329,228 +219,14 @@ const ChannelsPage = () => {
   ]
 
 return (
-    <div style={{ padding: 24 }}>
+  <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
         <h2>渠道管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-          form.resetFields()
-          setCreateModalVisible(true)
-        }}>新建渠道</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/channels/new')}>新建渠道</Button>
       </div>
 
       <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading} />
 
-      {/* 创建 Modal */}
-      <Modal title="新建渠道" open={createModalVisible} onCancel={() => setCreateModalVisible(false)} onOk={() => form.submit()} width={600}>
-        <Form form={form} onFinish={handleCreate} layout="vertical">
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-                <Select>
-                  <Select.Option value="openai">OpenAI</Select.Option>
-                  <Select.Option value="anthropic">Anthropic</Select.Option>
-                  <Select.Option value="azure">Azure</Select.Option>
-                  <Select.Option value="deepseek">DeepSeek</Select.Option>
-                  <Select.Option value="minimax">MiniMax</Select.Option>
-                  <Select.Option value="volcengine">火山引擎</Select.Option>
-                  <Select.Option value="custom">自定义</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="endpoint" label="API 端点"><Input placeholder="https://api.openai.com/v1" /></Form.Item>
-          <Form.Item label="API Key" required>
-            <Row gutter={8}>
-              <Col flex="auto">
-                <Form.Item name="api_key" noStyle rules={[{ required: true, message: '请输入 API Key' }]}>
-                  <Input.Password placeholder="sk-..." />
-                </Form.Item>
-              </Col>
-              <Col>
-                <Button icon={<ApiOutlined />} loading={testLoading} onClick={handleTestConnection}>
-                  测试连接
-                </Button>
-              </Col>
-            </Row>
-          </Form.Item>
-          <Form.Item name="extra_keys" label="额外 Keys (JSON 数组)"><Input.TextArea rows={2} placeholder='["sk-xxx1", "sk-xxx2"]' /></Form.Item>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="key_strategy" label="Key 策略" initialValue="round_robin">
-                <Select>
-                  <Select.Option value="round_robin">轮询</Select.Option>
-                  <Select.Option value="random">随机</Select.Option>
-                  <Select.Option value="sequential">顺序</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="priority" label="优先级" initialValue={0}><InputNumber style={{ width: '100%' }} /></Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="timeout" label="超时(秒)" initialValue={60}><InputNumber style={{ width: '100%' }} /></Form.Item>
-            </Col>
-          </Row>
-          <Collapse
-            ghost
-            items={[
-              {
-                key: 'advanced',
-                label: '⚙️ 高级选项（一般无需修改）',
-                children: (
-                  <>
-              <Form.Item
-                name="upstream_format"
-                label="上游 API 格式"
-                initialValue="auto"
-                tooltip="默认自动即可。Anthropic 官方API选 anthropic，GCP Gemini 选 gemini。"
-              >
-                <Select>
-                  <Select.Option value="auto">自动</Select.Option>
-                  <Select.Option value="chat">Chat Completions</Select.Option>
-                  <Select.Option value="anthropic">Anthropic Messages</Select.Option>
-                  <Select.Option value="gemini">Gemini generateContent</Select.Option>
-                  <Select.Option value="responses">OpenAI Responses</Select.Option>
-                  <Select.Option value="custom">自定义</Select.Option>
-                </Select>
-              </Form.Item>
-
-              <Form.Item name="auth_type" label="认证方式" initialValue="auto" tooltip="默认自动已覆盖大多数场景">
-                <Select>
-                  <Select.Option value="auto">自动</Select.Option>
-                  <Select.Option value="bearer">Bearer</Select.Option>
-                  <Select.Option value="api_key">API Key (x-api-key)</Select.Option>
-                  <Select.Option value="azure_api_key">Azure API Key</Select.Option>
-                  <Select.Option value="query_key">Query Parameter</Select.Option>
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="auth_headers"
-                label="额外请求头 (JSON)"
-                tooltip='例如 Anthropic 需要 {"anthropic-version": "2023-06-01"}'
-              >
-                <Input.TextArea rows={3} placeholder='{"anthropic-version": "2023-06-01"}' />
-              </Form.Item>
-                  </>
-                ),
-              },
-            ]}
-          />
-        </Form>
-      </Modal>
-
-      {/* 编辑 Modal */}
-      <Modal title="编辑渠道" open={editModalVisible} onCancel={() => setEditModalVisible(false)} onOk={() => form.submit()} width={600}>
-        <Form form={form} onFinish={handleUpdate} layout="vertical">
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-                <Select>
-                  <Select.Option value="openai">OpenAI</Select.Option>
-                  <Select.Option value="anthropic">Anthropic</Select.Option>
-                  <Select.Option value="azure">Azure</Select.Option>
-                  <Select.Option value="deepseek">DeepSeek</Select.Option>
-                  <Select.Option value="minimax">MiniMax</Select.Option>
-                  <Select.Option value="volcengine">火山引擎</Select.Option>
-                  <Select.Option value="custom">自定义</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="endpoint" label="API 端点"><Input /></Form.Item>
-          <Form.Item label="API Key">
-            <Row gutter={8}>
-              <Col flex="auto">
-                <Form.Item name="api_key" noStyle>
-                  <Input.Password placeholder="不修改请留空" />
-                </Form.Item>
-              </Col>
-              <Col>
-                <Button icon={<ApiOutlined />} loading={testLoading} onClick={handleTestConnection}>
-                  测试连接
-                </Button>
-              </Col>
-            </Row>
-          </Form.Item>
-          <Form.Item name="extra_keys" label="额外 Keys"><Input.TextArea rows={2} /></Form.Item>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="key_strategy" label="Key 策略">
-                <Select>
-                  <Select.Option value="round_robin">轮询</Select.Option>
-                  <Select.Option value="random">随机</Select.Option>
-                  <Select.Option value="sequential">顺序</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="priority" label="优先级"><InputNumber style={{ width: '100%' }} /></Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="timeout" label="超时(秒)"><InputNumber style={{ width: '100%' }} /></Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="status" label="状态">
-            <Select>
-              <Select.Option value="active">启用</Select.Option>
-              <Select.Option value="disabled">禁用</Select.Option>
-            </Select>
-          </Form.Item>
-          <Collapse
-            ghost
-            items={[
-              {
-                key: 'advanced',
-                label: '⚙️ 高级选项（一般无需修改）',
-                children: (
-                  <>
-              <Form.Item
-                name="upstream_format"
-                label="上游 API 格式"
-                initialValue="auto"
-                tooltip="默认自动即可。Anthropic 官方API选 anthropic，GCP Gemini 选 gemini。"
-              >
-                <Select>
-                  <Select.Option value="auto">自动</Select.Option>
-                  <Select.Option value="chat">Chat Completions</Select.Option>
-                  <Select.Option value="anthropic">Anthropic Messages</Select.Option>
-                  <Select.Option value="gemini">Gemini generateContent</Select.Option>
-                  <Select.Option value="responses">OpenAI Responses</Select.Option>
-                  <Select.Option value="custom">自定义</Select.Option>
-                </Select>
-              </Form.Item>
-
-              <Form.Item name="auth_type" label="认证方式" initialValue="auto" tooltip="默认自动已覆盖大多数场景">
-                <Select>
-                  <Select.Option value="auto">自动</Select.Option>
-                  <Select.Option value="bearer">Bearer</Select.Option>
-                  <Select.Option value="api_key">API Key (x-api-key)</Select.Option>
-                  <Select.Option value="azure_api_key">Azure API Key</Select.Option>
-                  <Select.Option value="query_key">Query Parameter</Select.Option>
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="auth_headers"
-                label="额外请求头 (JSON)"
-                tooltip='例如 Anthropic 需要 {"anthropic-version": "2023-06-01"}'
-              >
-                <Input.TextArea rows={3} placeholder='{"anthropic-version": "2023-06-01"}' />
-              </Form.Item>
-                  </>
-                ),
-              },
-            ]}
-          />
-        </Form>
-      </Modal>
 
       {/* 配置 Modal */}
       <Modal title="配额配置" open={configModalVisible} onCancel={() => setConfigModalVisible(false)} onOk={() => configForm.submit()}>
