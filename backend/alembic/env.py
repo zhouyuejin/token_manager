@@ -1,5 +1,6 @@
 from logging.config import fileConfig
 
+from sqlalchemy import String
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
@@ -65,7 +66,12 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            # Custom revision id column to support longer revision ids
+            # (e.g. "20260911_0924_add_channel_advanced_config" = 41 chars).
+            # Default is VARCHAR(32) which is too short for timestamped ids.
+            version_num=String(length=64),
         )
 
         with context.begin_transaction():
