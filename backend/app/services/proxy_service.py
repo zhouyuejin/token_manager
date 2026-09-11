@@ -24,6 +24,8 @@ from app.models.model_channel import ModelChannel
 from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_model_mappings
 from app.models.usage_log import UsageLog
 
+from app.services.channel_auth import build_auth_headers, get_upstream_url
+
 
 # 进程级 round_robin 计数器（重启归零）
 _key_rr_counters: Dict[str, int] = {}
@@ -436,13 +438,13 @@ class ProxyService:
         """单次转发到上游"""
         start_time = time.time()
         
-        upstream_url = f"{channel.endpoint.rstrip('/')}/chat/completions"
         request_data["model"] = upstream_model
-        
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json"
-        }
+        upstream_url = get_upstream_url(channel, model=upstream_model)
+
+        headers = build_auth_headers(channel, key)
+        headers["Content-Type"] = "application/json"
+        if channel.upstream_format == "anthropic" or (channel.upstream_format == "auto" and channel.type.value == "anthropic"):
+            headers.setdefault("anthropic-version", "2023-06-01")
 
         try:
             with httpx.Client(timeout=channel.timeout) as client:
@@ -541,12 +543,12 @@ class ProxyService:
         def generate():
             try:
                 with httpx.Client(timeout=ch.timeout) as client:
-                    upstream_url = f"{ch.endpoint.rstrip('/')}/chat/completions"
                     request_data["model"] = upstream_model
-                    headers = {
-                        "Authorization": f"Bearer {key}",
-                        "Content-Type": "application/json"
-                    }
+                    upstream_url = get_upstream_url(ch, model=upstream_model)
+                    headers = build_auth_headers(ch, key)
+                    headers["Content-Type"] = "application/json"
+                    if ch.upstream_format == "anthropic" or (ch.upstream_format == "auto" and ch.type.value == "anthropic"):
+                        headers.setdefault("anthropic-version", "2023-06-01")
 
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
                         if response.status_code != 200:
