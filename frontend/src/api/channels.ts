@@ -26,6 +26,10 @@ export interface Channel {
     extra_params?: Record<string, string>
   }
   bound_models_count?: number
+  // === 新增 ===
+  upstream_format?: string
+  auth_type?: string
+  auth_headers?: Record<string, string>
 }
 
 export interface ChannelQuota {
