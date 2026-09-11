@@ -342,7 +342,10 @@ async def list_channels(
             quota_type=ch.quota_type, quota_hourly=ch.quota_hourly, quota_weekly=ch.quota_weekly,
             sync_enabled=ch.sync_enabled, sync_interval=ch.sync_interval, last_sync_at=ch.last_sync_at,
             quota_config=json.loads(ch.quota_config) if ch.quota_config else None,
-            bound_models_count=bound_count
+            bound_models_count=bound_count,
+            upstream_format=ch.upstream_format,
+            auth_type=ch.auth_type,
+            auth_headers=json.loads(ch.auth_headers) if ch.auth_headers else None,
         ))
     
     return ChannelListResponse(total=total, items=items)
@@ -360,7 +363,10 @@ async def create_channel(data: ChannelCreate, request: Request, db: Session = De
         key_strategy=data.key_strategy, priority=data.priority, timeout=data.timeout,
         quota_type=data.quota_type, quota_hourly=data.quota_hourly, quota_weekly=data.quota_weekly,
         sync_enabled=data.sync_enabled, sync_interval=data.sync_interval,
-        quota_config=json.dumps(data.quota_config.dict()) if data.quota_config else None
+        quota_config=json.dumps(data.quota_config.dict()) if data.quota_config else None,
+        upstream_format=data.upstream_format,
+        auth_type=data.auth_type,
+        auth_headers=json.dumps(data.auth_headers) if data.auth_headers else None,
     )
     db.add(channel)
     db.commit()
@@ -375,7 +381,10 @@ async def create_channel(data: ChannelCreate, request: Request, db: Session = De
         priority=channel.priority, timeout=channel.timeout,
         status=channel.status.value, health_status=channel.health_status.value,
         quota_type=channel.quota_type, quota_hourly=channel.quota_hourly, quota_weekly=channel.quota_weekly,
-        sync_enabled=channel.sync_enabled, sync_interval=channel.sync_interval
+        sync_enabled=channel.sync_enabled, sync_interval=channel.sync_interval,
+        upstream_format=channel.upstream_format,
+        auth_type=channel.auth_type,
+        auth_headers=data.auth_headers,
     )
 
 
@@ -488,7 +497,10 @@ async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: Use
                 channel_id=channel.channel_id, name=channel.name, type=channel.type.value,
                 endpoint=channel.endpoint, api_key=channel.api_key,
                 priority=channel.priority, timeout=channel.timeout,
-                status=channel.status.value, health_status=channel.health_status.value
+                status=channel.status.value, health_status=channel.health_status.value,
+                upstream_format=channel.upstream_format,
+                auth_type=channel.auth_type,
+                auth_headers=json.loads(channel.auth_headers) if channel.auth_headers else None,
             ) if model else None
         ))
     
@@ -502,7 +514,10 @@ async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: Use
         quota_type=channel.quota_type, quota_hourly=channel.quota_hourly, quota_weekly=channel.quota_weekly,
         sync_enabled=channel.sync_enabled, sync_interval=channel.sync_interval, last_sync_at=channel.last_sync_at,
         quota_config=json.loads(channel.quota_config) if channel.quota_config else None,
-        bound_models_count=len(mc_list), bound_models=bound_models
+        bound_models_count=len(mc_list), bound_models=bound_models,
+        upstream_format=channel.upstream_format,
+        auth_type=channel.auth_type,
+        auth_headers=json.loads(channel.auth_headers) if channel.auth_headers else None,
     )
 
 
@@ -521,6 +536,8 @@ async def update_channel(channel_id: str, data: ChannelUpdate, request: Request,
             value = json.dumps(value)
         if field == "quota_config":
             value = json.dumps(value.dict())
+        if field == "auth_headers" and value is not None:
+            value = json.dumps(value)
         if getattr(channel, field) != value:
             changed[field] = value
             setattr(channel, field, value)
@@ -668,7 +685,10 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
             channel=ChannelResponse(
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
                 endpoint=ch.endpoint, api_key=ch.api_key, priority=ch.priority, timeout=ch.timeout,
-                status=ch.status.value if ch.status else "active", health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None)
+                status=ch.status.value if ch.status else "active", health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None),
+                upstream_format=ch.upstream_format,
+                auth_type=ch.auth_type,
+                auth_headers=json.loads(ch.auth_headers) if ch.auth_headers else None,
             ) if ch else None
         ))
     
@@ -750,7 +770,10 @@ async def list_model_channels(model_id: str, db: Session = Depends(get_db), admi
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
                 endpoint=ch.endpoint, api_key=ch.api_key,
                 priority=ch.priority, timeout=ch.timeout,
-                status=ch.status.value, health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None)
+                status=ch.status.value, health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None),
+                upstream_format=ch.upstream_format,
+                auth_type=ch.auth_type,
+                auth_headers=json.loads(ch.auth_headers) if ch.auth_headers else None,
             ) if ch else None,
         ))
     return items
