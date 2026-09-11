@@ -147,15 +147,23 @@ class AzureModelAdapter(BaseModelSyncAdapter):
 
 class VolcengineModelAdapter(BaseModelSyncAdapter):
     """火山引擎模型同步适配器"""
-    
+
     async def fetch_models(self) -> List[ModelInfo]:
-        url = f"{self.channel.endpoint}/v1/models"
+        base = (self.channel.endpoint or "").rstrip("/")
+        # coding plan 端点用 /v3/models，普通端点用 /v1/models
+        models_path = "/v3/models" if "/api/coding" in base else "/v1/models"
+        url = f"{base}{models_path}"
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.get(url, headers=self.get_headers())
                 if response.status_code == 200:
                     data = response.json()
-                    return [ModelInfo(model_id=item.get("id", ""), name=item.get("id", ""), owned_by="volcengine") for item in data.get("data", [])]
+                    # 过滤 Shutdown 状态的模型
+                    return [
+                        ModelInfo(model_id=item.get("id", ""), name=item.get("id", ""), owned_by="volcengine")
+                        for item in data.get("data", [])
+                        if item.get("status") != "Shutdown"
+                    ]
         except Exception as e:
             print(f"火山引擎模型同步失败: {e}")
         return self._get_default_models()
