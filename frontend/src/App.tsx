@@ -13,6 +13,7 @@ import Settings from './pages/Settings'
 import Chat from './pages/Chat'
 import AdminUsers from './pages/admin/Users'
 import AdminChannels from './pages/admin/Channels'
+import ChannelForm from './pages/admin/ChannelForm'
 import ChannelBindings from './pages/admin/ChannelBindings'
 import AdminModels from './pages/admin/Models'
 import AdminModelGroups from './pages/admin/ModelGroups'
@@ -106,6 +107,8 @@ function App() {
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="channels" element={<AdminChannels />} />
+              <Route path="channels/new" element={<ChannelForm />} />
+              <Route path="channels/:channelId/edit" element={<ChannelForm />} />
               <Route path="channels/:channelId/bindings" element={<ChannelBindings />} />
               <Route path="providers" element={<Navigate to="/admin/channels" replace />} />
               <Route path="models" element={<AdminModels />} />
