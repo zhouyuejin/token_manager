@@ -13,7 +13,11 @@ import enum
 class QuotaType(enum.Enum):
     """配额类型"""
     hourly = "hourly"
+    five_hour = "five_hour"
     weekly = "weekly"
+    daily = "daily"
+    monthly = "monthly"
+    custom = "custom"
 
 
 class SyncStatus(enum.Enum):

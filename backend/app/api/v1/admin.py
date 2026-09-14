@@ -411,14 +411,36 @@ async def test_channel_connection(
 async def list_channel_quotas(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """所有渠道配额"""
     quotas = db.query(ChannelQuota).all()
-    items = []
+    by_channel = {}
     for q in quotas:
         ch = db.query(Channel).filter(Channel.channel_id == q.channel_id).first()
-        items.append(ChannelQuotaResponse(
-            channel_id=q.channel_id, channel_name=ch.name if ch else None,
-            hourly=QuotaDetail(limit=q.quota_limit, used=q.quota_used, remain=q.quota_remain, percent=float(q.quota_percent), last_sync=str(q.sync_at)) if q.quota_type == QuotaType.hourly else None,
-            weekly=QuotaDetail(limit=q.quota_limit, used=q.quota_used, remain=q.quota_remain, percent=float(q.quota_percent), last_sync=str(q.sync_at)) if q.quota_type == QuotaType.weekly else None
-        ))
+        item = by_channel.setdefault(q.channel_id, {
+            "channel_id": q.channel_id,
+            "channel_name": ch.name if ch else None,
+            "windows": [],
+            "hourly": None,
+            "weekly": None,
+        })
+        raw_data = json.loads(q.raw_data) if q.raw_data else None
+        quota_type = q.quota_type.value if hasattr(q.quota_type, "value") else str(q.quota_type)
+        detail = QuotaDetail(
+            type=quota_type,
+            label=raw_data.get("window", {}).get("label") if raw_data else None,
+            limit=q.quota_limit,
+            used=q.quota_used,
+            remain=q.quota_remain,
+            percent=float(q.quota_percent),
+            reset_at=raw_data.get("window", {}).get("reset_at") if raw_data else None,
+            reset_in_seconds=raw_data.get("window", {}).get("reset_in_seconds") if raw_data else None,
+            last_sync=str(q.sync_at),
+            raw_data=raw_data,
+        )
+        item["windows"].append(detail)
+        if quota_type == "hourly":
+            item["hourly"] = detail
+        if quota_type == "weekly":
+            item["weekly"] = detail
+    items = [ChannelQuotaResponse(**item) for item in by_channel.values()]
     return ChannelQuotaListResponse(total=len(items), items=items)
 
 
@@ -432,11 +454,28 @@ async def get_channel_quota(channel_id: str, db: Session = Depends(get_db), admi
     quotas = db.query(ChannelQuota).filter(ChannelQuota.channel_id == channel_id).all()
     hourly = next((q for q in quotas if q.quota_type == QuotaType.hourly), None)
     weekly = next((q for q in quotas if q.quota_type == QuotaType.weekly), None)
+    windows = []
+    for q in quotas:
+        raw_data = json.loads(q.raw_data) if q.raw_data else None
+        quota_type = q.quota_type.value if hasattr(q.quota_type, "value") else str(q.quota_type)
+        windows.append(QuotaDetail(
+            type=quota_type,
+            label=raw_data.get("window", {}).get("label") if raw_data else None,
+            limit=q.quota_limit,
+            used=q.quota_used,
+            remain=q.quota_remain,
+            percent=float(q.quota_percent),
+            reset_at=raw_data.get("window", {}).get("reset_at") if raw_data else None,
+            reset_in_seconds=raw_data.get("window", {}).get("reset_in_seconds") if raw_data else None,
+            last_sync=str(q.sync_at),
+            raw_data=raw_data,
+        ))
     
     return ChannelQuotaResponse(
         channel_id=channel_id, channel_name=ch.name,
         hourly=QuotaDetail(limit=hourly.quota_limit, used=hourly.quota_used, remain=hourly.quota_remain, percent=float(hourly.quota_percent), last_sync=str(hourly.sync_at)) if hourly else None,
-        weekly=QuotaDetail(limit=weekly.quota_limit, used=weekly.quota_used, remain=weekly.quota_remain, percent=float(weekly.quota_percent), last_sync=str(weekly.sync_at)) if weekly else None
+        weekly=QuotaDetail(limit=weekly.quota_limit, used=weekly.quota_used, remain=weekly.quota_remain, percent=float(weekly.quota_percent), last_sync=str(weekly.sync_at)) if weekly else None,
+        windows=windows,
     )
 
 
@@ -449,7 +488,8 @@ async def sync_channel_quota(channel_id: str, request: Request, db: Session = De
     
     from app.services.sync_service import create_sync_service
     sync_service = create_sync_service(db)
-    await sync_service.sync_channel_quota(ch)
+    if not await sync_service.sync_channel_quota(ch):
+        raise HTTPException(status_code=400, detail="渠道不支持用量同步或同步失败")
     
     record_operation(db=db, operator=admin, action="sync_quota", target_type="channel", target_id=channel_id, detail={}, ip_address=extract_client_ip(request))
     return {"message": "同步成功"}

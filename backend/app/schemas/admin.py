@@ -75,9 +75,11 @@ class QuotaAdjustRequest(BaseModel):
 
 class QuotaConfig(BaseModel):
     """用量查询自定义配置"""
+    query_mode: Optional[str] = None
     model_name: Optional[str] = None
     custom_api_path: Optional[str] = None
     extra_params: Optional[Dict[str, str]] = None
+    windows: Optional[List[Dict[str, Any]]] = None
 
 
 class ChannelCreate(BaseModel):
@@ -348,16 +350,20 @@ class ChannelQuotaResponse(BaseModel):
     channel_name: Optional[str] = None
     hourly: Optional["QuotaDetail"] = None
     weekly: Optional["QuotaDetail"] = None
+    windows: List["QuotaDetail"] = Field(default_factory=list)
 
 
 
 class QuotaDetail(BaseModel):
     """配额详情"""
+    type: Optional[str] = None
+    label: Optional[str] = None
     limit: int
     used: int
     remain: int
     percent: float
     reset_at: Optional[str] = None
+    reset_in_seconds: Optional[int] = None
     last_sync: Optional[str] = None
     raw_data: Optional[Any] = None
 

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
-  Table, Button, Tag, Space, Modal, Form, InputNumber, Switch, 
+  Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
   Popconfirm, Row, Col, Progress, Tooltip
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, SettingOutlined } from '@ant-design/icons'
@@ -29,19 +29,25 @@ const formatRemainTime = (ms: number): string => {
 
 const calcQuotaStats = (quota: any) => {
   if (!quota) return null
-  const modelRemains = quota.hourly?.raw_data?.model_remains || []
-  if (modelRemains.length === 0) return null
-  const m = modelRemains[0]
+  const windows = quota.windows || [quota.hourly, quota.weekly].filter(Boolean)
+  if (windows.length === 0) return null
+  const fiveHour = windows.find((w: any) => w.type === 'five_hour') || quota.hourly
+  const weekly = windows.find((w: any) => w.type === 'weekly') || quota.weekly
   return {
-    hourlyUsedPercent: 100 - (m.current_interval_remaining_percent || 0),
-    hourlyTotal: m.current_interval_total_count || 0,
-    hourlyRemainPercent: m.current_interval_remaining_percent || 0,
-    hourlyRemainTime: m.remains_time || 0,
-    weeklyUsedPercent: 100 - (m.current_weekly_remaining_percent || 0),
-    weeklyTotal: m.current_weekly_total_count || 0,
-    weeklyRemainPercent: m.current_weekly_remaining_percent || 0,
-    weeklyRemainTime: m.weekly_remains_time || 0,
+    hourlyUsedPercent: fiveHour?.percent || 0,
+    hourlyTotal: fiveHour?.limit || 0,
+    hourlyRemain: fiveHour?.remain || 0,
+    hourlyRemainTime: (fiveHour?.reset_in_seconds || 0) * 1000,
+    weeklyUsedPercent: weekly?.percent || 0,
+    weeklyTotal: weekly?.limit || 0,
+    weeklyRemain: weekly?.remain || 0,
+    weeklyRemainTime: (weekly?.reset_in_seconds || 0) * 1000,
   }
+}
+
+const formatQuotaRemain = (remain: number, total: number) => {
+  if (!total || total <= 0) return '套餐未返回总量'
+  return `剩余 ${remain}/${total}`
 }
 
 const ChannelsPage = () => {
@@ -100,12 +106,19 @@ const ChannelsPage = () => {
   const handleConfig = async (values: any) => {
     if (!selectedChannel) return
     try {
-      await updateChannelQuota(selectedChannel.channel_id, values)
+      const payload = { ...values }
+      if (typeof payload.quota_config === 'string') {
+        payload.quota_config = payload.quota_config.trim()
+          ? JSON.parse(payload.quota_config)
+          : undefined
+      }
+      await updateChannelQuota(selectedChannel.channel_id, payload)
       message.success('配置更新成功')
       setConfigModalVisible(false)
       fetchData()
-    } catch {
-      message.error('配置更新失败')
+    } catch (e) {
+      if (e instanceof SyntaxError) message.error('用量查询配置不是合法 JSON')
+      else message.error('配置更新失败')
     }
   }
 
@@ -180,8 +193,14 @@ const ChannelsPage = () => {
         if (!stats) return <span style={{ color: '#999' }}>未配置</span>
         return (
           <div style={{ fontSize: 12 }}>
-            <div>小时: <Progress percent={Math.round(stats.hourlyUsedPercent)} size="small" style={{ width: 100, display: 'inline' }} /></div>
+            <div>5小时: <Progress percent={Math.round(stats.hourlyUsedPercent)} size="small" style={{ width: 100, display: 'inline' }} /></div>
+            <div style={{ color: '#666' }}>
+              {formatQuotaRemain(stats.hourlyRemain, stats.hourlyTotal)} · {formatRemainTime(stats.hourlyRemainTime)}重置
+            </div>
             <div>周: <Progress percent={Math.round(stats.weeklyUsedPercent)} size="small" style={{ width: 100, display: 'inline' }} /></div>
+            <div style={{ color: '#666' }}>
+              {formatQuotaRemain(stats.weeklyRemain, stats.weeklyTotal)} · {formatRemainTime(stats.weeklyRemainTime)}重置
+            </div>
           </div>
         )
       }
@@ -206,7 +225,8 @@ const ChannelsPage = () => {
               quota_hourly: record.quota_hourly,
               quota_weekly: record.quota_weekly,
               sync_enabled: record.sync_enabled,
-              sync_interval: record.sync_interval
+              sync_interval: record.sync_interval,
+              quota_config: record.quota_config ? JSON.stringify(record.quota_config, null, 2) : ''
             })
             setConfigModalVisible(true)
           }} /></Tooltip>
@@ -245,6 +265,13 @@ return (
           </Form.Item>
           <Form.Item name="sync_interval" label="同步间隔(秒)">
             <InputNumber style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="quota_config"
+            label="用量查询配置(JSON)"
+            tooltip='手动模式示例: {"query_mode":"manual","windows":[{"type":"five_hour","label":"5小时","limit":100,"remain":80,"reset_at":"2026-09-14T15:00:00Z"}]}'
+          >
+            <Input.TextArea rows={6} />
           </Form.Item>
         </Form>
       </Modal>
