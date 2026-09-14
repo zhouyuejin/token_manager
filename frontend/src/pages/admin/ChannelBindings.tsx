@@ -57,7 +57,7 @@ const SortableRow: React.FC<SortableRowProps> = ({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    backgroundColor: selected ? '#e6f7ff' : 'transparent'
+    backgroundColor: selected ? 'rgba(59, 130, 246, 0.15)' : 'transparent'
   }
 
   return (
