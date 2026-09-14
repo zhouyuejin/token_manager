@@ -103,6 +103,16 @@ def test_get_upstream_url_strips_trailing_slash():
     assert url == "https://api.example.com/v1/chat/completions"
 
 
+@pytest.mark.parametrize("endpoint", [
+    " https://api.openai.com/v1",
+    "\t https://api.openai.com/v1/ \r\n",
+])
+def test_get_upstream_url_strips_surrounding_whitespace(endpoint):
+    ch = _channel(type_="openai", upstream_format="chat")
+    ch.endpoint = endpoint
+    assert get_upstream_url(ch) == "https://api.openai.com/v1/chat/completions"
+
+
 def test_query_key_returns_empty_auth_headers():
     ch = _channel(type_="custom", auth_type="query_key")
     headers = build_auth_headers(ch, "key123")

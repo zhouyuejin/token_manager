@@ -64,10 +64,12 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-zhouyuejin1995@163.com}
       - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Token Manager}
-      - HTTP_PROXY=
-      - HTTPS_PROXY=
-      - http_proxy=
-      - https_proxy=
+      - HTTP_PROXY=${HTTP_PROXY:-http://host.docker.internal:1082}
+      - HTTPS_PROXY=${HTTPS_PROXY:-http://host.docker.internal:1082}
+      - http_proxy=${http_proxy:-http://host.docker.internal:1082}
+      - https_proxy=${https_proxy:-http://host.docker.internal:1082}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,mysql,redis,deb.debian.org,security.debian.org}
+      - no_proxy=${no_proxy:-localhost,127.0.0.1,mysql,redis,deb.debian.org,security.debian.org}
     depends_on:
       mysql:
         condition: service_healthy

@@ -95,7 +95,7 @@ def build_auth_headers(channel: Channel, api_key: str) -> Dict[str, str]:
 
 
 def _build_url_for_format(endpoint: str, fmt: UpstreamFormat, model: Optional[str] = None) -> str:
-    base = endpoint.rstrip("/")
+    base = endpoint.strip().rstrip("/")
     # 火山方舟 coding plan 端点（/api/coding）使用 /v3/chat/completions
     if "/api/coding" in base:
         return f"{base}/v3/chat/completions"
