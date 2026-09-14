@@ -448,7 +448,7 @@ const ModelsPage = () => {
               title: '平台模型', 
               dataIndex: 'model_id', 
               key: 'model_id',
-              width: 200,
+              width: 280,
               render: (_: any, record: ModelMapping) => (
                 <div>
                   
@@ -522,6 +522,7 @@ const ModelsPage = () => {
               title: '操作',
               key: 'action',
               width: 150,
+              fixed: 'right',
               render: (_: any, record: ModelMapping) => (
                 <Space>
                   <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
@@ -534,6 +535,7 @@ const ModelsPage = () => {
           ]}
           rowKey="model_id"
           loading={loading}
+          scroll={{ x: 'max-content', y: 'calc(100vh - 280px)' }}
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,

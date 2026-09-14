@@ -302,7 +302,7 @@ const ModelGroups: React.FC = () => {
           rowKey="group_id"
           loading={loading}
           pagination={false}
-          scroll={{ x: 'max-content' }}
+          scroll={{ x: 'max-content', y: 'calc(100vh - 440px)' }}
         />
       </Card>
 

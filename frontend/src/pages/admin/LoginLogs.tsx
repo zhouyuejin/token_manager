@@ -226,6 +226,7 @@ const [loading, setLoading] = useState(false)
           columns={columns}
           rowKey="log_id"
           loading={loading}
+          scroll={{ y: "calc(100vh - 425px)" }}
           pagination={{
             current: page,
             pageSize,

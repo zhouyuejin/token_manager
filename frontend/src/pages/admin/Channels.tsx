@@ -225,7 +225,8 @@ return (
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/channels/new')}>新建渠道</Button>
       </div>
 
-      <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading} />
+      <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading}
+          scroll={{ y: "calc(100vh - 320px)" }} />
 
 
       {/* 配置 Modal */}
