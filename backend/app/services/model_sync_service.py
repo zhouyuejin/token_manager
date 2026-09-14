@@ -3,6 +3,7 @@
 """
 import json
 import httpx
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -35,26 +36,27 @@ class BaseModelSyncAdapter(ABC):
     def get_headers(self) -> Dict[str, str]:
         return {"Authorization": f"Bearer {self.channel.api_key}", "Content-Type": "application/json"}
 
+    def build_models_url(self, path: str = "/v1/models") -> str:
+        base = (self.channel.endpoint or "").strip().rstrip("/")
+        if re.search(r"/v\d+(?:beta)?$", base):
+            path = re.sub(r"^/v\d+(?:beta)?/", "/", path)
+        return f"{base}{path}"
+
 
 class OpenAIModelAdapter(BaseModelSyncAdapter):
     """OpenAI模型同步适配器"""
     
     async def fetch_models(self) -> List[ModelInfo]:
-        url = f"{self.channel.endpoint}/v1/models"
+        url = self.build_models_url()
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.get(url, headers=self.get_headers())
                 if response.status_code == 200:
                     data = response.json()
                     return [ModelInfo(model_id=item["id"], name=item.get("id", ""), owned_by="openai") for item in data.get("data", [])]
+                raise RuntimeError(f"HTTP {response.status_code}")
         except Exception as e:
-            print(f"OpenAI模型同步失败: {e}")
-        return self._get_default_models()
-    
-    def _get_default_models(self) -> List[ModelInfo]:
-        return [ModelInfo("gpt-4o", "GPT-4o", "openai"), ModelInfo("gpt-4o-mini", "GPT-4o Mini", "openai"),
-                ModelInfo("gpt-4-turbo", "GPT-4 Turbo", "openai"), ModelInfo("gpt-4", "GPT-4", "openai"),
-                ModelInfo("gpt-3.5-turbo", "GPT-3.5 Turbo", "openai")]
+            raise RuntimeError(f"OpenAI模型同步失败: {e}") from e
 
 
 class AnthropicModelAdapter(BaseModelSyncAdapter):
