@@ -35,6 +35,7 @@ from app.schemas.admin import (
     UserUsage, ChannelUsage, ModelUsageStats, DailyUsageStats,
 )
 from app.services.operation_log_service import record_operation
+from app.services.model_pricing_service import sync_model_prices
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
@@ -629,6 +630,14 @@ async def list_models(
         ))
     
     return ModelListResponse(total=total, items=items)
+
+
+@router.post("/models/pricing/sync")
+async def sync_models_pricing(request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """同步模型定价"""
+    result = sync_model_prices(db)
+    record_operation(db=db, operator=admin, action="sync_pricing", target_type="model", target_id="*", detail=result, ip_address=extract_client_ip(request))
+    return result
 
 
 @router.post("/models", response_model=ModelResponse)

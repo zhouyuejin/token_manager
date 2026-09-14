@@ -15,6 +15,14 @@ export interface Model {
   model_groups?: string[]
 }
 
+export type ModelMapping = Model
+
+export interface ModelPricingSyncResult {
+  total: number
+  updated: number
+  skipped: number
+}
+
 export interface ModelChannel {
   id: number
   model_id: string
@@ -28,6 +36,9 @@ export interface ModelChannel {
 }
 
 export const getModels = () => get<{ total: number; items: Model[] }>('/admin/models')
+
+export const syncModelPricing = () =>
+  post<ModelPricingSyncResult>('/admin/models/pricing/sync')
 
 export const createModel = (data: Partial<Model>) =>
   post<Model>('/admin/models', data)
@@ -61,4 +72,3 @@ export const unbindChannel = (modelId: string, channelId: string) =>
 
 export const updateModelChannel = (modelId: string, channelId: string, data: Partial<ModelChannel>) =>
   patch(`/admin/models/${modelId}/channels/${channelId}`, data)
-

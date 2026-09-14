@@ -7,7 +7,7 @@ import {
   Drawer, Switch, Divider
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined } from '@ant-design/icons'
-import { getModels, createModel, updateModel, deleteModel, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
+import { getModels, createModel, updateModel, deleteModel, syncModelPricing, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
 import { useSwrData } from '../../hooks/useSwr'
 import { getChannels, Channel, syncChannelModels } from '../../api/channels'
 
@@ -108,6 +108,19 @@ const ModelsPage = () => {
       fetchData()
     } catch (error) {
       message.error('删除失败')
+    }
+  }
+
+  const handleSyncPricing = async () => {
+    setLoading(true)
+    try {
+      const result = await syncModelPricing()
+      message.success(`已同步 ${result.updated} 个模型价格，跳过 ${result.skipped} 个`)
+      fetchData()
+    } catch (error) {
+      message.error('同步定价失败')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -415,6 +428,14 @@ const ModelsPage = () => {
           模型管理
         </h2>
         <Space>
+          <Button
+            icon={<DollarOutlined />}
+            onClick={handleSyncPricing}
+            loading={loading}
+            style={{ borderRadius: 10 }}
+          >
+            同步定价
+          </Button>
           <Button 
             icon={<CloudDownloadOutlined />} 
             onClick={openFetchModal}
