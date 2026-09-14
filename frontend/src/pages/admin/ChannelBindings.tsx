@@ -22,7 +22,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   getChannel, getChannelModelBindings, bindModelToChannel, unbindModelFromChannel,
-  updateChannelModelBinding, replaceChannelModelBindings, ChannelModelBinding
+  updateChannelModelBinding, replaceChannelModelBindings, ChannelModelBinding, Channel
 } from '../../api/channels'
 import { getModels, Model } from '../../api/models'
 
@@ -50,7 +50,7 @@ const SortableRow: React.FC<SortableRowProps> = ({
   id, binding, onEdit, onUnbind, selected, onSelect, allModels
 }) => {
   const {
-    attributes, launchers, listeners, setNodeRef, transform, transition, isDragging
+    attributes, listeners, setNodeRef, transform, transition, isDragging
   } = useSortable({ id })
 
   const style = {
