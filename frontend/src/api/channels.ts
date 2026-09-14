@@ -1,4 +1,5 @@
-import { get, post, put, del } from './request'
+import { get, post, put, patch, del } from './request'
+import type { Model } from './models'
 
 export interface Channel {
   channel_id: string
@@ -37,13 +38,18 @@ export interface ChannelQuota {
   channel_name?: string
   hourly?: QuotaDetail
   weekly?: QuotaDetail
+  windows?: QuotaDetail[]
 }
 
 interface QuotaDetail {
+  type?: string
+  label?: string
   limit: number
   used: number
   remain: number
   percent: number
+  reset_at?: string
+  reset_in_seconds?: number
   last_sync?: string
   raw_data?: any
 }
