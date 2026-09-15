@@ -690,7 +690,15 @@ const ModelsPage = () => {
           <Select
             style={{ width: 300 }}
             placeholder="请选择渠道"
-            value={selectedChannelId || undefined}
+            // 与 options 同步：避免 channel 状态变更（active→disabled）或被改名后，
+            // value 找不到对应 label 触发 antd 警告 `label of value is not same as label in Select options`
+            value={
+              selectedChannelId && channelsList.some(
+                p => p.channel_id === selectedChannelId && p.status === 'active'
+              )
+                ? selectedChannelId
+                : undefined
+            }
             onChange={handleSelectChannel}
           >
             {channelsList.filter(p => p.status === 'active').map(p => (
