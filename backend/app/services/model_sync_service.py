@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.channel import Channel, ChannelType
+from app.services.secret_crypto import decrypt_secret
 
 
 class ModelInfo:
@@ -28,13 +29,17 @@ class BaseModelSyncAdapter(ABC):
     
     def __init__(self, channel: Channel):
         self.channel = channel
+
+    @property
+    def api_key(self) -> str:
+        return decrypt_secret(self.channel.api_key) or ""
     
     @abstractmethod
     async def fetch_models(self) -> List[ModelInfo]:
         pass
     
     def get_headers(self) -> Dict[str, str]:
-        return {"Authorization": f"Bearer {self.channel.api_key}", "Content-Type": "application/json"}
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
     def build_models_url(self, path: str = "/v1/models") -> str:
         base = (self.channel.endpoint or "").strip().rstrip("/")
@@ -63,7 +68,7 @@ class AnthropicModelAdapter(BaseModelSyncAdapter):
     """Anthropic模型同步适配器"""
     
     def get_headers(self) -> Dict[str, str]:
-        return {"x-api-key": self.channel.api_key, "anthropic-version": "2023-06-01"}
+        return {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
     
     async def fetch_models(self) -> List[ModelInfo]:
         url = "https://api.anthropic.com/v1/models"

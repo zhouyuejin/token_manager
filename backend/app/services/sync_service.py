@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.channel import Channel
 from app.models.channel_quota import ChannelQuota, QuotaType, SyncStatus
+from app.services.secret_crypto import decrypt_secret
 
 
 def _parse_reset_at(value: Optional[str]) -> Optional[datetime]:
@@ -74,6 +75,10 @@ class BaseQuotaSyncAdapter(ABC):
     
     def __init__(self, channel: Channel):
         self.channel = channel
+
+    @property
+    def api_key(self) -> str:
+        return decrypt_secret(self.channel.api_key) or ""
     
     @abstractmethod
     async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -99,7 +104,7 @@ class VolcengineAdapter(BaseQuotaSyncAdapter):
     
     async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         url = f"{self.channel.endpoint}/v1/quota"
-        headers = {"Authorization": f"Bearer {self.channel.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -131,7 +136,7 @@ class OpenAIAdapter(BaseQuotaSyncAdapter):
     
     async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         url = "https://api.openai.com/v1/usage"
-        headers = {"Authorization": f"Bearer {self.channel.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -161,7 +166,7 @@ class AnthropicAdapter(BaseQuotaSyncAdapter):
     
     async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         url = "https://api.anthropic.com/v1/organizations/self/usage"
-        headers = {"x-api-key": self.channel.api_key, "anthropic-version": "2023-06-01"}
+        headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
         
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -209,7 +214,7 @@ class MinimaxAdapter(BaseQuotaSyncAdapter):
     async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         base_url = (self.channel.endpoint or "https://api.minimaxi.com/v1").rstrip("/")
         url = f"{base_url}/token_plan/remains"
-        headers = {"Authorization": f"Bearer {self.channel.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         
         try:
             async with httpx.AsyncClient(timeout=30) as client:

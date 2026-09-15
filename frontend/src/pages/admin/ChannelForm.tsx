@@ -9,7 +9,7 @@ import { ArrowLeftOutlined, ApiOutlined, SaveOutlined } from '@ant-design/icons'
 import {
   getChannel, createChannel, updateChannel, testChannelConnection
 } from '../../api/channels'
-import { parseExtraKeys, parseAuthHeaders } from '../../utils/channelForm'
+import { prepareChannelPayload } from '../../utils/channelForm'
 
 const { Title } = Typography
 
@@ -35,10 +35,7 @@ const ChannelForm: React.FC = () => {
           ...ch,
           api_key: '',
         })
-        // extra_keys / auth_headers 可能是数组/对象，需 JSON.stringify 为字符串
-        if (ch.extra_keys) {
-          form.setFieldValue('extra_keys', JSON.stringify(ch.extra_keys))
-        }
+        form.setFieldValue('extra_keys', '')
         if (ch.auth_headers !== undefined) {
           form.setFieldValue('auth_headers', JSON.stringify(ch.auth_headers))
         }
@@ -55,7 +52,7 @@ const ChannelForm: React.FC = () => {
 
   const handleCreate = async (values: any) => {
     try {
-      const payload = parseAuthHeaders(parseExtraKeys(values))
+      const payload = prepareChannelPayload(values, false)
       await createChannel(payload)
       message.success('创建成功')
       navigate('/admin/channels')
@@ -67,7 +64,7 @@ const ChannelForm: React.FC = () => {
   const handleUpdate = async (values: any) => {
     if (!channelId) return
     try {
-      const payload = parseAuthHeaders(parseExtraKeys(values))
+      const payload = prepareChannelPayload(values, true)
       await updateChannel(channelId, payload)
       message.success('更新成功')
       navigate('/admin/channels')
@@ -211,7 +208,7 @@ const ChannelForm: React.FC = () => {
             label="额外 Keys (JSON 数组)"
             tooltip={'["sk-xxx1", "sk-xxx2"]'}
           >
-            <Input.TextArea rows={2} placeholder={'["sk-xxx1", "sk-xxx2"]'} />
+            <Input.TextArea rows={2} placeholder={isEdit ? '不修改请留空；填写 JSON 数组可替换' : '["sk-xxx1", "sk-xxx2"]'} />
           </Form.Item>
 
           {/* key_strategy + priority + timeout */}

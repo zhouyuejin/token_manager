@@ -26,6 +26,7 @@ from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_mod
 from app.models.usage_log import UsageLog
 
 from app.services.channel_auth import build_auth_headers, get_upstream_url
+from app.services.secret_crypto import decrypt_secret
 
 
 # 进程级 round_robin 计数器（重启归零）
@@ -352,15 +353,15 @@ class ProxyService:
 
     def _get_key_pool(self, channel: Channel) -> List[str]:
         """获取 channel 的所有 key"""
-        pool = [channel.api_key]
+        pool = [decrypt_secret(channel.api_key)]
         if channel.extra_keys:
             try:
                 extra = json.loads(channel.extra_keys)
                 if isinstance(extra, list):
-                    pool.extend(extra)
+                    pool.extend(decrypt_secret(k) for k in extra)
             except json.JSONDecodeError:
                 pass
-        return pool
+        return [k for k in pool if k]
 
     def _key_fingerprint(self, key: str) -> str:
         """Key 的哈希指纹（用于存储在 key_health 中）"""

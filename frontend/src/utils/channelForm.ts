@@ -43,3 +43,13 @@ export const parseAuthHeaders = (values: any) => {
   }
   return payload
 }
+
+export const prepareChannelPayload = (values: any, isEdit: boolean) => {
+  const payload = parseAuthHeaders(parseExtraKeys(values))
+  if (!isEdit) return payload
+
+  if (typeof payload.api_key === 'string' && !payload.api_key.trim()) {
+    delete payload.api_key
+  }
+  return payload
+}
