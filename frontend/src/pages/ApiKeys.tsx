@@ -8,6 +8,7 @@ import {
 import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
 import { createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
 import { useSwrData } from '../hooks/useSwr'
+import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhitelist'
 import dayjs from 'dayjs'
 
 const ApiKeysPage = () => {
@@ -29,7 +30,10 @@ const ApiKeysPage = () => {
 
   const handleCreate = async (values: any) => {
     try {
-      const result = await createApiKey(values)
+      const result = await createApiKey({
+        name: values.name,
+        ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
+      })
       setNewKey(result.api_key)
       message.success('创建成功')
       fetchKeys()
@@ -42,6 +46,7 @@ const ApiKeysPage = () => {
     setEditingKey(record)
     editForm.setFieldsValue({
       name: record.name,
+      ip_whitelist: formatApiKeyWhitelist(record.ip_whitelist),
     })
     setEditModalVisible(true)
   }
@@ -49,7 +54,10 @@ const ApiKeysPage = () => {
   const handleUpdate = async (values: any) => {
     if (!editingKey) return
     try {
-      await updateApiKey(editingKey.key_id, values)
+      await updateApiKey(editingKey.key_id, {
+        name: values.name,
+        ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
+      })
       message.success('更新成功')
       setEditModalVisible(false)
       setEditingKey(null)
@@ -114,6 +122,25 @@ const ApiKeysPage = () => {
           {status === 'active' ? '启用' : '禁用'}
         </Tag>
       )
+    },
+    {
+      title: 'IP白名单',
+      dataIndex: 'ip_whitelist',
+      key: 'ip_whitelist',
+      render: (value?: string[]) => {
+        const list = value || []
+        if (list.length === 0) {
+          return <span style={{ color: token.colorTextSecondary }}>不限制</span>
+        }
+        return (
+          <Space size={[4, 4]} wrap>
+            {list.slice(0, 3).map((item) => (
+              <Tag key={item} style={{ margin: 0, borderRadius: 6 }}>{item}</Tag>
+            ))}
+            {list.length > 3 && <Tag style={{ margin: 0, borderRadius: 6 }}>+{list.length - 3}</Tag>}
+          </Space>
+        )
+      }
     },
     {
       title: '创建时间',
@@ -319,6 +346,21 @@ const ApiKeysPage = () => {
                 }}
               />
             </Form.Item>
+            <Form.Item
+              name="ip_whitelist"
+              label={<span style={{ color: token.colorText }}>IP白名单</span>}
+              extra="每行或逗号分隔一个 IP/CIDR，留空表示不限制。"
+            >
+              <Input.TextArea
+                placeholder={'例如：\n10.0.0.1\n10.0.0.0/8'}
+                autoSize={{ minRows: 3, maxRows: 6 }}
+                style={{
+                  background: token.colorBgContainer,
+                  border: `1px solid ${token.colorBorder}`,
+                  borderRadius: 10,
+                }}
+              />
+            </Form.Item>
           </Form>
         )}
       </Modal>
@@ -352,6 +394,21 @@ const ApiKeysPage = () => {
               placeholder="请输入Key名称"
               style={{
                 height: 40,
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorder}`,
+                borderRadius: 10,
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="ip_whitelist"
+            label={<span style={{ color: token.colorText }}>IP白名单</span>}
+            extra="每行或逗号分隔一个 IP/CIDR，留空表示不限制。"
+          >
+            <Input.TextArea
+              placeholder={'例如：\n10.0.0.1\n10.0.0.0/8'}
+              autoSize={{ minRows: 3, maxRows: 6 }}
+              style={{
                 background: token.colorBgContainer,
                 border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,

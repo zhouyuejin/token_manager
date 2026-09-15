@@ -148,6 +148,17 @@ cd frontend && node src/utils/thinkTag.test.mjs
 | 渠道上游密钥当前按明文字段读取 | 字段存在但未加密 | `backend/app/models/channel.py` 的 `api_key`、`extra_keys` 是普通字符串/JSON 字段；`ProxyService.select_channel()`/`pick_key()` 直接取出 Key 用于上游请求。 |
 | 部门/项目/预算归因 | 未实现 | `users`、`api_keys`、`usage_logs` 当前没有 `department_id`/`project_id`/预算字段。 |
 
+### 前端真实能力清单
+
+| 能力 | 当前状态 | 证据 |
+| --- | --- | --- |
+| 用户侧路由已覆盖统计、通知、API Key、聊天和设置 | 已实现 | `frontend/src/App.tsx` 注册 `/stats`、`/notifications`、`/api-keys`、`/chat`、`/settings`；`MainLayout.tsx` 有对应菜单。 |
+| 管理员侧路由已覆盖 dashboard、用户、渠道、模型、模型分组和日志 | 已实现 | `frontend/src/App.tsx` 注册 `/admin/dashboard`、`/admin/users`、`/admin/channels`、`/admin/models`、`/admin/model-groups`、`/admin/logs/operations`、`/admin/logs/logins`；`MainLayout.tsx` 有管理后台菜单。 |
+| API Key 页面和 API 类型 | 部分实现 | `frontend/src/api/apiKeys.ts` 已有 `ip_whitelist`、`status`、`last_used_at`；缺少 Phase 1 所需 `expires_at`、`revoked_at`、`revoked_reason`、`last_used_ip`、`last_used_user_agent`、限流字段、轮换/吊销 API 封装。 |
+| 渠道页面和 API 类型 | 部分实现且存在安全缺口 | `frontend/src/api/channels.ts` 仍将 `api_key` 声明为普通 `string`，`extra_keys` 为明文数组语义；Phase 1 需要改成掩码/替换语义，避免掩码回写覆盖真实 Key。 |
+| 通知、操作日志和登录日志 | 已实现基础入口 | `frontend/src/pages/Notifications.tsx`、`frontend/src/pages/admin/OperationLogs.tsx`、`frontend/src/pages/admin/LoginLogs.tsx` 已存在，可承接后续冻结、审批、审计结果展示。 |
+| Phase 1/2 所需的安全、预算、项目和账务页面仍未接入 | 未实现 | 当前没有 `frontend/src/api/billing.ts`、`frontend/src/pages/admin/Billing.tsx`、`Projects.tsx`、`Departments.tsx`，路由和菜单也没有预算/项目/账务入口。 |
+
 ### 验证命令基线
 
 | 命令 | 当前结果 | 边界 |
@@ -162,8 +173,10 @@ cd frontend && node src/utils/thinkTag.test.mjs
 ### 后续执行规则
 
 - Phase 0 不改代理行为，只记录当前事实和护栏。
+- Phase 0 前端不做 UI 调整，只记录当前路由、页面、API 类型和验证命令基线。
 - Phase 1 才接入 IP 白名单、Key 生命周期、限流和渠道密钥加密。
 - Phase 2 才新增部门/项目/预算/预扣/对账相关模型和迁移。
+- Phase 1/2 涉及可操作能力时，必须同步补前端 API 类型、页面字段、路由/菜单入口和错误态。
 - 每个后续 Phase 先写能红灯的后端测试，再做最小实现，最后更新本计划状态。
 - 不跨 Phase 顺手重构；发现无关问题先记录，不在当前阶段处理。
 
@@ -267,6 +280,9 @@ cd backend && python -m pytest tests/test_api_key_security.py -v
 - 已在 `ProxyAuthMiddleware.dispatch()` 的 Key/User 校验后接入 IP 白名单校验，不命中返回 403。
 - 已新增 `backend/tests/test_api_key_security.py` 覆盖空白名单、精确 IP、CIDR、未命中、非法配置、代理中间件允许/拒绝。
 - 本机验证命令：`python3 -m pytest backend/tests/test_api_key_security.py -q`，结果 `7 passed`。
+- 前端已在 `ApiKeys.tsx` 增加 IP 白名单列表展示、创建表单和编辑表单；支持换行或逗号分隔，留空表示不限制。
+- 已新增 `frontend/src/utils/apiKeyWhitelist.ts` 和 `frontend/src/utils/apiKeyWhitelist.test.mjs` 固定白名单文本解析/格式化规则。
+- 前端验证命令：`cd frontend && node src/utils/apiKeyWhitelist.test.mjs`，结果 `3 passed`；`cd frontend && npm run build` 通过。
 
 #### Task 1.2: API Key 生命周期管理
 
