@@ -157,3 +157,14 @@ export const replaceChannelModelBindings = (channelId: string, data: Array<{
   weight: number
   enabled: boolean
 }>) => put(`/admin/channels/${channelId}/models`, data)
+
+export const batchBindModelsToChannel = (channelId: string, data: Array<{
+  model_id: string
+  upstream_model: string
+  priority: number
+  weight: number
+  enabled: boolean
+}>) => post<{ added: string[]; skipped: string[]; errors: string[] }>(
+  `/admin/channels/${channelId}/models/batch`,
+  data
+)

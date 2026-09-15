@@ -1055,6 +1055,60 @@ async def replace_channel_models(channel_id: str, data: List[ChannelModelCreate]
     return {"message": "更新成功", "count": len(data)}
 
 
+@router.post("/channels/{channel_id}/models/batch")
+async def batch_add_channel_models(channel_id: str, data: List[ChannelModelCreate], request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """批量绑定模型到渠道（增量；用于"获取模型"批量导入）
+
+    与 PUT /channels/{channel_id}/models 的区别：本接口是增量添加，不删除已有绑定；
+    重复绑定跳过并放入 skipped，不存在的 model_id 放入 errors，整体一次 commit。
+    """
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+
+    if not data:
+        return {"added": [], "skipped": [], "errors": []}
+
+    # 校验 model 存在性 + 已有绑定，一次性预取避免 N 次查询
+    model_ids = [mc.model_id for mc in data]
+    existing_models = {
+        m.model_id for m in db.query(Model).filter(Model.model_id.in_(model_ids)).all()
+    }
+    existing_bindings = {
+        mc.model_id for mc in
+        db.query(ModelChannel.model_id).filter(
+            ModelChannel.channel_id == channel_id,
+            ModelChannel.model_id.in_(model_ids),
+        ).all()
+    }
+
+    added: List[str] = []
+    skipped: List[str] = []
+    errors: List[str] = []
+    for mc_data in data:
+        if mc_data.model_id not in existing_models:
+            errors.append(f"模型 {mc_data.model_id} 不存在")
+            continue
+        if mc_data.model_id in existing_bindings:
+            skipped.append(mc_data.model_id)
+            continue
+        db.add(ModelChannel(
+            channel_id=channel_id, model_id=mc_data.model_id,
+            upstream_model=mc_data.upstream_model, priority=mc_data.priority,
+            weight=mc_data.weight, enabled=mc_data.enabled,
+        ))
+        added.append(mc_data.model_id)
+
+    db.commit()
+    record_operation(
+        db=db, operator=admin, action="batch_bind_models",
+        target_type="channel", target_id=channel_id,
+        detail={"added": len(added), "skipped": len(skipped), "errors": len(errors)},
+        ip_address=extract_client_ip(request),
+    )
+    return {"added": added, "skipped": skipped, "errors": errors}
+
+
 
 
 # ========== 兼容性路由 (GC-7) ==========

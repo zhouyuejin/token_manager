@@ -9,7 +9,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined } from '@ant-design/icons'
 import { getModels, createModel, updateModel, deleteModel, syncModelPricing, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
 import { useSwrData } from '../../hooks/useSwr'
-import { getChannels, Channel, syncChannelModels } from '../../api/channels'
+import { getChannels, Channel, syncChannelModels, batchBindModelsToChannel } from '../../api/channels'
 
 // 上游模型类型
 interface UpstreamModel {
@@ -339,8 +339,8 @@ const ModelsPage = () => {
     }
 
     let createdCount = 0
-    let boundCount = 0
     const errors: string[] = []
+    const prepared: Array<{ upstreamModelId: string; platformModelId: string }> = []
 
     for (const upstreamModelId of selectedModels) {
       const upstreamModel = upstreamModels.find(m => m.model_id === upstreamModelId)
@@ -372,27 +372,32 @@ const ModelsPage = () => {
         }
       }
 
-      // 2) 建立渠道绑定
+      prepared.push({ upstreamModelId, platformModelId })
+    }
+
+    // 2) 批量绑定：一次 HTTP 调用替代原 N 次单条 POST
+    let boundCount = 0
+    let skippedCount = 0
+    if (prepared.length > 0) {
       try {
-        await bindChannelToModel(platformModelId, {
-          channel_id: channel.channel_id,
-          upstream_model: upstreamModelId,
+        const result = await batchBindModelsToChannel(channel.channel_id, prepared.map(p => ({
+          model_id: p.platformModelId,
+          upstream_model: p.upstreamModelId,
           priority: 0,
           weight: 100,
           enabled: true,
-        })
-        boundCount++
+        })))
+        boundCount = result.added.length
+        skippedCount = result.skipped.length
+        // 后端 errors：model 不存在等，记录到统一错误列表
+        for (const e of result.errors) errors.push(`绑定 ${channel.name}: ${e}`)
       } catch (e: any) {
-        // 已绑定会返回 4xx 错误，跳过即可
-        const detail = e?.response?.data?.detail || ''
-        if (!detail.includes('已绑定') && !detail.includes('duplicate')) {
-          errors.push(`绑定 ${platformModelId} → ${channel.name}: ${detail || '失败'}`)
-        }
+        errors.push(`批量绑定失败: ${e?.response?.data?.detail || e?.message || '失败'}`)
       }
     }
 
     if (errors.length > 0) {
-      message.warning(`新建 ${createdCount} 个、绑定 ${boundCount} 个；${errors.length} 个失败，详见控制台`)
+      message.warning(`新建 ${createdCount} 个、新绑定 ${boundCount} 个、跳过 ${skippedCount} 个；${errors.length} 个失败，详见控制台`)
       console.error('[批量导入] 错误明细:', errors)
     } else {
       message.success(`成功新建 ${createdCount} 个模型并绑定 ${boundCount} 个渠道`)
