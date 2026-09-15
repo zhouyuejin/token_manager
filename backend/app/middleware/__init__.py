@@ -48,11 +48,11 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
             proxy_service = ProxyService(db)
             
             # 验证Key
-            key_obj = proxy_service.verify_api_key(api_key)
-            if not key_obj:
+            key_obj, auth_error = proxy_service.authenticate_api_key(api_key)
+            if auth_error or not key_obj:
                 return JSONResponse(
                     status_code=401,
-                    content={"detail": "无效的API Key"}
+                    content={"detail": auth_error or "无效的API Key"}
                 )
             
             # 获取用户

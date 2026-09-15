@@ -8,11 +8,17 @@ export interface ApiKey {
   status: string
   created_at: string
   last_used_at: string | null
+  expires_at?: string | null
+  revoked_at?: string | null
+  revoked_reason?: string | null
+  last_used_ip?: string | null
+  last_used_user_agent?: string | null
 }
 
 export interface CreateApiKeyParams {
   name: string
   ip_whitelist?: string[]
+  expires_at?: string | null
 }
 
 export const getApiKeys = () => get<{ items: ApiKey[] }>('/api-keys')
@@ -29,3 +35,9 @@ export const deleteApiKey = (keyId: string) => del(`/api-keys/${keyId}`)
 
 export const updateApiKeyStatus = (keyId: string, status: string) =>
   put(`/api-keys/${keyId}/status`, { status })
+
+export const revokeApiKey = (keyId: string, reason?: string) =>
+  put(`/api-keys/${keyId}/revoke`, { reason })
+
+export const rotateApiKey = (keyId: string) =>
+  post<{ api_key: string; name: string; key_id: string; expires_at?: string | null }>(`/api-keys/${keyId}/rotate`, {})

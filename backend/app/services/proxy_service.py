@@ -40,11 +40,34 @@ class ProxyService:
     
     def verify_api_key(self, api_key: str) -> Optional[ApiKey]:
         """验证API Key"""
+        key, error = self.authenticate_api_key(api_key)
+        return None if error else key
+
+    def authenticate_api_key(self, api_key: str) -> Tuple[Optional[ApiKey], Optional[str]]:
+        """返回 API Key 及不可用原因。"""
         key = self.db.query(ApiKey).filter(
-            ApiKey.api_key == api_key,
-            ApiKey.status == "active"
+            ApiKey.api_key == api_key
         ).first()
-        return key
+        if not key:
+            return None, "无效的API Key"
+
+        error = self.get_api_key_auth_error(key)
+        if error:
+            return None, error
+        return key, None
+
+    @staticmethod
+    def get_api_key_auth_error(api_key: ApiKey) -> Optional[str]:
+        status_value = getattr(getattr(api_key, "status", None), "value", getattr(api_key, "status", None))
+        if status_value == "revoked" or getattr(api_key, "revoked_at", None):
+            return "API Key已吊销"
+        if status_value != "active":
+            return "无效的API Key"
+
+        expires_at = getattr(api_key, "expires_at", None)
+        if expires_at and expires_at <= datetime.utcnow():
+            return "API Key已过期"
+        return None
     
     def get_user_from_key(self, api_key: ApiKey) -> Optional[User]:
         """从API Key获取用户"""

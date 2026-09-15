@@ -308,6 +308,13 @@ cd backend && python -m pytest tests/test_api_key_security.py -v
 - 操作日志记录创建、吊销、轮换。
 - API Key 安全状态在列表、详情、创建/编辑/轮换/吊销流程中可见可操作。
 
+**执行记录：**
+- 已在 `api_keys` 增加 `expires_at`、`revoked_at`、`revoked_reason`、`last_used_ip`、`last_used_user_agent`，并通过 Alembic 迁移扩展 `status` 为 `active/disabled/revoked`。
+- 已新增 `ProxyService.authenticate_api_key()` / `get_api_key_auth_error()`，代理中间件可区分无效、过期、吊销 Key。
+- 已扩展 API Key 创建、列表、详情、编辑响应字段；新增用户和管理员吊销/轮换接口。
+- 已在 `ApiKeys.tsx` 增加过期时间展示、创建/编辑过期时间、吊销和轮换操作；轮换后的新 Key 仍只展示一次。
+- 本机验证命令：`python3 -m pytest backend/tests/test_api_key_security.py backend/tests/test_platform_baseline_contract.py -q`，结果 `13 passed`；`cd frontend && npm run build` 通过。
+
 #### Task 1.3: 限流服务
 
 **实现：**
