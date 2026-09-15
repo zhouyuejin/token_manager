@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
   Select, Popconfirm, Tabs, Row, Col, InputNumber, Radio, Checkbox,
-  Drawer, Switch, Divider
+  Drawer, Switch, Divider, Tooltip
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined, SearchOutlined } from '@ant-design/icons'
 import { getModels, createModel, updateModel, deleteModel, syncModelPricing, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
 import { useSwrData } from '../../hooks/useSwr'
 import { getChannels, Channel, syncChannelModels, batchBindModelsToChannel } from '../../api/channels'
@@ -18,6 +18,23 @@ interface UpstreamModel {
   owned_by?: string    // 旧格式
   model_name?: string  // 新格式
   display_name?: string // 新格式
+}
+
+
+// 导入结果明细 Modal 的小卡片
+const Stat = ({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'success' | 'muted' | 'danger' }) => {
+  const { token } = useThemeToken()
+  const color =
+    tone === 'success' ? token.colorSuccess :
+    tone === 'danger' ? token.colorError :
+    tone === 'muted' ? token.colorTextTertiary :
+    token.colorText
+  return (
+    <div style={{ padding: '8px 12px', borderRadius: 8, background: token.colorFillTertiary }}>
+      <div style={{ fontSize: 12, color: token.colorTextSecondary }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 600, color, lineHeight: 1.4 }}>{value}</div>
+    </div>
+  )
 }
 
 const ModelsPage = () => {
@@ -35,7 +52,17 @@ const ModelsPage = () => {
   const [upstreamModels, setUpstreamModels] = useState<UpstreamModel[]>([])
   const [fetchLoading, setFetchLoading] = useState(false)
   const [selectedModels, setSelectedModels] = useState<string[]>([])
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 })
+  // 获取模型抽屉：搜索 / 仅看未导入 / 导入结果明细
+  const [searchText, setSearchText] = useState('')
+  const [onlyNew, setOnlyNew] = useState(false)
+  const [importResult, setImportResult] = useState<{
+    totalSelected: number
+    preExisted: number
+    created: number
+    bound: number
+    skipped: number
+    errors: string[]
+  } | null>(null)
 
   // 渠道绑定 Drawer 状态
   const [bindingsDrawerOpen, setBindingsDrawerOpen] = useState(false)
@@ -52,6 +79,42 @@ const ModelsPage = () => {
   
   const modelsList = modelsData?.items || []
   const channelsList = channelsData?.items || []
+
+  // 平台模型 ID 规则：${channel.type}-${upstream.model_id}（与 handleBatchCreate 中生成方式一致）
+  // Set 用于「存在性」快查；Map 用于在 Drawer 行内拿到完整 Model 记录（bound_channel_ids）
+  const existingModelIds = useMemo(
+    () => new Set(modelsList.map(m => m.model_id)),
+    [modelsList],
+  )
+  const existingModelsById = useMemo(
+    () => new Map(modelsList.map(m => [m.model_id, m] as const)),
+    [modelsList],
+  )
+  const selectedChannelType = useMemo(
+    () => channelsList.find(c => c.channel_id === selectedChannelId)?.type,
+    [channelsList, selectedChannelId],
+  )
+  // 当前渠道已绑定的 platformModelId 集合（驱动"已绑此渠道" 的不可勾状态）
+  const alreadyBoundToCurrent = useMemo(() => {
+    if (!selectedChannelId) return new Set<string>()
+    const set = new Set<string>()
+    modelsList.forEach(m => {
+      if (m.bound_channel_ids?.includes(selectedChannelId)) set.add(m.model_id)
+    })
+    return set
+  }, [modelsList, selectedChannelId])
+  // 按搜索词 + 仅看未导入 过滤上游模型
+  const filteredUpstreamModels = useMemo(() => {
+    const q = searchText.trim().toLowerCase()
+    return upstreamModels.filter(m => {
+      // 「仅看可操作」: 排除已存在且已绑当前渠道的行（不可操作）
+      if (onlyNew && existingModelIds.has(`${selectedChannelType}-${m.model_id}`) && alreadyBoundToCurrent.has(`${selectedChannelType}-${m.model_id}`)) return false
+      if (!q) return true
+      return [m.model_id, m.name, m.model_name, m.display_name, m.owned_by]
+        .filter(Boolean)
+        .some((s: any) => String(s).toLowerCase().includes(q))
+    })
+  }, [upstreamModels, searchText, onlyNew, existingModelIds, selectedChannelType])
 
   const fetchData = async () => {
     mutateModels()
@@ -277,19 +340,19 @@ const ModelsPage = () => {
     setSelectedChannelId(channelId)
     setFetchLoading(true)
     setSelectedModels([])
-    
+    setSearchText('')
+    setOnlyNew(false)
+
     try {
       // 调用同步模型API
       const result = await syncChannelModels(channelId)
       if (result.success && result.models) {
         // 同步接口返回的 models 即为该渠道的上游模型列表
         setUpstreamModels(result.models)
-        setPagination({ ...pagination, total: result.models.length })
         message.success(`成功获取 ${result.count} 个模型`)
       } else {
         message.error(result.message || '获取模型失败')
         setUpstreamModels([])
-        setPagination({ ...pagination, total: 0 })
       }
     } catch (error) {
       message.error('获取模型失败')
@@ -297,11 +360,6 @@ const ModelsPage = () => {
     } finally {
       setFetchLoading(false)
     }
-  }
-
-  // 分页变化
-  const handlePageChange = (page: number, pageSize: number) => {
-    setPagination({ ...pagination, current: page, pageSize })
   }
 
   // 选择模型
@@ -313,15 +371,21 @@ const ModelsPage = () => {
     }
   }
 
-  // 全选
+  // 全选：仅勾选「可操作」的行——全新 + 已存在但未绑当前渠道。
+  // 已存在且已绑当前渠道的行 disabled，不会被勾上。
   const handleSelectAll = (checked: boolean, currentPageModels: UpstreamModel[]) => {
     if (checked) {
-      const allIds = currentPageModels.map(m => m.model_id)
-      setSelectedModels([...new Set([...selectedModels, ...allIds])])
+      const eligible = currentPageModels
+        .filter(m => {
+          const pid = `${selectedChannelType}-${m.model_id}`
+          if (!existingModelIds.has(pid)) return true             // 全新
+          return !alreadyBoundToCurrent.has(pid)                  // 存在但未绑当前渠道
+        })
+        .map(m => m.model_id)
+      setSelectedModels(prev => [...new Set([...prev, ...eligible])])
     } else {
-      // 取消当前页的全选
       const currentPageIds = currentPageModels.map(m => m.model_id)
-      setSelectedModels(selectedModels.filter(id => !currentPageIds.includes(id)))
+      setSelectedModels(prev => prev.filter(id => !currentPageIds.includes(id)))
     }
   }
 
@@ -396,22 +460,27 @@ const ModelsPage = () => {
       }
     }
 
+    // 统计：selectedModels 里被前端内存差集跳过的（即「已存在」）
+    const preExisted = selectedModels.filter(id => {
+      const upstreamModel = upstreamModels.find(m => m.model_id === id)
+      if (!upstreamModel) return false
+      return existingModelIds.has(`${channel.type}-${id}`)
+    }).length
+
+    setImportResult({
+      totalSelected: selectedModels.length,
+      preExisted,
+      created: createdCount,
+      bound: boundCount,
+      skipped: skippedCount,
+      errors,
+    })
+
     if (errors.length > 0) {
-      message.warning(`新建 ${createdCount} 个、新绑定 ${boundCount} 个、跳过 ${skippedCount} 个；${errors.length} 个失败，详见控制台`)
       console.error('[批量导入] 错误明细:', errors)
-    } else {
-      message.success(`成功新建 ${createdCount} 个模型并绑定 ${boundCount} 个渠道`)
     }
-    setFetchModalVisible(false)
     setSelectedModels([])
     fetchData()
-  }
-
-  // 获取当前页的模型
-  const getCurrentPageModels = () => {
-    const start = (pagination.current - 1) * pagination.pageSize
-    const end = start + pagination.pageSize
-    return upstreamModels.slice(start, end)
   }
 
   return (
@@ -677,95 +746,36 @@ const ModelsPage = () => {
         </Form>
       </Modal>
 
-      {/* 获取模型弹窗 */}
-      <Modal
-        title={<span style={{ color: token.colorText }}><CloudDownloadOutlined style={{ marginRight: 8 }} />获取模型</span>}
+      {/* 获取模型抽屉 */}
+      <Drawer
+        title={<span style={{ color: token.colorText }}><CloudDownloadOutlined style={{ marginRight: 8 }} />从上游获取模型</span>}
         open={fetchModalVisible}
-        onCancel={() => { setFetchModalVisible(false); setSelectedChannelId(''); setUpstreamModels([]); setSelectedModels([]); }}
-        footer={null}
-        width={900}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <span style={{ color: token.colorTextSecondary, marginRight: 8 }}>选择渠道：</span>
-          <Select
-            style={{ width: 300 }}
-            placeholder="请选择渠道"
-            // 与 options 同步：避免 channel 状态变更（active→disabled）或被改名后，
-            // value 找不到对应 label 触发 antd 警告 `label of value is not same as label in Select options`
-            value={
-              selectedChannelId && channelsList.some(
-                p => p.channel_id === selectedChannelId && p.status === 'active'
-              )
-                ? selectedChannelId
-                : undefined
-            }
-            onChange={handleSelectChannel}
-          >
-            {channelsList.filter(p => p.status === 'active').map(p => (
-              <Select.Option key={p.channel_id} value={p.channel_id}>
-                {p.name} ({p.type})
-              </Select.Option>
-            ))}
-          </Select>
-          <div style={{ marginTop: 8, fontSize: 12, color: token.colorTextSecondary }}>
-            从上游拉取的模型将以 <code>{'{channel.type}'}-{'{model_id}'}</code> 为平台 ID 自动创建，并自动绑定到所选渠道
-          </div>
-        </div>
-
-        {upstreamModels.length > 0 ? (
-          <>
-            <Table
-              dataSource={getCurrentPageModels()}
-              columns={[
-                {
-                  title: <Checkbox 
-                    onChange={(e) => handleSelectAll(e.target.checked, getCurrentPageModels())}
-                    checked={getCurrentPageModels().every(m => selectedModels.includes(m.model_id))}
-                    indeterminate={getCurrentPageModels().some(m => selectedModels.includes(m.model_id)) && !getCurrentPageModels().every(m => selectedModels.includes(m.model_id))}
-                  />,
-                  key: 'checkbox',
-                  width: 50,
-                  render: (_: any, record: UpstreamModel) => (
-                    <Checkbox 
-                      checked={selectedModels.includes(record.model_id)}
-                      onChange={(e) => handleSelectModel(record.model_id, e.target.checked)}
-                    />
-                  )
-                },
-                { 
-                  title: '模型ID', 
-                  dataIndex: 'model_id', 
-                  key: 'model_id',
-                  render: (text: string) => <span style={{ color: token.colorText }}>{text}</span>
-                },
-                { 
-                  title: '模型名称', 
-                  dataIndex: 'name', 
-                  key: 'name',
-                  render: (text: string) => <span style={{ color: token.colorTextSecondary }}>{text || '-'}</span>
-                },
-              ]}
-              rowKey="model_id"
-              loading={fetchLoading}
-              pagination={{
-                current: pagination.current,
-                pageSize: pagination.pageSize,
-                total: pagination.total,
-                onChange: handlePageChange,
-                showSizeChanger: true,
-                showTotal: (total: number) => `共 ${total} 个模型`
-              }}
-              size="small"
-            />
-            
-            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ color: token.colorTextSecondary }}>
-                已选择 <span style={{ color: '#3B82F6', fontWeight: 600 }}>{selectedModels.length}</span> 个模型
+        onClose={() => {
+          setFetchModalVisible(false)
+          setSelectedChannelId('')
+          setUpstreamModels([])
+          setSelectedModels([])
+          setSearchText('')
+          setOnlyNew(false)
+        }}
+        placement="right"
+        width={560}
+        destroyOnHidden
+        styles={{ body: { paddingTop: 12 } }}
+        footer={
+          upstreamModels.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>
+                已选 <span style={{ color: token.colorPrimary, fontWeight: 600 }}>{selectedModels.length}</span>
+                {' / '}
+                过滤后 <span style={{ fontWeight: 600 }}>{filteredUpstreamModels.length}</span>
+                {' / '}
+                上游共 <span style={{ fontWeight: 600 }}>{upstreamModels.length}</span>
               </div>
               <Space>
                 <Button onClick={() => setFetchModalVisible(false)}>取消</Button>
-                <Button 
-                  type="primary" 
+                <Button
+                  type="primary"
                   onClick={handleBatchCreate}
                   disabled={selectedModels.length === 0}
                   style={{ background: token.colorPrimary, border: 'none' }}
@@ -774,13 +784,221 @@ const ModelsPage = () => {
                 </Button>
               </Space>
             </div>
+          )
+        }
+      >
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: token.colorTextSecondary, whiteSpace: 'nowrap' }}>渠道：</span>
+            <Select
+              style={{ flex: 1, minWidth: 200 }}
+              placeholder="请选择渠道"
+              value={
+                selectedChannelId && channelsList.some(
+                  p => p.channel_id === selectedChannelId && p.status === 'active'
+                )
+                  ? selectedChannelId
+                  : undefined
+              }
+              onChange={handleSelectChannel}
+            >
+              {channelsList.filter(p => p.status === 'active').map(p => (
+                <Select.Option key={p.channel_id} value={p.channel_id}>
+                  {p.name} ({p.type})
+                </Select.Option>
+              ))}
+            </Select>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12, color: token.colorTextSecondary, lineHeight: 1.6 }}>
+            平台 ID 规则：<code>{'{channel.type}'}-{'{model_id}'}</code>；已存在的模型会自动标灰、不可勾选。
+          </div>
+        </div>
+
+        {upstreamModels.length > 0 ? (
+          <>
+            <Input
+              allowClear
+              placeholder="搜索 model_id / name / display_name"
+              prefix={<SearchOutlined style={{ color: token.colorTextSecondary }} />}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{ marginBottom: 8 }}
+            />
+            <Space size={4} wrap style={{ marginBottom: 8 }}>
+              <Button size="small" onClick={() => handleSelectAll(true, filteredUpstreamModels)}>全选过滤结果</Button>
+              <Button size="small" onClick={() => setSelectedModels([])}>清空选择</Button>
+              <Checkbox checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)}>
+                仅看可操作
+              </Checkbox>
+            </Space>
+
+            <Table<UpstreamModel>
+              dataSource={filteredUpstreamModels}
+              rowKey="model_id"
+              loading={fetchLoading}
+              size="small"
+              pagination={{
+                pageSize: 50,
+                showSizeChanger: true,
+                pageSizeOptions: ['20', '50', '100'],
+                showTotal: (total) => `共 ${total} 个`,
+              }}
+              scroll={{ y: 'calc(100vh - 460px)' }}
+              columns={[
+                {
+                  title: (
+                    <Checkbox
+                      onChange={(e) => handleSelectAll(e.target.checked, filteredUpstreamModels)}
+                      checked={filteredUpstreamModels.length > 0 && filteredUpstreamModels.every(m => selectedModels.includes(m.model_id))}
+                      indeterminate={filteredUpstreamModels.some(m => selectedModels.includes(m.model_id)) && !filteredUpstreamModels.every(m => selectedModels.includes(m.model_id))}
+                    />
+                  ),
+                  key: 'checkbox',
+                  width: 44,
+                  render: (_: any, record: UpstreamModel) => {
+                    const platformModelId = `${selectedChannelType}-${record.model_id}`
+                    const existed = existingModelIds.has(platformModelId)
+                    const fullySkipped = existed && alreadyBoundToCurrent.has(platformModelId)
+                    return (
+                      <Checkbox
+                        checked={selectedModels.includes(record.model_id)}
+                        disabled={fullySkipped}
+                        onChange={(e) => handleSelectModel(record.model_id, e.target.checked)}
+                      />
+                    )
+                  },
+                },
+                {
+                  title: '模型 ID',
+                  dataIndex: 'model_id',
+                  key: 'model_id',
+                  width: 200,
+                  render: (text: string) => (
+                    <Tooltip title={text} placement="topLeft">
+                      <span
+                        style={{
+                          color: token.colorText,
+                          fontFamily: 'monospace',
+                          display: 'inline-block',
+                          maxWidth: 180,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          verticalAlign: 'middle',
+                        }}
+                      >
+                        {text}
+                      </span>
+                    </Tooltip>
+                  ),
+                },
+                {
+                  title: '名称',
+                  key: 'name',
+                  render: (_: any, record: UpstreamModel) => {
+                    const platformModelId = `${selectedChannelType}-${record.model_id}`
+                    const existed = existingModelIds.has(platformModelId)
+                    const boundToCurrent = existed && alreadyBoundToCurrent.has(platformModelId)
+                    const existedModel = existed ? existingModelsById.get(platformModelId) : null
+                    const boundIds = existedModel?.bound_channel_ids ?? []
+                    const displayName = record.display_name || record.model_name || record.name || '-'
+                    const boundIdsText = boundIds.length > 0
+                      ? `已绑: ${boundIds.join(', ')}`
+                      : null
+                    return (
+                      <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                        <Space size={4}>
+                          <Tooltip title={displayName} placement="topLeft">
+                            <span
+                              style={{
+                                color: existed ? token.colorTextTertiary : token.colorTextSecondary,
+                                maxWidth: 200,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
+                                verticalAlign: 'middle',
+                              }}
+                            >
+                              {displayName}
+                            </span>
+                          </Tooltip>
+                          {boundToCurrent && <Tag style={{ marginInlineEnd: 0, flexShrink: 0 }}>已绑此渠道</Tag>}
+                          {existed && !boundToCurrent && (
+                            <Tag color="warning" style={{ marginInlineEnd: 0, flexShrink: 0 }}>可补绑定</Tag>
+                          )}
+                        </Space>
+                        {existed && boundIdsText && (
+                          <Tooltip title={boundIds.join(', ')} placement="bottomLeft">
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: token.colorTextTertiary,
+                                fontFamily: 'monospace',
+                                maxWidth: 200,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                display: 'inline-block',
+                              }}
+                            >
+                              {boundIdsText}
+                            </span>
+                          </Tooltip>
+                        )}
+                      </Space>
+                    )
+                  },
+                },
+              ]}
+            />
           </>
         ) : selectedChannelId && !fetchLoading ? (
           <div style={{ textAlign: 'center', padding: 40, color: token.colorTextSecondary }}>
             该渠道暂无模型，请确保渠道配置正确
           </div>
         ) : null}
+      </Drawer>
+
+      {/* 导入结果明细 */}
+      <Modal
+        title="导入结果"
+        open={!!importResult}
+        onCancel={() => { setImportResult(null); setFetchModalVisible(false) }}
+        footer={
+          <Button type="primary" onClick={() => { setImportResult(null); setFetchModalVisible(false) }}>
+            关闭
+          </Button>
+        }
+        width={520}
+      >
+        {importResult && (
+          <div style={{ color: token.colorText }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <Stat label="本次选择" value={importResult.totalSelected} />
+              <Stat label="已存在（未新建模型）" value={importResult.preExisted} tone="muted" />
+              <Stat label="新建模型" value={importResult.created} tone="success" />
+              <Stat label="新绑定数" value={importResult.bound} tone="success" />
+              <Stat label="后端跳过" value={importResult.skipped} tone="muted" />
+              <Stat label="失败" value={importResult.errors.length} tone={importResult.errors.length > 0 ? 'danger' : 'muted'} />
+            </div>
+            {importResult.errors.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, color: token.colorTextSecondary, marginBottom: 4 }}>
+                  失败明细（同时写入 console.error）：
+                </div>
+                <ul style={{ paddingInlineStart: 18, margin: 0, maxHeight: 200, overflow: 'auto', fontSize: 12, color: token.colorError }}>
+                  {importResult.errors.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
+
+
 
       {/* ===== 渠道绑定 Drawer ===== */}
       <Drawer

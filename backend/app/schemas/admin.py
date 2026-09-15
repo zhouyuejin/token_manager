@@ -273,6 +273,8 @@ class ModelResponse(BaseModel):
     created_at: Optional[UtcDateTime] = None
     # 绑定渠道数量（列表页聚合）
     bound_channels_count: Optional[int] = None
+    # 绑定渠道 ID 列表（列表页聚合；详细列表走 /admin/models/{id}/channels）
+    bound_channel_ids: List[str] = Field(default_factory=list, description="已绑定的渠道 ID 列表")
     # 所属分组
     model_groups: List[str] = Field(default_factory=list, description="所属分组名称列表")
 
