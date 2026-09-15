@@ -22,3 +22,13 @@ def test_frontend_workstream_is_recorded():
     assert "API Key 安全状态在列表、详情、创建/编辑/轮换/吊销流程中可见可操作" in text
     assert "Phase 2 前端补齐任务" in text
     assert "成本归因、预算、预扣、对账和导出必须有后台可操作入口" in text
+
+
+def test_phase_0_frontend_baseline_is_recorded():
+    text = PLAN_DOC.read_text(encoding="utf-8")
+
+    assert "### 前端真实能力清单" in text
+    assert "用户侧路由已覆盖统计、通知、API Key、聊天和设置" in text
+    assert "管理员侧路由已覆盖 dashboard、用户、渠道、模型、模型分组和日志" in text
+    assert "Phase 1/2 所需的安全、预算、项目和账务页面仍未接入" in text
+    assert "Phase 0 前端不做 UI 调整" in text
