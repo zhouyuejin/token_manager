@@ -26,6 +26,12 @@ const STATUS_LABEL: Record<string, string> = {
   blocked: '锁定',
 }
 
+const FAILURE_REASON_LABEL: Record<string, string> = {
+  user_not_found: '用户不存在',
+  invalid_password: '密码错误',
+  account_disabled: '账户已被禁用',
+}
+
 const LoginLogsPage = () => {
     const { token, isDark } = useThemeToken()
 
@@ -161,7 +167,7 @@ const [loading, setLoading] = useState(false)
       dataIndex: 'failure_reason',
       key: 'failure_reason',
       render: (val: string) => (
-        <span style={{ color: '#F87171', fontSize: 12 }}>{val || '-'}</span>
+        <span style={{ color: '#F87171', fontSize: 12 }}>{(val && FAILURE_REASON_LABEL[val]) || val || '-'}</span>
       ),
     },
   ]
