@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
+import { useNavigate } from 'react-router-dom'
 import { useMessage } from '../../utils/message'
 import {
-  Table, Button, Tag, Space, Modal, Form, Input, Select,
-  Popconfirm, Card, Switch, Alert, Typography, Popover,
+  Table, Button, Tag, Space, Input,
+  Popconfirm, Card, Alert, Typography, Popover,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import { 
-  getModelGroups, createModelGroup, updateModelGroup, 
+  getModelGroups, 
   deleteModelGroup, setModelGroupDefault, unsetModelGroupDefault,
   ModelGroup 
 } from '../../api/modelGroups'
@@ -17,7 +18,6 @@ import {
 } from '../../hooks/useDefaultModelGroupWarning'
 
 const { Text } = Typography
-const { TextArea } = Input
 
 interface ModelIdsCellProps {
   modelIds: string[]
@@ -138,11 +138,9 @@ const ModelGroups: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [groups, setGroups] = useState<ModelGroup[]>([])
   const [models, setModels] = useState<ModelMapping[]>([])
-  const [modalVisible, setModalVisible] = useState(false)
-  const [editingGroup, setEditingGroup] = useState<ModelGroup | null>(null)
-  const [form] = Form.useForm()
   const message = useMessage()
   const { token, isDark } = useThemeToken()
+  const navigate = useNavigate()
   const { needsAttention, refresh } = useDefaultModelGroupWarning()
 
   useEffect(() => {
@@ -171,22 +169,6 @@ const ModelGroups: React.FC = () => {
     }
   }
 
-  const handleCreate = () => {
-    setEditingGroup(null)
-    form.resetFields()
-    setModalVisible(true)
-  }
-
-  const handleEdit = (record: ModelGroup) => {
-    setEditingGroup(record)
-    form.setFieldsValue({
-      name: record.name,
-      description: record.description,
-      is_default: record.is_default === 1,
-      model_ids: record.model_ids
-    })
-    setModalVisible(true)
-  }
 
   const handleDelete = async (groupId: string) => {
     try {
@@ -226,33 +208,6 @@ const ModelGroups: React.FC = () => {
     }
   }
 
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields()
-      const setAsDefault = values.set_as_default === true
-      const data = {
-        name: values.name,
-        description: values.description,
-        is_default: (values.is_default || setAsDefault) ? 1 : 0,
-        model_ids: values.model_ids || []
-      }
-
-      if (editingGroup) {
-        await updateModelGroup(editingGroup.group_id, data)
-        message.success('更新成功')
-      } else {
-        await createModelGroup(data)
-        message.success('创建成功')
-      }
-      
-      setModalVisible(false)
-      fetchGroups()
-      refresh()
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
   const noActiveDefault = needsAttention
 
   const columns = [
@@ -284,7 +239,7 @@ const ModelGroups: React.FC = () => {
         <ModelIdsCell
           modelIds={record.model_ids}
           models={models}
-          onManage={() => handleEdit(record)}
+          onManage={() => navigate(`/admin/model-groups/${record.group_id}/edit`)}
         />
       )
     },
@@ -343,7 +298,7 @@ const ModelGroups: React.FC = () => {
             <Button
               type="text"
               icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
+              onClick={() => navigate(`/admin/model-groups/${record.group_id}/edit`)}
               style={{ color: '#3B82F6' }}
             >
               编辑
@@ -373,7 +328,7 @@ const ModelGroups: React.FC = () => {
             <span>
               缺少已启用的默认模型分组，新用户将无法正常使用 API Key。
               {groups.length === 0 ? (
-                <Button type="link" size="small" onClick={handleCreate}>
+                <Button type="link" size="small" onClick={() => navigate('/admin/model-groups/new')}>
                   立即创建分组
                 </Button>
               ) : (
@@ -393,7 +348,7 @@ const ModelGroups: React.FC = () => {
           <Button 
             type="primary" 
             icon={<PlusOutlined />} 
-            onClick={handleCreate}
+            onClick={() => navigate('/admin/model-groups/new')}
           >
             新建分组
           </Button>
@@ -409,82 +364,6 @@ const ModelGroups: React.FC = () => {
         />
       </Card>
 
-      <Modal
-        title={editingGroup ? '编辑分组' : '新建分组'}
-        open={modalVisible}
-        onCancel={() => setModalVisible(false)}
-        onOk={handleSubmit}
-        width={700}
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="name"
-            label="分组名称"
-            rules={[{ required: true, message: '请输入分组名称' }]}
-          >
-            <Input placeholder="如：VIP-高级模型" />
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="描述"
-          >
-            <TextArea rows={3} placeholder="分组描述" />
-          </Form.Item>
-
-          {!editingGroup && (
-            <Form.Item
-              name="set_as_default"
-              label="创建后立即设为默认"
-              valuePropName="checked"
-            >
-              <Switch checkedChildren="是" unCheckedChildren="否" />
-            </Form.Item>
-          )}
-
-          {editingGroup && (
-            <Form.Item
-              name="is_default"
-              label="设为默认分组"
-              valuePropName="checked"
-            >
-              <Switch checkedChildren="是" unCheckedChildren="否" />
-            </Form.Item>
-          )}
-
-          <Form.Item
-            name="model_ids"
-            label="关联模型"
-            tooltip="选择要绑定到该分组的模型。可同时选择多个模型。"
-          >
-            <Select
-              mode="multiple"
-              placeholder="请选择模型"
-              showSearch
-              filterOption={(input, option) =>
-                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              optionLabelProp="label"
-            >
-              {models.map(m => (
-                <Select.Option 
-                  key={m.model_id} 
-                  value={m.model_id}
-                  label={m.display_name || m.model_id}
-                >
-                  {m.display_name || m.model_id} 
-                  <span style={{ color: '#999', marginLeft: 8 }}>
-                    ({m.provider_id})
-                  </span>
-                  {m.status === 'disabled' && (
-                    <Tag color="red" style={{ marginLeft: 8 }}>禁用</Tag>
-                  )}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   )
 }

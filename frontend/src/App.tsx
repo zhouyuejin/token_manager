@@ -17,6 +17,7 @@ import ChannelForm from './pages/admin/ChannelForm'
 import ChannelBindings from './pages/admin/ChannelBindings'
 import AdminModels from './pages/admin/Models'
 import AdminModelGroups from './pages/admin/ModelGroups'
+import ModelGroupForm from './pages/admin/ModelGroupForm'
 import AdminLayout from './pages/admin/AdminLayout'
 import OperationLogs from './pages/admin/OperationLogs'
 import LoginLogs from './pages/admin/LoginLogs'
@@ -113,6 +114,8 @@ function App() {
               <Route path="providers" element={<Navigate to="/admin/channels" replace />} />
               <Route path="models" element={<AdminModels />} />
               <Route path="model-groups" element={<AdminModelGroups />} />
+              <Route path="model-groups/new" element={<ModelGroupForm />} />
+              <Route path="model-groups/:groupId/edit" element={<ModelGroupForm />} />
               <Route path="logs/operations" element={<OperationLogs />} />
               <Route path="logs/logins" element={<LoginLogs />} />
             </Route>
