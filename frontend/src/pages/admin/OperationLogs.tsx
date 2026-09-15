@@ -7,21 +7,43 @@ import { getOperationLogs, OperationLog, OperationLogParams } from '../../api/lo
 
 const { RangePicker } = DatePicker
 
-const ACTION_OPTIONS = [
+const ACTION_LABELS: Record<string, string> = {
+  create: '新建',
+  update: '更新',
+  delete: '删除',
+  change_password: '修改密码',
+  update_status: '修改状态',
+  adjust_quota: '调整额度',
+  update_quota: '更新额度',
+  sync_quota: '同步额度',
+  sync_models: '同步模型',
+  sync_pricing: '同步定价',
+  bind_channel: '绑定渠道',
+  unbind_channel: '解绑渠道',
+  update_channel_binding: '修改渠道绑定',
+  bind_model: '绑定模型',
+  unbind_model: '解绑模型',
+  update_model_binding: '修改模型绑定',
+  replace_channels: '替换渠道',
+  replace_models: '替换模型',
+  batch_bind_models: '批量绑定模型',
+}
+
+const TARGET_TYPE_LABELS: Record<string, string> = {
+  user: '用户',
+  api_key: 'API Key',
+  channel: '渠道',
+  model: '模型',
+  notification_settings: '通知设置',
+}
+
+const toOptions = (labels: Record<string, string>) => [
   { label: '全部', value: '' },
-  { label: '创建', value: 'create' },
-  { label: '更新', value: 'update' },
-  { label: '删除', value: 'delete' },
+  ...Object.entries(labels).map(([value, label]) => ({ value, label })),
 ]
 
-const TARGET_TYPE_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '用户', value: 'user' },
-  { label: 'API Key', value: 'api_key' },
-  { label: '模型', value: 'model' },
-  { label: '供应商', value: 'provider' },
-  { label: '额度', value: 'quota' },
-]
+const ACTION_OPTIONS = toOptions(ACTION_LABELS)
+const TARGET_TYPE_OPTIONS = toOptions(TARGET_TYPE_LABELS)
 
 const OperationLogsPage = () => {
     const { token, isDark } = useThemeToken()
@@ -117,7 +139,7 @@ const [loading, setLoading] = useState(false)
       dataIndex: 'action',
       key: 'action',
       render: (val: string) => (
-        <span style={{ color: token.colorText }}>{val}</span>
+        <span style={{ color: token.colorText }}>{ACTION_LABELS[val] ?? val}</span>
       ),
     },
     {
@@ -125,7 +147,7 @@ const [loading, setLoading] = useState(false)
       dataIndex: 'target_type',
       key: 'target_type',
       render: (val: string) => (
-        <span style={{ color: token.colorText }}>{val}</span>
+        <span style={{ color: token.colorText }}>{TARGET_TYPE_LABELS[val] ?? val}</span>
       ),
     },
     {

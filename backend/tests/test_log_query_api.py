@@ -290,7 +290,7 @@ class TestOperationLogsAdmin:
                 operator_id=admin.user_id,
                 operator_name=admin.username,
                 action="delete",
-                target_type="provider",
+                target_type="channel",
                 detail="{}",
             ))
             db.commit()

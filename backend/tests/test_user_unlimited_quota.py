@@ -308,7 +308,7 @@ def test_operation_log_records_unlimited_change():
     record_operation(
         db=mock_db,
         operator=admin,
-        action="quota_adjust",
+        action="adjust_quota",
         target_type="user",
         target_id="user_unlimited_test",
         detail=detail_true,
@@ -325,7 +325,7 @@ def test_operation_log_records_unlimited_change():
     record_operation(
         db=mock_db,
         operator=admin,
-        action="quota_adjust",
+        action="adjust_quota",
         target_type="user",
         target_id="user_unlimited_test",
         detail=detail_false,
@@ -345,7 +345,7 @@ def test_operation_log_records_unlimited_change():
     saved_detail = json.loads(log_true.detail)
     assert saved_detail["unlimited"] is True
     assert saved_detail["after"] == -1
-    assert log_true.action == "quota_adjust"
+    assert log_true.action == "adjust_quota"
     assert log_true.target_type == "user"
     assert log_true.operator_id == "admin_log"
 
