@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMessage } from '../../utils/message'
-import { Card, Button, Space, Form, Input, Select, Row, Col, Switch, Tag, Typography } from 'antd'
+import { Card, Button, Space, Form, Input, Row, Col, Switch, Typography, Transfer, Divider } from 'antd'
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
 import { getModelGroup, createModelGroup, updateModelGroup } from '../../api/modelGroups'
 import { getModels, Model } from '../../api/models'
@@ -17,6 +17,7 @@ const ModelGroupForm: React.FC = () => {
   const [submitLoading, setSubmitLoading] = useState(false)
   const [fetchLoading, setFetchLoading] = useState(false)
   const [models, setModels] = useState<Model[]>([])
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([])
 
   const isEdit = !!groupId
 
@@ -39,10 +40,13 @@ const ModelGroupForm: React.FC = () => {
       setFetchLoading(true)
       try {
         const group = await getModelGroup(groupId)
+        const modelIds = group.model_ids || []
         form.setFieldsValue({
           ...group,
           is_default: group.is_default === 1,
+          model_ids: modelIds,
         })
+        setSelectedModelIds(modelIds)
       } catch {
         message.error('加载分组信息失败')
         navigate('/admin/model-groups')
@@ -177,31 +181,54 @@ const ModelGroupForm: React.FC = () => {
             label="关联模型"
             tooltip="选择要绑定到该分组的模型。可同时选择多个模型。"
           >
-            <Select
-              mode="multiple"
-              placeholder="请选择模型"
-              showSearch
-              filterOption={(input, option) =>
-                String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              optionLabelProp="label"
-            >
-              {models.map(m => (
-                <Select.Option
-                  key={m.model_id}
-                  value={m.model_id}
-                  label={m.display_name || m.model_id}
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Space>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    const allIds = models
+                      .filter(m => m.status !== 'disabled')
+                      .map(m => m.model_id)
+                    setSelectedModelIds(allIds)
+                    form.setFieldsValue({ model_ids: allIds })
+                  }}
                 >
-                  {m.display_name || m.model_id}
-                  <span style={{ color: '#999', marginLeft: 8 }}>
-                    ({m.provider_id})
-                  </span>
-                  {m.status === 'disabled' && (
-                    <Tag color="red" style={{ marginLeft: 8 }}>禁用</Tag>
-                  )}
-                </Select.Option>
-              ))}
-            </Select>
+                  全选
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setSelectedModelIds([])
+                    form.setFieldsValue({ model_ids: [] })
+                  }}
+                >
+                  取消全选
+                </Button>
+              </Space>
+              <Transfer
+                dataSource={models.map(m => ({
+                  key: m.model_id,
+                  title: m.display_name || m.model_id,
+                  description: m.provider_id,
+                  disabled: m.status === 'disabled',
+                }))}
+                targetKeys={selectedModelIds}
+                onChange={(nextTargetKeys) => {
+                  setSelectedModelIds(nextTargetKeys as string[])
+                  form.setFieldsValue({ model_ids: nextTargetKeys })
+                }}
+                render={item => `${item.title} (${item.description})`}
+                showSearch
+                filterOption={(input, item) =>
+                  (item.title as string).toLowerCase().includes(input.toLowerCase()) ||
+                  (item.description as string).toLowerCase().includes(input.toLowerCase())
+                }
+                pagination={{ pageSize: 20 }}
+                listStyle={{ width: '45%', height: 360 }}
+                titles={['可选模型', '已选模型']}
+                operations={['添加', '移除']}
+              />
+            </Space>
           </Form.Item>
 
         </Form>
