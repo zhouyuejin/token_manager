@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.database import SessionLocal
 from app.services.proxy_service import ProxyService
+from app.utils.request import extract_client_ip
 
 
 class ProxyAuthMiddleware(BaseHTTPMiddleware):
@@ -60,6 +61,12 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "用户已被禁用"}
+                )
+
+            if not proxy_service.check_api_key_ip(key_obj, extract_client_ip(request)):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "IP不在API Key白名单内"}
                 )
             
             # 将用户和Key信息存入请求状态

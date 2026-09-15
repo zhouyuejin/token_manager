@@ -109,6 +109,44 @@ cd frontend && node src/utils/thinkTag.test.mjs
 
 ---
 
+## Phase 0 执行记录
+
+### 真实能力清单
+
+| 能力 | 当前状态 | 证据 |
+| --- | --- | --- |
+| OpenAI-compatible 代理入口 | 已实现 | `backend/app/api/v1/proxy.py` 提供 `/v1/models`、`/v1/balance`、`/v1/chat/completions`，请求进入后读取 `request.state.user` 和 `request.state.api_key`。 |
+| 代理 API Key 基础认证 | 已实现 | `backend/app/middleware/__init__.py` 的 `ProxyAuthMiddleware` 只拦截 `/api/v1/proxy/`，调用 `ProxyService.verify_api_key()` 校验 active Key，再调用 `get_user_from_key()` 校验 active 用户。 |
+| 模型分组访问控制 | 已实现 | `backend/app/services/proxy_service.py` 的 `check_model_group_access()` 用用户有效分组和模型绑定分组做交集判断。 |
+| 用户额度前置检查和调用后扣减 | 已实现但非预扣 | `backend/app/api/v1/proxy.py` 请求前调用 `check_quota()`，成功响应后调用 `deduct_quota()`；当前没有 reservation/rollback 流程。 |
+| 代理用量日志 | 已实现 | `backend/app/services/proxy_service.py` 的 `record_usage()` 写入 `usage_logs`，模型见 `backend/app/models/usage_log.py`。 |
+| API Key IP 白名单字段存在但代理链路未接入 | 字段存在但未接入 | `backend/app/models/api_key.py` 有 `ip_whitelist`；`backend/app/api/v1/api_keys.py` 的用户/管理员更新接口会保存该字段；`ProxyAuthMiddleware` 目前没有读取或校验客户端 IP。 |
+| API Key 级 QPS/RPM/TPM 限流未实现 | 未实现 | `backend/app/models/api_key.py` 已移除 `qps_limit` 等 per-key 限额字段；当前没有 `rate_limit_service.py` 或代理限流调用点。 |
+| API Key 生命周期扩展 | 未实现 | `ApiKeyStatus` 只有 `active/disabled`；模型没有 `expires_at`、`revoked_at`、`last_used_ip`、`last_used_user_agent`。 |
+| 渠道上游密钥当前按明文字段读取 | 字段存在但未加密 | `backend/app/models/channel.py` 的 `api_key`、`extra_keys` 是普通字符串/JSON 字段；`ProxyService.select_channel()`/`pick_key()` 直接取出 Key 用于上游请求。 |
+| 部门/项目/预算归因 | 未实现 | `users`、`api_keys`、`usage_logs` 当前没有 `department_id`/`project_id`/预算字段。 |
+
+### 验证命令基线
+
+| 命令 | 当前结果 | 边界 |
+| --- | --- | --- |
+| `python -m pytest backend/tests/test_platform_baseline_contract.py -q` | 本机 shell 无 `python` 命令，退出 127。 | 后续本机验证使用 `python3`；容器/CI 若提供 `python` 可继续使用原命令。 |
+| `python3 -m pytest backend/tests/test_platform_baseline_contract.py -q` | 通过：`1 passed`。该测试曾先红灯，缺少本执行记录。 | Phase 0 用该测试固定文档基线。 |
+| `cd backend && python3 -m pytest` | 未通过：收集期 10 个错误。主要包括无法连接默认 MySQL 主机 `mysql`、多个测试仍导入已不存在的 `app.models.provider`、以及 `migrate_provider_group_bindings_to_models` 旧导入。 | 这是当前后端全量测试基线，不是 Phase 0 改动引入；执行 Phase 1/2 行为改造时必须优先跑目标测试并处理相关基线。 |
+| `cd frontend && npm run build` | 通过：`tsc && vite build` 成功，Vite 仅提示 chunk 超过 500 kB。 | Phase 0 不改前端；该结果只证明当前前端可构建。 |
+| `cd frontend && node src/utils/chatStorage.test.mjs` | 未通过：5 个子测试均因 Node 直接导入 `chatStorage.ts` 报 `ERR_UNKNOWN_FILE_EXTENSION`。 | 这是测试运行方式/加载器基线问题，不是聊天存储行为验证失败。 |
+| `cd frontend && node src/utils/thinkTag.test.mjs` | 通过：`9 passed`。 | Phase 0 不改 think tag 解析逻辑。 |
+
+### 后续执行规则
+
+- Phase 0 不改代理行为，只记录当前事实和护栏。
+- Phase 1 才接入 IP 白名单、Key 生命周期、限流和渠道密钥加密。
+- Phase 2 才新增部门/项目/预算/预扣/对账相关模型和迁移。
+- 每个后续 Phase 先写能红灯的后端测试，再做最小实现，最后更新本计划状态。
+- 不跨 Phase 顺手重构；发现无关问题先记录，不在当前阶段处理。
+
+---
+
 ## Phase 1: 访问控制与 API Key 安全
 
 ### 目标
@@ -198,6 +236,12 @@ cd frontend && node src/utils/thinkTag.test.mjs
 ```bash
 cd backend && python -m pytest tests/test_api_key_security.py -v
 ```
+
+**执行记录：**
+- 已新增 `ProxyService.check_api_key_ip(api_key, client_ip) -> bool`，空白名单放行，支持精确 IP 和 CIDR，非法配置不会放行全部。
+- 已在 `ProxyAuthMiddleware.dispatch()` 的 Key/User 校验后接入 IP 白名单校验，不命中返回 403。
+- 已新增 `backend/tests/test_api_key_security.py` 覆盖空白名单、精确 IP、CIDR、未命中、非法配置、代理中间件允许/拒绝。
+- 本机验证命令：`python3 -m pytest backend/tests/test_api_key_security.py -q`，结果 `7 passed`。
 
 #### Task 1.2: API Key 生命周期管理
 
@@ -825,4 +869,3 @@ def check_proxy_rate_limit(
 - 外部客户门户。
 - 全量 DLP/内容安全平台。
 - 自研 APM 或日志平台。
-

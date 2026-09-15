@@ -4,6 +4,7 @@
 支持多渠道 Failover 和多 Key 轮询
 """
 import json
+import ipaddress
 import time
 import secrets
 import random
@@ -52,6 +53,39 @@ class ProxyService:
             User.status == "active"
         ).first()
         return user
+
+    @staticmethod
+    def check_api_key_ip(api_key: ApiKey, client_ip: Optional[str]) -> bool:
+        """检查客户端 IP 是否命中 API Key 白名单。空白名单表示不限制。"""
+        raw_whitelist = getattr(api_key, "ip_whitelist", None)
+        if not raw_whitelist:
+            return True
+
+        try:
+            whitelist = json.loads(raw_whitelist)
+        except (TypeError, json.JSONDecodeError):
+            return False
+
+        if not whitelist:
+            return True
+        if not client_ip:
+            return False
+
+        try:
+            ip = ipaddress.ip_address(client_ip)
+        except ValueError:
+            return False
+
+        for item in whitelist:
+            try:
+                if "/" in item:
+                    if ip in ipaddress.ip_network(item, strict=False):
+                        return True
+                elif ip == ipaddress.ip_address(item):
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
 
     # ---- GC-1: single source of truth for model group access ----
 
