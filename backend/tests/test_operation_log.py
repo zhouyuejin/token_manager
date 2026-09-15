@@ -280,7 +280,7 @@ class TestMultipleActionsAndTargetTypes:
         headers = {"Authorization": f"Bearer {token}"}
 
         response = client.post(
-            "/api/v1/admin/providers",
+            "/api/v1/admin/channels",
             headers=headers,
             json={
                 "name": "TestProvider",
@@ -295,42 +295,29 @@ class TestMultipleActionsAndTargetTypes:
         )
         assert response.status_code == 200
         data = response.json()
-        provider_id = data["provider_id"]
+        channel_id = data["channel_id"]
 
         db = TestingSessionLocal()
         try:
             log = db.query(OperationLog).filter(
-                OperationLog.target_id == provider_id,
+                OperationLog.target_id == channel_id,
                 OperationLog.action == "create",
             ).first()
             assert log is not None
-            assert log.target_type == "provider"
+            assert log.target_type == "channel"
             assert log.operator_name == "admin"
             detail = json.loads(log.detail)
             assert detail["name"] == "TestProvider"
             assert detail["type"] == "openai"
-            assert detail["endpoint"] == "https://api.test.com"
             # api_key should NOT be in detail (sensitive)
             assert "api_key" not in detail
         finally:
             db.close()
 
-    def test_model_mapping_create_log(self):
+    def test_model_create_log(self):
+        """创建模型记录 target_type=model 的操作日志"""
         token = _get_admin_token()
         headers = {"Authorization": f"Bearer {token}"}
-
-        # 先创建一个 provider
-        p_resp = client.post(
-            "/api/v1/admin/providers",
-            headers=headers,
-            json={
-                "name": "MMProvider",
-                "type": "openai",
-                "endpoint": "https://api.mm.com",
-                "api_key": "sk-mm",
-            },
-        )
-        provider_id = p_resp.json()["provider_id"]
 
         response = client.post(
             "/api/v1/admin/models",
@@ -338,8 +325,6 @@ class TestMultipleActionsAndTargetTypes:
             json={
                 "model_id": "mmodel_001",
                 "display_name": "TestModel",
-                "provider_id": provider_id,
-                "provider_model": "gpt-4",
                 "aliases": ["test-gpt4"],
             },
         )
@@ -353,10 +338,8 @@ class TestMultipleActionsAndTargetTypes:
                 OperationLog.action == "create",
             ).first()
             assert log is not None
-            assert log.target_type == "model_mapping"
+            assert log.target_type == "model"
             detail = json.loads(log.detail)
-            assert detail["display_name"] == "TestModel"
-            assert detail["provider_id"] == provider_id
-            assert detail["provider_model"] == "gpt-4"
+            assert detail["model_id"] == model_id
         finally:
             db.close()
