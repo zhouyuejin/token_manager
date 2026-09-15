@@ -37,6 +37,28 @@
 
 ---
 
+## 前端补齐总则
+
+后端治理能力只有在用户和管理员可见、可配置、可追踪时才算完整。后续每个 Phase 必须同步检查前端是否需要补齐页面、API 类型、表单、列表字段、操作确认、错误态、空态、权限态和验证命令。
+
+### 前端通用要求
+
+- 新增后端字段时，同步更新 `frontend/src/api/*.ts` 类型和相关页面展示/编辑逻辑。
+- 涉及敏感信息时，前端只展示掩码或一次性明文，不在表格、表单回显、通知、日志页中泄露完整 API Key 或上游 Key。
+- 涉及阻断类策略时，前端必须能展示明确原因，例如过期、吊销、IP 不匹配、限流、预算不足。
+- 涉及管理员动作时，页面必须提供确认和结果反馈，并继续依赖后端操作日志作为审计事实。
+- 涉及后台页面的阶段，至少运行 `cd frontend && npm run build`；若新增可独立测试的前端工具函数，补最小 node 测试。
+- 视觉和布局改动要复用现有 React/Vite + Ant Design 页面结构，不新增设计系统或复杂状态库。
+
+### 前端状态分层
+
+- 用户自助页：优先补 `frontend/src/pages/ApiKeys.tsx`、`frontend/src/pages/Stats.tsx`、`frontend/src/pages/Notifications.tsx`。
+- 管理后台页：优先补 `frontend/src/pages/admin/*.tsx` 和 `frontend/src/pages/AdminDashboard.tsx`。
+- API 封装：所有新增接口先进入 `frontend/src/api/*.ts`，页面不直接拼接裸请求。
+- 导航入口：新增后台页面必须同步检查 `frontend/src/components/Layout/MainLayout.tsx` 或后台布局入口。
+
+---
+
 ## Phase 0: 基线确认与执行护栏
 
 ### 目标
@@ -176,6 +198,8 @@ cd frontend && node src/utils/thinkTag.test.mjs
 - 新增：`backend/alembic/versions/<timestamp>_api_key_security_and_rate_limits.py`
 - 修改：`frontend/src/pages/ApiKeys.tsx`
 - 修改：`frontend/src/pages/admin/ChannelForm.tsx`
+- 修改：`frontend/src/api/apiKeys.ts`
+- 修改：`frontend/src/api/channels.ts`
 - 测试：`backend/tests/test_api_key_security.py`
 - 测试：`backend/tests/test_proxy_rate_limit.py`
 - 测试：`backend/tests/test_channel_secret_crypto.py`
@@ -230,6 +254,7 @@ cd frontend && node src/utils/thinkTag.test.mjs
 - 请求 IP 命中 CIDR：允许调用。
 - 请求 IP 未命中：返回 403。
 - 非法白名单配置不应放行全部，建议忽略非法项并记录操作日志或警告日志。
+- 用户和管理员编辑 API Key 时，前端能查看和保存 IP 白名单，空值含义明确。
 
 **验证：**
 
@@ -253,14 +278,19 @@ cd backend && python -m pytest tests/test_api_key_security.py -v
 - API Key 明文只在创建或轮换响应中返回一次。
 
 **前端：**
+- `frontend/src/api/apiKeys.ts` 增加 `expires_at`、`revoked_at`、`revoked_reason`、`last_used_ip`、`last_used_user_agent`、`status` 枚举类型。
 - `ApiKeys.tsx` 增加过期时间展示。
 - 创建弹窗增加过期时间输入，可为空。
 - 新 Key 展示后关闭弹窗不再能重新查看完整 Key。
+- Key 列表用 Tag 区分 active/disabled/revoked/expired。
+- 增加吊销和轮换操作，操作前二次确认，轮换成功后只展示新 Key 一次。
+- 管理员视角能看到所属用户、最后使用 IP/User-Agent 和吊销原因。
 
 **验收：**
 - 过期 Key 无法调用代理。
 - disabled/revoked/expired 三类状态在 UI 和 API 返回中可区分。
 - 操作日志记录创建、吊销、轮换。
+- API Key 安全状态在列表、详情、创建/编辑/轮换/吊销流程中可见可操作。
 
 #### Task 1.3: 限流服务
 
@@ -297,6 +327,7 @@ def check_proxy_rate_limit(
 - 超 TPM 返回 429。
 - 并发数超限返回 429。
 - 上游失败、客户端断开、异常抛出时并发计数会释放。
+- API Key 列表或详情能展示当前限流配置；429 错误在调用说明或失败提示中可读。
 
 #### Task 1.4: 上游渠道密钥加密
 
@@ -306,11 +337,18 @@ def check_proxy_rate_limit(
 - `ChannelForm` 只展示掩码，不回填明文。
 - 后端更新渠道时，空值表示不修改原 Key；新值表示重新加密保存。
 
+**前端：**
+- `frontend/src/api/channels.ts` 明确渠道 Key 响应字段为掩码或空值，不声明为完整明文。
+- `ChannelForm` 编辑时不把掩码当作真实 Key 提交；Key 输入留空表示不修改。
+- 新建渠道时仍要求填写主 Key；编辑渠道时提供“替换 Key”明确动作。
+- `Channels.tsx` 列表不得展示完整主 Key 或 extra keys。
+
 **验收：**
 - 数据库中新保存的渠道 Key 不再明文可读。
 - 旧明文渠道仍能调用，编辑保存后转为密文。
 - 列表和详情接口不返回完整上游 Key。
 - 测试覆盖明文兼容、密文解密、掩码输出、错误密钥处理。
+- 前端不会把掩码回写覆盖真实 Key。
 
 #### Task 1.5: 错误调用自动冻结
 
@@ -323,6 +361,44 @@ def check_proxy_rate_limit(
 - 异常 Key 自动冻结。
 - 冻结产生通知给管理员和 Key 所属用户。
 - 管理后台可看到冻结原因。
+- 用户 API Key 列表和管理员列表能看到自动冻结状态、原因和发生时间。
+
+### Phase 1 前端补齐任务
+
+#### Frontend 1.1: API Key 安全配置闭环
+
+**实现：**
+- `ApiKeys.tsx` 支持 IP 白名单、过期时间、状态、最后使用信息、吊销、轮换。
+- 管理员 API Key 视图支持按用户和状态筛选，显示冻结/吊销/过期原因。
+- API Key 明文仅在创建或轮换结果弹窗中展示一次，关闭后只显示掩码。
+
+**验收：**
+- 用户能完成创建 Key、设置白名单、设置过期时间、吊销、轮换。
+- 管理员能定位某个 Key 的所属用户、安全状态和最近使用来源。
+- 前端不会在列表、详情、日志或通知中展示完整 Key。
+
+#### Frontend 1.2: 渠道密钥安全表单
+
+**实现：**
+- `ChannelForm` 区分“保持原 Key”和“替换 Key”。
+- `extra_keys` 支持逐项替换或清空，避免把 `null`、掩码字符串、空字符串误提交为真实 Key。
+- `Channels.tsx` 只展示 Key 数量、掩码或安全状态。
+
+**验收：**
+- 编辑渠道但不改 Key 时，原 Key 不被覆盖。
+- 替换 Key 后页面显示掩码，不能重新查看完整明文。
+- 表单提交 payload 与后端语义一致。
+
+#### Frontend 1.3: 限流和冻结反馈
+
+**实现：**
+- API Key 详情展示 QPS/RPM/TPM/并发限制。
+- 代理调用相关错误在用户可见位置显示明确原因：IP 不匹配、Key 过期/吊销/冻结、限流。
+- 通知详情展示自动冻结原因和解冻/处理建议。
+
+**验收：**
+- 429、403、401 的关键原因不会只显示“请求失败”。
+- 自动冻结后用户和管理员都能看到状态变化。
 
 ### 阶段验收
 
@@ -330,6 +406,8 @@ def check_proxy_rate_limit(
 - 渠道密钥新写入为密文，接口不泄露明文。
 - 代理中间件对安全策略的返回码清晰：401 未认证，403 无权限/IP 不匹配，429 限流。
 - 旧数据有兼容路径和迁移说明。
+- Phase 1 前端补齐任务完成并通过 `cd frontend && npm run build`。
+- API Key 安全状态在列表、详情、创建/编辑/轮换/吊销流程中可见可操作。
 
 ### 不做事项
 
@@ -370,6 +448,9 @@ def check_proxy_rate_limit(
 - 修改：`frontend/src/pages/Stats.tsx`
 - 修改：`frontend/src/pages/AdminDashboard.tsx`
 - 新增：`frontend/src/pages/admin/Billing.tsx`
+- 新增：`frontend/src/api/billing.ts`
+- 新增或修改：`frontend/src/pages/admin/Projects.tsx`
+- 新增或修改：`frontend/src/pages/admin/Departments.tsx`
 - 测试：`backend/tests/test_quota_reservation.py`
 - 测试：`backend/tests/test_billing_reconcile.py`
 - 测试：`backend/tests/test_org_project_budget.py`
@@ -427,6 +508,7 @@ def check_proxy_rate_limit(
 - 每条新 `usage_logs` 都能追溯到 key/user/project/department/channel/model。
 - 旧日志字段为空不影响历史统计。
 - 管理后台能按项目筛选用量。
+- API Key 创建/编辑前端必须选择项目；历史 Key 显示默认项目或未归因状态。
 
 #### Task 2.2: 预扣费与并发安全
 
@@ -455,6 +537,7 @@ def check_proxy_rate_limit(
 - 首次跨越阈值通知一次。
 - 超 100% 后代理请求返回明确错误。
 - 通知不会因 WebSocket 失败影响代理主流程。
+- 管理后台能配置项目/月预算、部门/月预算、阈值和阻断策略。
 
 #### Task 2.4: 对账任务
 
@@ -468,6 +551,7 @@ def check_proxy_rate_limit(
 - 能输出对账结果：正常、异常数量、异常明细。
 - 管理员可在后台查看最近对账结果。
 - 异常不会静默吞掉。
+- 对账异常可在后台按类型筛选，并能跳转到相关 usage/quota/reservation 记录。
 
 #### Task 2.5: 报表导出
 
@@ -479,6 +563,45 @@ def check_proxy_rate_limit(
 **验收：**
 - 导出的总 token、总成本与页面统计一致。
 - 大范围导出有分页或流式策略，不一次性把全部数据加载到内存。
+- 前端导出按钮展示处理中、成功、失败状态，失败时保留筛选条件。
+
+### Phase 2 前端补齐任务
+
+#### Frontend 2.1: 部门、项目和 Key 归因管理
+
+**实现：**
+- 增加部门/项目管理入口，支持基础增删改查和状态展示。
+- 用户管理页能分配可用项目。
+- API Key 创建/编辑页必须绑定项目，项目不可用时给出明确提示。
+
+**验收：**
+- 管理员能从项目追到部门、负责人、关联用户和关联 Key。
+- 普通用户只能选择自己可用项目。
+- 历史未归因数据在 UI 中有明确标识，不伪装成已归因。
+
+#### Frontend 2.2: 预算、预扣和成本看板
+
+**实现：**
+- `Billing.tsx` 展示预算使用率、预扣中金额、实际消费、剩余预算。
+- `Stats.tsx` 和 `AdminDashboard.tsx` 增加项目/部门/模型/渠道成本筛选。
+- 对超预算阻断、预扣失败、释放失败展示明确原因。
+
+**验收：**
+- 成本归因、预算、预扣、对账和导出必须有后台可操作入口。
+- 管理员能回答“哪个部门/项目/Key 花了多少钱”。
+- 用户能看到自己 Key/项目的预算剩余和阻断原因。
+
+#### Frontend 2.3: 对账和报表导出
+
+**实现：**
+- `Billing.tsx` 增加对账报告列表、异常明细抽屉、CSV 导出。
+- 导出沿用当前筛选条件，并展示导出范围摘要。
+- 大范围导出时页面不阻塞主交互。
+
+**验收：**
+- 对账报告能区分正常、异常、待处理。
+- 导出数据口径与页面统计口径一致。
+- 导出失败不会清空筛选条件。
 
 ### 阶段验收
 
@@ -486,6 +609,8 @@ def check_proxy_rate_limit(
 - 并发请求不会透支额度。
 - 成本统计不再只停留在 token 层面，有 USD 成本闭环。
 - 至少有每日对账报告和 CSV 导出。
+- Phase 2 前端补齐任务完成并通过 `cd frontend && npm run build`。
+- 成本归因、预算、预扣、对账和导出必须有后台可操作入口。
 
 ### 不做事项
 
@@ -575,11 +700,36 @@ def check_proxy_rate_limit(
 - 告警恢复时可产生恢复通知。
 - 告警规则可在配置中调整阈值。
 
+### Phase 3 前端补齐任务
+
+#### Frontend 3.1: 路由解释和请求定位
+
+**实现：**
+- `RouteMonitor.tsx` 支持按 `request_id`、用户、Key、模型、渠道、状态码查询。
+- 路由详情展示候选渠道、跳过原因、最终选择、失败重试路径和脱敏后的错误信息。
+- 用户报错复制 `request_id` 后，管理员能直接定位到同一条记录。
+
+**验收：**
+- 管理员能在 UI 中回答“为什么走这个渠道”和“为什么失败”。
+- 页面不展示完整 API Key、上游 Key、prompt 正文。
+
+#### Frontend 3.2: 渠道健康和熔断操作
+
+**实现：**
+- `HealthDashboard.tsx` 展示渠道成功率、错误率、P50/P95、cooldown、Key 健康状态。
+- `Channels.tsx` 增加健康状态、冷却倒计时和手动恢复入口。
+- 手动恢复操作需要确认并展示操作结果。
+
+**验收：**
+- 渠道异常、冷却、恢复状态在列表和看板中一致。
+- 手动恢复后页面能刷新并体现最新状态。
+
 ### 阶段验收
 
 - 管理员可以用 `request_id` 定位一次调用的完整路由过程。
 - 渠道健康状态不再只靠列表字段，具备时间窗口指标。
 - 熔断/cooldown 可见、可恢复、可审计。
+- Phase 3 前端补齐任务完成并通过 `cd frontend && npm run build`。
 
 ### 不做事项
 
@@ -684,11 +834,36 @@ def check_proxy_rate_limit(
 - 审批通过后 Key 归属正确项目。
 - Key 安全规则沿用 Phase 1。
 
+### Phase 4 前端补齐任务
+
+#### Frontend 4.1: 用户申请入口
+
+**实现：**
+- `Approvals.tsx` 支持普通用户提交 Key、额度、模型分组、项目权限申请。
+- 表单复用 Phase 1/2 的安全字段：项目、用途、IP 白名单、过期时间、申请理由。
+- 用户能查看我的申请状态、审批意见和生效结果。
+
+**验收：**
+- 未审批的申请不会误导用户认为已生效。
+- 审批拒绝、取消、补充说明都有明确状态。
+
+#### Frontend 4.2: 管理员审批台
+
+**实现：**
+- `admin/Approvals.tsx` 支持按类型、状态、申请人、项目筛选待办。
+- 审批详情展示业务影响，例如将增加多少额度、授予哪个模型分组、创建哪个项目 Key。
+- 通过/拒绝都需要确认和审批意见。
+
+**验收：**
+- 管理员能在一个页面处理所有待审批事项。
+- 审批通过后相关业务页面能看到结果。
+
 ### 阶段验收
 
 - 用户能自助提交申请。
 - 管理员能审批并自动生效。
 - 所有审批动作有通知和审计。
+- Phase 4 前端补齐任务完成并通过 `cd frontend && npm run build`。
 
 ### 不做事项
 
@@ -798,11 +973,36 @@ def check_proxy_rate_limit(
 - 有可执行的恢复步骤文档。
 - Grafana 能看到核心运营指标。
 
+### Phase 5 前端补齐任务
+
+#### Frontend 5.1: 协议能力入口
+
+**实现：**
+- 模型和渠道页面能区分 chat/responses/embeddings/images/audio/rerank 等接口能力。
+- 统计页能按接口类型筛选用量和成本。
+- 配置页避免把供应商私有能力混成通用能力。
+
+**验收：**
+- 新增代理协议后，管理员能在 UI 中配置和观察对应能力。
+- 现有 chat/completions 页面和配置不回退。
+
+#### Frontend 5.2: 企业登录、RBAC 和运维状态
+
+**实现：**
+- `Login.tsx` 增加企业登录入口，同时保留账号密码 fallback 策略展示。
+- `admin/Roles.tsx` 管理角色和权限，只读角色不展示危险操作按钮。
+- 运维健康页展示 MySQL、Redis、上游、后台任务状态。
+
+**验收：**
+- 不同角色登录后看到的导航和操作按钮与后端权限一致。
+- degraded/unhealthy 状态有明确提示和排查入口。
+
 ### 阶段验收
 
 - 平台支持主要 AI 接口类型。
 - 用户身份和权限能对接企业体系。
 - 数据安全和运维恢复有明确策略。
+- Phase 5 前端补齐任务完成并通过 `cd frontend && npm run build`。
 
 ### 不做事项
 
@@ -832,6 +1032,7 @@ def check_proxy_rate_limit(
 - 该阶段新增或修改的后端行为有测试。
 - 该阶段涉及数据库变更时，有 Alembic migration。
 - 该阶段涉及前端时，至少通过前端构建或明确记录历史基线错误。
+- 该阶段涉及用户或管理员可操作能力时，前端 API 类型、页面入口、表单/表格字段、错误态和权限态必须同步更新。
 - 操作日志、通知、错误码、权限边界都按阶段目标处理。
 - 文档更新了实际完成情况和遗留问题。
 
