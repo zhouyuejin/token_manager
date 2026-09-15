@@ -18,6 +18,7 @@ class ApiKeyStatus(enum.Enum):
     """API Key状态"""
     active = "active"
     disabled = "disabled"
+    revoked = "revoked"
 
 
 class ApiKey(Base):
@@ -38,6 +39,11 @@ class ApiKey(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     last_used_at = Column(DateTime, nullable=True, comment="最后使用时间")
+    expires_at = Column(DateTime, nullable=True, comment="过期时间")
+    revoked_at = Column(DateTime, nullable=True, comment="吊销时间")
+    revoked_reason = Column(String(255), nullable=True, comment="吊销原因")
+    last_used_ip = Column(String(64), nullable=True, comment="最后使用IP")
+    last_used_user_agent = Column(String(500), nullable=True, comment="最后使用User-Agent")
     
     # 关联用户
     user = relationship("User", primaryjoin="foreign(ApiKey.user_id) == User.user_id", viewonly=True)

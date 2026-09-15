@@ -20,6 +20,8 @@ class ApiKeyCreate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    ip_whitelist: Optional[List[str]] = None
+    expires_at: Optional[datetime] = None
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -33,6 +35,7 @@ class ApiKeyUpdate(BaseModel):
         serialization_alias='name'
     )
     ip_whitelist: Optional[List[str]] = None
+    expires_at: Optional[datetime] = None
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -50,6 +53,12 @@ class ApiKeyResponse(BaseModel):
     status: str
     created_at: UtcDateTime
     last_used_at: Optional[UtcDateTime] = None
+    ip_whitelist: List[str] = []
+    expires_at: Optional[UtcDateTime] = None
+    revoked_at: Optional[UtcDateTime] = None
+    revoked_reason: Optional[str] = None
+    last_used_ip: Optional[str] = None
+    last_used_user_agent: Optional[str] = None
     # NO model_groups — GC-2
 
     model_config = {'populate_by_name': True}
@@ -74,8 +83,14 @@ class ApiKeyCreatedResponse(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    expires_at: Optional[UtcDateTime] = None
 
     model_config = {'populate_by_name': True}
+
+
+class ApiKeyRevokeRequest(BaseModel):
+    """吊销 API Key 请求"""
+    reason: Optional[str] = None
 
 
 # ---------- Admin-facing schemas ----------
@@ -87,6 +102,8 @@ class ApiKeyAdminCreate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    ip_whitelist: Optional[List[str]] = None
+    expires_at: Optional[datetime] = None
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -100,6 +117,7 @@ class ApiKeyAdminUpdate(BaseModel):
         serialization_alias='name'
     )
     ip_whitelist: Optional[List[str]] = None
+    expires_at: Optional[datetime] = None
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -117,6 +135,12 @@ class ApiKeyAdminResponse(BaseModel):
     status: str
     created_at: UtcDateTime
     last_used_at: Optional[UtcDateTime] = None
+    ip_whitelist: List[str] = []
+    expires_at: Optional[UtcDateTime] = None
+    revoked_at: Optional[UtcDateTime] = None
+    revoked_reason: Optional[str] = None
+    last_used_ip: Optional[str] = None
+    last_used_user_agent: Optional[str] = None
     # NO model_groups — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}

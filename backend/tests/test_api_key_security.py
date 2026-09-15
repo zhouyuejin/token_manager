@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -40,8 +41,26 @@ def test_api_key_ip_whitelist_ignores_invalid_entries_without_allowing_all():
     assert ProxyService.check_api_key_ip(api_key, "198.51.100.8") is False
 
 
+def test_api_key_auth_allows_active_non_expired_key():
+    api_key = SimpleNamespace(status="active", revoked_at=None, expires_at=datetime.utcnow() + timedelta(minutes=1))
+
+    assert ProxyService.get_api_key_auth_error(api_key) is None
+
+
+def test_api_key_auth_rejects_expired_key():
+    api_key = SimpleNamespace(status="active", revoked_at=None, expires_at=datetime.utcnow() - timedelta(minutes=1))
+
+    assert ProxyService.get_api_key_auth_error(api_key) == "API Key已过期"
+
+
+def test_api_key_auth_rejects_revoked_key():
+    api_key = SimpleNamespace(status="revoked", revoked_at=datetime.utcnow(), expires_at=None)
+
+    assert ProxyService.get_api_key_auth_error(api_key) == "API Key已吊销"
+
+
 def test_proxy_middleware_rejects_ip_outside_whitelist(monkeypatch):
-    api_key = SimpleNamespace(api_key="tmk_test", ip_whitelist=json.dumps(["203.0.113.10"]))
+    api_key = SimpleNamespace(api_key="tmk_test", status="active", revoked_at=None, expires_at=None, ip_whitelist=json.dumps(["203.0.113.10"]))
     user = SimpleNamespace(user_id="usr_test")
     app = _proxy_app(monkeypatch, api_key, user)
 
@@ -58,7 +77,7 @@ def test_proxy_middleware_rejects_ip_outside_whitelist(monkeypatch):
 
 
 def test_proxy_middleware_allows_ip_inside_whitelist(monkeypatch):
-    api_key = SimpleNamespace(api_key="tmk_test", ip_whitelist=json.dumps(["203.0.113.10"]))
+    api_key = SimpleNamespace(api_key="tmk_test", status="active", revoked_at=None, expires_at=None, ip_whitelist=json.dumps(["203.0.113.10"]))
     user = SimpleNamespace(user_id="usr_test")
     app = _proxy_app(monkeypatch, api_key, user)
 
@@ -85,6 +104,12 @@ def _proxy_app(monkeypatch, api_key, user):
 
         def verify_api_key(self, value):
             return api_key if value == api_key.api_key else None
+
+        def authenticate_api_key(self, value):
+            key = self.verify_api_key(value)
+            if not key:
+                return None, "无效的API Key"
+            return key, ProxyService.get_api_key_auth_error(key)
 
         def get_user_from_key(self, key):
             return user

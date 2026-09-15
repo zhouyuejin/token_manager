@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
 import {
-  Table, Button, Tag, Space, Modal, Form, Input,
+  Table, Button, Tag, Space, Modal, Form, Input, DatePicker,
   Popconfirm
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, CopyOutlined } from '@ant-design/icons'
-import { createApiKey, deleteApiKey, updateApiKey, ApiKey } from '../api/apiKeys'
+import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined } from '@ant-design/icons'
+import { createApiKey, deleteApiKey, updateApiKey, revokeApiKey, rotateApiKey, ApiKey } from '../api/apiKeys'
 import { useSwrData } from '../hooks/useSwr'
 import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhitelist'
 import dayjs from 'dayjs'
@@ -19,6 +19,7 @@ const ApiKeysPage = () => {
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
   const [newKey, setNewKey] = useState<string | null>(null)
+  const [newKeyTitle, setNewKeyTitle] = useState('创建 API Key')
   const [form] = Form.useForm()
   const [editForm] = Form.useForm()
   const message = useMessage()
@@ -33,7 +34,9 @@ const ApiKeysPage = () => {
       const result = await createApiKey({
         name: values.name,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
+        expires_at: values.expires_at?.toISOString?.() || null,
       })
+      setNewKeyTitle('创建 API Key')
       setNewKey(result.api_key)
       message.success('创建成功')
       fetchKeys()
@@ -47,6 +50,7 @@ const ApiKeysPage = () => {
     editForm.setFieldsValue({
       name: record.name,
       ip_whitelist: formatApiKeyWhitelist(record.ip_whitelist),
+      expires_at: record.expires_at ? dayjs(record.expires_at) : null,
     })
     setEditModalVisible(true)
   }
@@ -57,6 +61,7 @@ const ApiKeysPage = () => {
       await updateApiKey(editingKey.key_id, {
         name: values.name,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
+        expires_at: values.expires_at?.toISOString?.() || null,
       })
       message.success('更新成功')
       setEditModalVisible(false)
@@ -78,9 +83,38 @@ const ApiKeysPage = () => {
     }
   }
 
+  const handleRevoke = async (keyId: string) => {
+    try {
+      await revokeApiKey(keyId, '用户手动吊销')
+      message.success('吊销成功')
+      fetchKeys()
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const handleRotate = async (keyId: string) => {
+    try {
+      const result = await rotateApiKey(keyId)
+      setNewKeyTitle('轮换 API Key')
+      setNewKey(result.api_key)
+      setModalVisible(true)
+      message.success('轮换成功')
+      fetchKeys()
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key)
     message.success('已复制到剪贴板')
+  }
+
+  const getLifecycleStatus = (record: ApiKey) => {
+    if (record.revoked_at || record.status === 'revoked') return 'revoked'
+    if (record.expires_at && dayjs(record.expires_at).isBefore(dayjs())) return 'expired'
+    return record.status
   }
 
   const columns = [
@@ -110,18 +144,28 @@ const ApiKeysPage = () => {
       title: '状态', 
       dataIndex: 'status', 
       key: 'status',
-      render: (status: string) => (
-        <Tag 
-          color={status === 'active' ? 'success' : 'error'}
-          style={{ 
-            borderRadius: '6px',
-            background: status === 'active' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(220, 38, 38, 0.15)',
-            border: 'none',
-          }}
-        >
-          {status === 'active' ? '启用' : '禁用'}
-        </Tag>
-      )
+      render: (_: string, record: ApiKey) => {
+        const status = getLifecycleStatus(record)
+        const labelMap: Record<string, string> = {
+          active: '启用',
+          disabled: '禁用',
+          revoked: '已吊销',
+          expired: '已过期',
+        }
+        const success = status === 'active'
+        return (
+          <Tag
+            color={success ? 'success' : 'error'}
+            style={{
+              borderRadius: '6px',
+              background: success ? 'rgba(34, 197, 94, 0.15)' : 'rgba(220, 38, 38, 0.15)',
+              border: 'none',
+            }}
+          >
+            {labelMap[status] || status}
+          </Tag>
+        )
+      }
     },
     {
       title: 'IP白名单',
@@ -141,6 +185,16 @@ const ApiKeysPage = () => {
           </Space>
         )
       }
+    },
+    {
+      title: '过期时间',
+      dataIndex: 'expires_at',
+      key: 'expires_at',
+      render: (val?: string | null) => (
+        <span style={{ color: token.colorTextSecondary }}>
+          {val ? dayjs.utc(val).local().format('YYYY-MM-DD HH:mm') : '永不过期'}
+        </span>
+      )
     },
     {
       title: '创建时间',
@@ -172,6 +226,22 @@ const ApiKeysPage = () => {
           >
             编辑
           </Button>
+          <Popconfirm
+            title="确认轮换此Key？旧密钥会立即失效。"
+            onConfirm={() => handleRotate(record.key_id)}
+          >
+            <Button type="text" icon={<SyncOutlined />} style={{ color: '#8B5CF6' }}>
+              轮换
+            </Button>
+          </Popconfirm>
+          <Popconfirm
+            title="确认吊销此Key？吊销后不能再调用代理。"
+            onConfirm={() => handleRevoke(record.key_id)}
+          >
+            <Button type="text" icon={<StopOutlined />} danger>
+              吊销
+            </Button>
+          </Popconfirm>
           <Popconfirm
             title="确认删除此Key？"
             onConfirm={() => handleDelete(record.key_id)}
@@ -237,7 +307,7 @@ const ApiKeysPage = () => {
             fontFamily: "'Space Grotesk', sans-serif",
             color: token.colorText,
           }}>
-            创建 API Key
+            {newKeyTitle}
           </span>
         }
         open={modalVisible}
@@ -361,6 +431,17 @@ const ApiKeysPage = () => {
                 }}
               />
             </Form.Item>
+            <Form.Item
+              name="expires_at"
+              label={<span style={{ color: token.colorText }}>过期时间</span>}
+              extra="留空表示永不过期。"
+            >
+              <DatePicker
+                showTime
+                style={{ width: '100%', height: 40, borderRadius: 10 }}
+                placeholder="请选择过期时间"
+              />
+            </Form.Item>
           </Form>
         )}
       </Modal>
@@ -413,6 +494,17 @@ const ApiKeysPage = () => {
                 border: `1px solid ${token.colorBorder}`,
                 borderRadius: 10,
               }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="expires_at"
+            label={<span style={{ color: token.colorText }}>过期时间</span>}
+            extra="留空表示永不过期。"
+          >
+            <DatePicker
+              showTime
+              style={{ width: '100%', height: 40, borderRadius: 10 }}
+              placeholder="请选择过期时间"
             />
           </Form.Item>
           <Form.Item style={{ marginTop: 24 }}>
