@@ -653,9 +653,16 @@ async def list_models(
     total = query.count()
     models = query.order_by(Model.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     
+    # 一次性聚合当前页所有 model 的渠道绑定，避免 N+1
+    page_model_ids = [m.model_id for m in models]
+    bindings_by_model: dict[str, list[str]] = {mid: [] for mid in page_model_ids}
+    if page_model_ids:
+        for mid, cid in db.query(ModelChannel.model_id, ModelChannel.channel_id)                .filter(ModelChannel.model_id.in_(page_model_ids)).all():
+            bindings_by_model.setdefault(mid, []).append(cid)
+
     items = []
     for m in models:
-        bound_count = db.query(ModelChannel).filter(ModelChannel.model_id == m.model_id).count()
+        bound_channel_ids = bindings_by_model.get(m.model_id, [])
         group_names = [g.name for g in m.model_groups]
         items.append(ModelResponse(
             model_id=m.model_id, display_name=m.display_name, description=m.description,
@@ -665,7 +672,8 @@ async def list_models(
             price_per_1k_output=float(m.price_per_1k_output) if m.price_per_1k_output else 0,
             price_per_request=float(m.price_per_request) if m.price_per_request else 0,
             status=m.status.value if hasattr(m.status, 'value') else str(m.status),
-            created_at=m.created_at, bound_channels_count=bound_count,
+            created_at=m.created_at, bound_channels_count=len(bound_channel_ids),
+            bound_channel_ids=bound_channel_ids,
             model_groups=group_names
         ))
     

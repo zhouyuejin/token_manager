@@ -12,6 +12,7 @@ export interface Model {
   status: string
   created_at?: string
   bound_channels_count?: number
+  bound_channel_ids?: string[]
   model_groups?: string[]
 }
 
