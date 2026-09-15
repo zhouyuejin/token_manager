@@ -210,6 +210,8 @@ const ModelGroups: React.FC = () => {
     {
       title: '操作',
       key: 'action',
+      width: 220,
+      fixed: 'right' as const,
       render: (_: any, record: ModelGroup) => {
         const isDefault = record.is_default === 1
         const isActive = record.status === 'active'

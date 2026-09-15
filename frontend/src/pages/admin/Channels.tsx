@@ -45,8 +45,12 @@ const calcQuotaStats = (quota: any) => {
   }
 }
 
-const formatQuotaRemain = (remain: number, total: number) => {
-  if (!total || total <= 0) return '套餐未返回总量'
+const formatQuotaRemain = (remain: number, total: number, percent?: number) => {
+  if (!total || total <= 0) {
+    // 上游未返回总量，但可能有进度（percent）；用 percent/100 兜底，避免显示 0/0
+    if (percent && percent > 0) return `剩余 ${Math.round(percent)}/100`
+    return '剩余 0/0'
+  }
   return `剩余 ${remain}/${total}`
 }
 
@@ -195,11 +199,11 @@ const ChannelsPage = () => {
           <div style={{ fontSize: 12 }}>
             <div>5小时: <Progress percent={Math.round(stats.hourlyUsedPercent)} size="small" style={{ width: 100, display: 'inline' }} /></div>
             <div style={{ color: '#666' }}>
-              {formatQuotaRemain(stats.hourlyRemain, stats.hourlyTotal)} · {formatRemainTime(stats.hourlyRemainTime)}重置
+              {formatQuotaRemain(stats.hourlyRemain, stats.hourlyTotal, stats.hourlyUsedPercent)} · {formatRemainTime(stats.hourlyRemainTime)}重置
             </div>
             <div>周: <Progress percent={Math.round(stats.weeklyUsedPercent)} size="small" style={{ width: 100, display: 'inline' }} /></div>
             <div style={{ color: '#666' }}>
-              {formatQuotaRemain(stats.weeklyRemain, stats.weeklyTotal)} · {formatRemainTime(stats.weeklyRemainTime)}重置
+              {formatQuotaRemain(stats.weeklyRemain, stats.weeklyTotal, stats.weeklyUsedPercent)} · {formatRemainTime(stats.weeklyRemainTime)}重置
             </div>
           </div>
         )
