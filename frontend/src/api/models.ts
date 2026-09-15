@@ -1,6 +1,7 @@
 import { get, post, put, patch, del } from './request'
 
 export interface Model {
+  provider_id?: string
   model_id: string
   display_name?: string
   description?: string
