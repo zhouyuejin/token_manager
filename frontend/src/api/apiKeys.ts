@@ -13,12 +13,20 @@ export interface ApiKey {
   revoked_reason?: string | null
   last_used_ip?: string | null
   last_used_user_agent?: string | null
+  qps_limit: number
+  rpm_limit: number
+  tpm_limit: number
+  concurrency_limit: number
 }
 
 export interface CreateApiKeyParams {
   name: string
   ip_whitelist?: string[]
   expires_at?: string | null
+  qps_limit?: number
+  rpm_limit?: number
+  tpm_limit?: number
+  concurrency_limit?: number
 }
 
 export const getApiKeys = () => get<{ items: ApiKey[] }>('/api-keys')

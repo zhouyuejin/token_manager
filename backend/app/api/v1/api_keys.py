@@ -68,6 +68,10 @@ def _api_key_response(key: ApiKey, admin: bool = False):
         revoked_reason=key.revoked_reason,
         last_used_ip=key.last_used_ip,
         last_used_user_agent=key.last_used_user_agent,
+        qps_limit=key.qps_limit,
+        rpm_limit=key.rpm_limit,
+        tpm_limit=key.tpm_limit,
+        concurrency_limit=key.concurrency_limit,
     )
 
 
@@ -112,6 +116,10 @@ async def create_api_key(
         key_name=api_key_data.name,
         ip_whitelist=json.dumps(api_key_data.ip_whitelist or []),
         expires_at=api_key_data.expires_at,
+        qps_limit=api_key_data.qps_limit or 0,
+        rpm_limit=api_key_data.rpm_limit or 0,
+        tpm_limit=api_key_data.tpm_limit or 0,
+        concurrency_limit=api_key_data.concurrency_limit or 0,
         status=ApiKeyStatus.active
     )
 
@@ -136,6 +144,10 @@ async def create_api_key(
         api_key=new_api_key.api_key,
         name=new_api_key.key_name,
         expires_at=new_api_key.expires_at,
+        qps_limit=new_api_key.qps_limit,
+        rpm_limit=new_api_key.rpm_limit,
+        tpm_limit=new_api_key.tpm_limit,
+        concurrency_limit=new_api_key.concurrency_limit,
     )
 
 
@@ -171,6 +183,11 @@ async def update_api_key(
     if "expires_at" in api_key_data.model_fields_set:
         changed["expires_at"] = api_key_data.expires_at.isoformat() if api_key_data.expires_at else None
         api_key.expires_at = api_key_data.expires_at
+    for field in ("qps_limit", "rpm_limit", "tpm_limit", "concurrency_limit"):
+        if field in api_key_data.model_fields_set:
+            value = int(getattr(api_key_data, field) or 0)
+            changed[field] = value
+            setattr(api_key, field, value)
 
     db.commit()
 
@@ -301,6 +318,10 @@ async def rotate_api_key(
         api_key=api_key.api_key,
         name=api_key.key_name,
         expires_at=api_key.expires_at,
+        qps_limit=api_key.qps_limit,
+        rpm_limit=api_key.rpm_limit,
+        tpm_limit=api_key.tpm_limit,
+        concurrency_limit=api_key.concurrency_limit,
     )
 
 
@@ -388,6 +409,10 @@ async def admin_create_api_key(
         key_name=api_key_data.name,
         ip_whitelist=json.dumps(api_key_data.ip_whitelist or []),
         expires_at=api_key_data.expires_at,
+        qps_limit=api_key_data.qps_limit or 0,
+        rpm_limit=api_key_data.rpm_limit or 0,
+        tpm_limit=api_key_data.tpm_limit or 0,
+        concurrency_limit=api_key_data.concurrency_limit or 0,
         status=ApiKeyStatus.active
     )
 
@@ -413,6 +438,10 @@ async def admin_create_api_key(
         api_key=new_api_key.api_key,
         name=new_api_key.key_name,
         expires_at=new_api_key.expires_at,
+        qps_limit=new_api_key.qps_limit,
+        rpm_limit=new_api_key.rpm_limit,
+        tpm_limit=new_api_key.tpm_limit,
+        concurrency_limit=new_api_key.concurrency_limit,
     )
 
 
@@ -465,6 +494,11 @@ async def admin_update_api_key(
     if "expires_at" in api_key_data.model_fields_set:
         changed["expires_at"] = api_key_data.expires_at.isoformat() if api_key_data.expires_at else None
         api_key.expires_at = api_key_data.expires_at
+    for field in ("qps_limit", "rpm_limit", "tpm_limit", "concurrency_limit"):
+        if field in api_key_data.model_fields_set:
+            value = int(getattr(api_key_data, field) or 0)
+            changed[field] = value
+            setattr(api_key, field, value)
 
     db.commit()
 
@@ -548,6 +582,10 @@ async def admin_rotate_api_key(
         api_key=api_key.api_key,
         name=api_key.key_name,
         expires_at=api_key.expires_at,
+        qps_limit=api_key.qps_limit,
+        rpm_limit=api_key.rpm_limit,
+        tpm_limit=api_key.tpm_limit,
+        concurrency_limit=api_key.concurrency_limit,
     )
 
 

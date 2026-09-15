@@ -336,8 +336,7 @@ class RateLimitDecision(TypedDict):
 ```python
 def check_proxy_rate_limit(
     redis_client,
-    user_id: str,
-    key_id: str,
+    api_key,
     model: str,
     estimated_tokens: int,
 ) -> RateLimitDecision:
@@ -351,6 +350,13 @@ def check_proxy_rate_limit(
 - 并发数超限返回 429。
 - 上游失败、客户端断开、异常抛出时并发计数会释放。
 - API Key 列表或详情能展示当前限流配置；429 错误在调用说明或失败提示中可读。
+
+**执行记录（2026-09-15）：**
+- 后端新增 `backend/app/services/rate_limit_service.py`，用 Redis 固定窗口实现 API Key + 模型维度的 QPS/RPM/TPM 计数，并用 Redis 计数实现并发限制。
+- `ApiKey` 模型、schema、用户/管理员创建与编辑接口补齐 `qps_limit`、`rpm_limit`、`tpm_limit`、`concurrency_limit`，新增迁移 `20260915_1100_api_key_rate_limits.py`。
+- 代理 `/chat/completions` 在 quota 预估后、上游转发前执行限流；超过限制返回 429 和 `Retry-After`，普通响应与流式响应都会释放并发计数。
+- 前端 API Key 列表展示限流摘要，创建/编辑弹窗支持设置 QPS/RPM/TPM/并发，`0` 表示不限制。
+- 验证：`backend/tests/test_proxy_rate_limit.py` 覆盖 QPS/RPM/TPM/并发阻断与释放；前端通过 `npm run build`。
 
 #### Task 1.4: 上游渠道密钥加密
 

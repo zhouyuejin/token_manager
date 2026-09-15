@@ -5,6 +5,7 @@
 """
 import json
 import time
+import math
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Request, HTTPException
@@ -18,6 +19,11 @@ from app.models.model import Model, ModelStatus
 from app.models.channel import Channel, ChannelStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.services.proxy_service import ProxyService, create_proxy_service
+from app.services.rate_limit_service import (
+    check_proxy_rate_limit,
+    get_rate_limit_redis_client,
+    release_proxy_concurrency,
+)
 
 router = APIRouter()
 
@@ -131,6 +137,17 @@ async def chat_completions(
     quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
         raise HTTPException(status_code=403, detail=quota_check["message"])
+
+    rate_limit_redis = get_rate_limit_redis_client()
+    rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, chat_request.model, estimated_tokens)
+    concurrency_key = rate_limit.get("concurrency_key")
+    if not rate_limit["allowed"]:
+        retry_after_ms = rate_limit.get("retry_after_ms", 1000)
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit.get("detail") or "请求过于频繁",
+            headers={"Retry-After": str(max(1, math.ceil(retry_after_ms / 1000)))},
+        )
     
     # 3. 构建请求数据
     request_data = chat_request.model_dump(exclude={"stream"})
@@ -144,6 +161,8 @@ async def chat_completions(
         _user_id = user.user_id
         _key_id = api_key.key_id
         _model = chat_request.model
+        _concurrency_key = concurrency_key
+        _rate_limit_redis = rate_limit_redis
         
         def sync_generator():
             from app.core.database import SessionLocal
@@ -194,46 +213,50 @@ async def chat_completions(
                     pass
                 finally:
                     db.close()
+                    release_proxy_concurrency(_rate_limit_redis, _concurrency_key)
         
         return StreamingResponse(sync_generator(), media_type="text/event-stream")
     else:
         # 普通响应
-        result = proxy_service.forward_with_failover(chat_request.model, user, api_key, request_data)
-        
-        # 5. 记录用量并扣减
-        tokens = proxy_service.calculate_tokens(
-            request_data,
-            result.get("data") if result.get("success") else None
-        )
-        
-        if result.get("success") and result.get("status_code") == 200:
-            proxy_service.record_usage(
-                user_id=user.user_id,
-                key_id=api_key.key_id,
-                channel_id=result.get("channel_id"),
-                model=chat_request.model,
-                tokens=tokens,
-                latency_ms=result.get("latency_ms", 0),
-                status_code=result.get("status_code", 200),
-                error_message=result.get("error")
+        try:
+            result = proxy_service.forward_with_failover(chat_request.model, user, api_key, request_data)
+            
+            # 5. 记录用量并扣减
+            tokens = proxy_service.calculate_tokens(
+                request_data,
+                result.get("data") if result.get("success") else None
             )
-            await proxy_service.deduct_quota(user, api_key, tokens)
-            return result.get("data", {})
-        else:
-            proxy_service.record_usage(
-                user_id=user.user_id,
-                key_id=api_key.key_id,
-                channel_id=result.get("channel_id"),
-                model=chat_request.model,
-                tokens=tokens,
-                latency_ms=result.get("latency_ms", 0),
-                status_code=result.get("status_code", 500),
-                error_message=result.get("error")
-            )
-            raise HTTPException(
-                status_code=result.get("status_code", 500),
-                detail=result.get("error", "请求失败")
-            )
+            
+            if result.get("success") and result.get("status_code") == 200:
+                proxy_service.record_usage(
+                    user_id=user.user_id,
+                    key_id=api_key.key_id,
+                    channel_id=result.get("channel_id"),
+                    model=chat_request.model,
+                    tokens=tokens,
+                    latency_ms=result.get("latency_ms", 0),
+                    status_code=result.get("status_code", 200),
+                    error_message=result.get("error")
+                )
+                await proxy_service.deduct_quota(user, api_key, tokens)
+                return result.get("data", {})
+            else:
+                proxy_service.record_usage(
+                    user_id=user.user_id,
+                    key_id=api_key.key_id,
+                    channel_id=result.get("channel_id"),
+                    model=chat_request.model,
+                    tokens=tokens,
+                    latency_ms=result.get("latency_ms", 0),
+                    status_code=result.get("status_code", 500),
+                    error_message=result.get("error")
+                )
+                raise HTTPException(
+                    status_code=result.get("status_code", 500),
+                    detail=result.get("error", "请求失败")
+                )
+        finally:
+            release_proxy_concurrency(rate_limit_redis, concurrency_key)
 
 
 # ========== v1 前缀路由 ==========
