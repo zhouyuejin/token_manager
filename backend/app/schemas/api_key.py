@@ -3,8 +3,8 @@ API Key相关Schema
 
 Task 5: 删除所有 model_group_ids / model_groups 字段。
 API Key 不再保留独立分组权限，统一由用户分组决定。
-GC-9: per-key 限额完全移除。daily_limit / monthly_limit / qps_limit 不再是 ApiKey 的字段。
-限流由 User.quota (USD) 单一来源负责（见 proxy_service.check_quota）。
+GC-9: per-key 额度完全移除。daily_limit / monthly_limit 不再是 ApiKey 的字段。
+Phase 1.3: API Key 保留限流字段（QPS/RPM/TPM/并发），额度仍由 User.quota 负责。
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -22,6 +22,10 @@ class ApiKeyCreate(BaseModel):
     )
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
+    qps_limit: int = Field(default=0, ge=0)
+    rpm_limit: int = Field(default=0, ge=0)
+    tpm_limit: int = Field(default=0, ge=0)
+    concurrency_limit: int = Field(default=0, ge=0)
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -36,6 +40,10 @@ class ApiKeyUpdate(BaseModel):
     )
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
+    qps_limit: Optional[int] = Field(default=None, ge=0)
+    rpm_limit: Optional[int] = Field(default=None, ge=0)
+    tpm_limit: Optional[int] = Field(default=None, ge=0)
+    concurrency_limit: Optional[int] = Field(default=None, ge=0)
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -59,6 +67,10 @@ class ApiKeyResponse(BaseModel):
     revoked_reason: Optional[str] = None
     last_used_ip: Optional[str] = None
     last_used_user_agent: Optional[str] = None
+    qps_limit: int = Field(default=0, ge=0)
+    rpm_limit: int = Field(default=0, ge=0)
+    tpm_limit: int = Field(default=0, ge=0)
+    concurrency_limit: int = Field(default=0, ge=0)
     # NO model_groups — GC-2
 
     model_config = {'populate_by_name': True}
@@ -84,6 +96,10 @@ class ApiKeyCreatedResponse(BaseModel):
         serialization_alias='name'
     )
     expires_at: Optional[UtcDateTime] = None
+    qps_limit: int = Field(default=0, ge=0)
+    rpm_limit: int = Field(default=0, ge=0)
+    tpm_limit: int = Field(default=0, ge=0)
+    concurrency_limit: int = Field(default=0, ge=0)
 
     model_config = {'populate_by_name': True}
 
@@ -104,6 +120,10 @@ class ApiKeyAdminCreate(BaseModel):
     )
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
+    qps_limit: int = Field(default=0, ge=0)
+    rpm_limit: int = Field(default=0, ge=0)
+    tpm_limit: int = Field(default=0, ge=0)
+    concurrency_limit: int = Field(default=0, ge=0)
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -118,6 +138,10 @@ class ApiKeyAdminUpdate(BaseModel):
     )
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
+    qps_limit: Optional[int] = Field(default=None, ge=0)
+    rpm_limit: Optional[int] = Field(default=None, ge=0)
+    tpm_limit: Optional[int] = Field(default=None, ge=0)
+    concurrency_limit: Optional[int] = Field(default=None, ge=0)
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}
@@ -141,6 +165,10 @@ class ApiKeyAdminResponse(BaseModel):
     revoked_reason: Optional[str] = None
     last_used_ip: Optional[str] = None
     last_used_user_agent: Optional[str] = None
+    qps_limit: int = Field(default=0, ge=0)
+    rpm_limit: int = Field(default=0, ge=0)
+    tpm_limit: int = Field(default=0, ge=0)
+    concurrency_limit: int = Field(default=0, ge=0)
     # NO model_groups — API Key 权限统一由用户分组决定
 
     model_config = {'populate_by_name': True}

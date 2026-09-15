@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
 import {
-  Table, Button, Tag, Space, Modal, Form, Input, DatePicker,
+  Table, Button, Tag, Space, Modal, Form, Input, DatePicker, InputNumber,
   Popconfirm
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined } from '@ant-design/icons'
@@ -35,6 +35,10 @@ const ApiKeysPage = () => {
         name: values.name,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
         expires_at: values.expires_at?.toISOString?.() || null,
+        qps_limit: values.qps_limit ?? 0,
+        rpm_limit: values.rpm_limit ?? 0,
+        tpm_limit: values.tpm_limit ?? 0,
+        concurrency_limit: values.concurrency_limit ?? 0,
       })
       setNewKeyTitle('创建 API Key')
       setNewKey(result.api_key)
@@ -51,6 +55,10 @@ const ApiKeysPage = () => {
       name: record.name,
       ip_whitelist: formatApiKeyWhitelist(record.ip_whitelist),
       expires_at: record.expires_at ? dayjs(record.expires_at) : null,
+      qps_limit: record.qps_limit,
+      rpm_limit: record.rpm_limit,
+      tpm_limit: record.tpm_limit,
+      concurrency_limit: record.concurrency_limit,
     })
     setEditModalVisible(true)
   }
@@ -62,6 +70,10 @@ const ApiKeysPage = () => {
         name: values.name,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
         expires_at: values.expires_at?.toISOString?.() || null,
+        qps_limit: values.qps_limit ?? 0,
+        rpm_limit: values.rpm_limit ?? 0,
+        tpm_limit: values.tpm_limit ?? 0,
+        concurrency_limit: values.concurrency_limit ?? 0,
       })
       message.success('更新成功')
       setEditModalVisible(false)
@@ -115,6 +127,29 @@ const ApiKeysPage = () => {
     if (record.revoked_at || record.status === 'revoked') return 'revoked'
     if (record.expires_at && dayjs(record.expires_at).isBefore(dayjs())) return 'expired'
     return record.status
+  }
+
+  const renderRateLimits = (record: ApiKey) => {
+    const limits = [
+      ['QPS', record.qps_limit],
+      ['RPM', record.rpm_limit],
+      ['TPM', record.tpm_limit],
+      ['并发', record.concurrency_limit],
+    ].filter(([, value]) => Number(value) > 0)
+
+    if (limits.length === 0) {
+      return <span style={{ color: token.colorTextSecondary }}>不限制</span>
+    }
+
+    return (
+      <Space size={[4, 4]} wrap>
+        {limits.map(([label, value]) => (
+          <Tag key={label} style={{ margin: 0, borderRadius: 6 }}>
+            {label}: {value}
+          </Tag>
+        ))}
+      </Space>
+    )
   }
 
   const columns = [
@@ -195,6 +230,11 @@ const ApiKeysPage = () => {
           {val ? dayjs.utc(val).local().format('YYYY-MM-DD HH:mm') : '永不过期'}
         </span>
       )
+    },
+    {
+      title: '限流',
+      key: 'rate_limits',
+      render: (_: unknown, record: ApiKey) => renderRateLimits(record)
     },
     {
       title: '创建时间',
@@ -442,6 +482,40 @@ const ApiKeysPage = () => {
                 placeholder="请选择过期时间"
               />
             </Form.Item>
+            <Space size={12} style={{ width: '100%' }} wrap>
+              <Form.Item
+                name="qps_limit"
+                label={<span style={{ color: token.colorText }}>QPS</span>}
+                extra="0 表示不限制。"
+                initialValue={0}
+              >
+                <InputNumber min={0} precision={0} style={{ width: 120 }} />
+              </Form.Item>
+              <Form.Item
+                name="rpm_limit"
+                label={<span style={{ color: token.colorText }}>RPM</span>}
+                extra="0 表示不限制。"
+                initialValue={0}
+              >
+                <InputNumber min={0} precision={0} style={{ width: 120 }} />
+              </Form.Item>
+              <Form.Item
+                name="tpm_limit"
+                label={<span style={{ color: token.colorText }}>TPM</span>}
+                extra="0 表示不限制。"
+                initialValue={0}
+              >
+                <InputNumber min={0} precision={0} style={{ width: 120 }} />
+              </Form.Item>
+              <Form.Item
+                name="concurrency_limit"
+                label={<span style={{ color: token.colorText }}>并发</span>}
+                extra="0 表示不限制。"
+                initialValue={0}
+              >
+                <InputNumber min={0} precision={0} style={{ width: 120 }} />
+              </Form.Item>
+            </Space>
           </Form>
         )}
       </Modal>
@@ -507,6 +581,36 @@ const ApiKeysPage = () => {
               placeholder="请选择过期时间"
             />
           </Form.Item>
+          <Space size={12} style={{ width: '100%' }} wrap>
+            <Form.Item
+              name="qps_limit"
+              label={<span style={{ color: token.colorText }}>QPS</span>}
+              extra="0 表示不限制。"
+            >
+              <InputNumber min={0} precision={0} style={{ width: 120 }} />
+            </Form.Item>
+            <Form.Item
+              name="rpm_limit"
+              label={<span style={{ color: token.colorText }}>RPM</span>}
+              extra="0 表示不限制。"
+            >
+              <InputNumber min={0} precision={0} style={{ width: 120 }} />
+            </Form.Item>
+            <Form.Item
+              name="tpm_limit"
+              label={<span style={{ color: token.colorText }}>TPM</span>}
+              extra="0 表示不限制。"
+            >
+              <InputNumber min={0} precision={0} style={{ width: 120 }} />
+            </Form.Item>
+            <Form.Item
+              name="concurrency_limit"
+              label={<span style={{ color: token.colorText }}>并发</span>}
+              extra="0 表示不限制。"
+            >
+              <InputNumber min={0} precision={0} style={{ width: 120 }} />
+            </Form.Item>
+          </Space>
           <Form.Item style={{ marginTop: 24 }}>
             <Space>
               <Button

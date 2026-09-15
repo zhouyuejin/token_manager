@@ -6,7 +6,7 @@ API Key 不再保留独立分组权限，统一由用户分组决定（§2.15）
 GC-9: 删 daily_limit / daily_used / daily_reset_at / monthly_limit / monthly_used / monthly_reset_at / qps_limit。
 限流由 User.quota (USD) 统一负责（见 proxy_service.check_quota）。
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -44,6 +44,10 @@ class ApiKey(Base):
     revoked_reason = Column(String(255), nullable=True, comment="吊销原因")
     last_used_ip = Column(String(64), nullable=True, comment="最后使用IP")
     last_used_user_agent = Column(String(500), nullable=True, comment="最后使用User-Agent")
+    qps_limit = Column(Integer, default=0, nullable=False, comment="每秒请求限制，0表示不限制")
+    rpm_limit = Column(Integer, default=0, nullable=False, comment="每分钟请求限制，0表示不限制")
+    tpm_limit = Column(Integer, default=0, nullable=False, comment="每分钟估算Token限制，0表示不限制")
+    concurrency_limit = Column(Integer, default=0, nullable=False, comment="并发请求限制，0表示不限制")
     
     # 关联用户
     user = relationship("User", primaryjoin="foreign(ApiKey.user_id) == User.user_id", viewonly=True)
