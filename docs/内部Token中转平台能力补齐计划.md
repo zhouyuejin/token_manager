@@ -379,6 +379,14 @@ def check_proxy_rate_limit(
 - 测试覆盖明文兼容、密文解密、掩码输出、错误密钥处理。
 - 前端不会把掩码回写覆盖真实 Key。
 
+**执行记录（2026-09-15）：**
+- 后端新增 `backend/app/services/secret_crypto.py`，使用 `enc:v1:` 前缀区分密文和历史明文；`SECRET_ENCRYPTION_KEY` 可从环境变量读取，未设置时回退使用 `SECRET_KEY` 派生开发密钥。
+- 新建渠道时加密保存 `api_key` 和 `extra_keys`；更新渠道时空 `api_key` 表示保持原 Key，新值会重新加密；操作日志中的 Key 改动只记录 `***`。
+- 代理转发、模型同步、配额同步在使用渠道 Key 前统一解密，历史明文渠道保持兼容。
+- 渠道列表、详情、模型绑定渠道响应只返回掩码 Key，不返回完整上游 Key。
+- 前端 `ChannelForm` 编辑态不回填主 Key 和额外 Key；保存时空主 Key 不提交，额外 Key 只有填写 JSON 数组时才替换，避免掩码回写覆盖真实 Key。
+- 验证：`python3 -m pytest tests/test_channel_secret_crypto.py tests/test_channel_auth.py tests/test_proxy_service_advanced_config.py tests/test_model_sync_service.py tests/test_channel_quota_windows.py tests/test_admin_channel_advanced.py -q` 通过，`33 passed`；`cd frontend && node src/utils/channelForm.test.mjs && npm run build` 通过。
+
 #### Task 1.5: 错误调用自动冻结
 
 **实现：**

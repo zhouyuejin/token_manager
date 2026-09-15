@@ -6,8 +6,8 @@ export interface Channel {
   name: string
   type: string
   endpoint: string
-  api_key: string
-  extra_keys?: string[]
+  api_key: string // masked; full upstream key is never returned
+  extra_keys?: string[] // masked values in responses; plaintext only in create/update payloads
   key_strategy?: 'round_robin' | 'random' | 'sequential'
   priority: number
   timeout: number

@@ -36,6 +36,7 @@ from app.schemas.admin import (
 )
 from app.services.operation_log_service import record_operation
 from app.services.model_pricing_service import sync_model_prices
+from app.services.secret_crypto import encrypt_secret, mask_secret
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
@@ -67,6 +68,89 @@ def _apply_role_transition(user: "User", new_role_value: str, changed: dict) -> 
     user.role = new_role
     changed["role"] = new_role_value
     return True
+
+
+def _load_extra_keys(value: Optional[str]) -> Optional[List[str]]:
+    return json.loads(value) if value else None
+
+
+def _mask_extra_keys(value: Optional[str]) -> Optional[List[str]]:
+    keys = _load_extra_keys(value)
+    return [mask_secret(k) for k in keys] if keys else None
+
+
+def _encrypt_extra_keys(keys: Optional[List[str]]) -> Optional[str]:
+    if not keys:
+        return None
+    encrypted = [encrypt_secret(k) for k in keys if k]
+    return json.dumps(encrypted) if encrypted else None
+
+
+def _encrypt_channel_create(data: ChannelCreate) -> dict:
+    return {
+        "api_key": encrypt_secret(data.api_key),
+        "extra_keys": _encrypt_extra_keys(data.extra_keys),
+    }
+
+
+def _channel_response(channel: Channel, *, bound_models_count: Optional[int] = None, bound_models: Optional[list] = None) -> ChannelResponse:
+    payload = dict(
+        channel_id=channel.channel_id,
+        name=channel.name,
+        type=channel.type.value if hasattr(channel.type, "value") else str(channel.type),
+        endpoint=channel.endpoint,
+        api_key=mask_secret(channel.api_key),
+        extra_keys=_mask_extra_keys(channel.extra_keys),
+        key_strategy=channel.key_strategy,
+        priority=channel.priority or 0,
+        timeout=channel.timeout or 60,
+        status=channel.status.value if hasattr(channel.status, "value") else str(channel.status or "active"),
+        health_status=channel.health_status.value if hasattr(channel.health_status, "value") else (str(channel.health_status) if channel.health_status else None),
+        last_check_at=channel.last_check_at,
+        cooldown_until=channel.cooldown_until,
+        quota_type=channel.quota_type,
+        quota_hourly=channel.quota_hourly,
+        quota_weekly=channel.quota_weekly,
+        sync_enabled=channel.sync_enabled,
+        sync_interval=channel.sync_interval,
+        last_sync_at=channel.last_sync_at,
+        quota_config=json.loads(channel.quota_config) if channel.quota_config else None,
+        bound_models_count=bound_models_count,
+        upstream_format=channel.upstream_format or "chat",
+        auth_type=channel.auth_type or "auto",
+        auth_headers=json.loads(channel.auth_headers) if channel.auth_headers else None,
+    )
+    if bound_models is not None:
+        payload["bound_models"] = bound_models
+        return ChannelWithModelsResponse(**payload)
+    return ChannelResponse(**payload)
+
+
+def _apply_channel_update(channel: Channel, data: ChannelUpdate) -> dict:
+    changed = {}
+    for field, value in data.model_dump(exclude_unset=True).items():
+        if value is None:
+            continue
+        if field == "api_key":
+            if not value:
+                continue
+            value = encrypt_secret(value)
+            changed_value = "***"
+        elif field == "extra_keys":
+            value = _encrypt_extra_keys(value)
+            changed_value = "***" if value else None
+        elif field == "quota_config":
+            value = json.dumps(value.dict())
+            changed_value = value
+        elif field == "auth_headers" and value is not None:
+            value = json.dumps(value)
+            changed_value = value
+        else:
+            changed_value = value
+        if getattr(channel, field) != value:
+            changed[field] = changed_value
+            setattr(channel, field, value)
+    return changed
 
 
 # ========== 用量统计 ==========
@@ -332,22 +416,7 @@ async def list_channels(
     items = []
     for ch in channels:
         bound_count = db.query(ModelChannel).filter(ModelChannel.channel_id == ch.channel_id).count()
-        extra_keys = json.loads(ch.extra_keys) if ch.extra_keys else None
-        items.append(ChannelResponse(
-            channel_id=ch.channel_id, name=ch.name, type=ch.type.value if hasattr(ch.type, 'value') else str(ch.type),
-            endpoint=ch.endpoint, api_key=ch.api_key, extra_keys=extra_keys, key_strategy=ch.key_strategy,
-            priority=ch.priority, timeout=ch.timeout,
-            status=ch.status.value if hasattr(ch.status, 'value') else str(ch.status),
-            health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None),
-            last_check_at=ch.last_check_at, cooldown_until=ch.cooldown_until,
-            quota_type=ch.quota_type, quota_hourly=ch.quota_hourly, quota_weekly=ch.quota_weekly,
-            sync_enabled=ch.sync_enabled, sync_interval=ch.sync_interval, last_sync_at=ch.last_sync_at,
-            quota_config=json.loads(ch.quota_config) if ch.quota_config else None,
-            bound_models_count=bound_count,
-            upstream_format=ch.upstream_format,
-            auth_type=ch.auth_type,
-            auth_headers=json.loads(ch.auth_headers) if ch.auth_headers else None,
-        ))
+        items.append(_channel_response(ch, bound_models_count=bound_count))
     
     return ChannelListResponse(total=total, items=items)
 
@@ -356,11 +425,12 @@ async def list_channels(
 async def create_channel(data: ChannelCreate, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """创建渠道"""
     channel_id = data.name.lower().replace(" ", "_")[:20] + f"_{secrets.token_hex(4)}"
+    secret_values = _encrypt_channel_create(data)
     
     channel = Channel(
         channel_id=channel_id, name=data.name, type=ChannelType(data.type),
-        endpoint=data.endpoint, api_key=data.api_key,
-        extra_keys=json.dumps(data.extra_keys) if data.extra_keys else None,
+        endpoint=data.endpoint, api_key=secret_values["api_key"],
+        extra_keys=secret_values["extra_keys"],
         key_strategy=data.key_strategy, priority=data.priority, timeout=data.timeout,
         quota_type=data.quota_type, quota_hourly=data.quota_hourly, quota_weekly=data.quota_weekly,
         sync_enabled=data.sync_enabled, sync_interval=data.sync_interval,
@@ -375,18 +445,7 @@ async def create_channel(data: ChannelCreate, request: Request, db: Session = De
     
     record_operation(db=db, operator=admin, action="create", target_type="channel", target_id=channel_id, detail={"name": data.name, "type": data.type}, ip_address=extract_client_ip(request))
     
-    return ChannelResponse(
-        channel_id=channel.channel_id, name=channel.name, type=channel.type.value,
-        endpoint=channel.endpoint, api_key=channel.api_key,
-        extra_keys=data.extra_keys, key_strategy=channel.key_strategy,
-        priority=channel.priority, timeout=channel.timeout,
-        status=channel.status.value, health_status=channel.health_status.value,
-        quota_type=channel.quota_type, quota_hourly=channel.quota_hourly, quota_weekly=channel.quota_weekly,
-        sync_enabled=channel.sync_enabled, sync_interval=channel.sync_interval,
-        upstream_format=channel.upstream_format,
-        auth_type=channel.auth_type,
-        auth_headers=data.auth_headers,
-    )
+    return _channel_response(channel)
 
 
 @router.post("/channels/test-connection", response_model=ChannelTestResponse)
@@ -536,7 +595,7 @@ async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: Use
             enabled=mc.enabled, created_at=mc.created_at,
             channel=ChannelResponse(
                 channel_id=channel.channel_id, name=channel.name, type=channel.type.value,
-                endpoint=channel.endpoint, api_key=channel.api_key,
+                endpoint=channel.endpoint, api_key=mask_secret(channel.api_key),
                 priority=channel.priority, timeout=channel.timeout,
                 status=channel.status.value, health_status=channel.health_status.value,
                 upstream_format=channel.upstream_format,
@@ -545,10 +604,9 @@ async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: Use
             ) if model else None
         ))
     
-    extra_keys = json.loads(channel.extra_keys) if channel.extra_keys else None
     return ChannelWithModelsResponse(
         channel_id=channel.channel_id, name=channel.name, type=channel.type.value,
-        endpoint=channel.endpoint, api_key=channel.api_key, extra_keys=extra_keys,
+        endpoint=channel.endpoint, api_key=mask_secret(channel.api_key), extra_keys=_mask_extra_keys(channel.extra_keys),
         key_strategy=channel.key_strategy, priority=channel.priority, timeout=channel.timeout,
         status=channel.status.value, health_status=channel.health_status.value,
         last_check_at=channel.last_check_at, cooldown_until=channel.cooldown_until,
@@ -569,19 +627,7 @@ async def update_channel(channel_id: str, data: ChannelUpdate, request: Request,
     if not channel:
         raise HTTPException(status_code=404, detail="渠道不存在")
     
-    changed = {}
-    for field, value in data.model_dump(exclude_unset=True).items():
-        if value is None:
-            continue
-        if field == "extra_keys":
-            value = json.dumps(value)
-        if field == "quota_config":
-            value = json.dumps(value.dict())
-        if field == "auth_headers" and value is not None:
-            value = json.dumps(value)
-        if getattr(channel, field) != value:
-            changed[field] = value
-            setattr(channel, field, value)
+    changed = _apply_channel_update(channel, data)
     
     db.commit()
     record_operation(db=db, operator=admin, action="update", target_type="channel", target_id=channel_id, detail=changed, ip_address=extract_client_ip(request))
@@ -741,7 +787,7 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
             enabled=mc.enabled, created_at=mc.created_at,
             channel=ChannelResponse(
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
-                endpoint=ch.endpoint, api_key=ch.api_key, priority=ch.priority, timeout=ch.timeout,
+                endpoint=ch.endpoint, api_key=mask_secret(ch.api_key), priority=ch.priority, timeout=ch.timeout,
                 status=ch.status.value if ch.status else "active", health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None),
                 upstream_format=ch.upstream_format,
                 auth_type=ch.auth_type,
@@ -825,7 +871,7 @@ async def list_model_channels(model_id: str, db: Session = Depends(get_db), admi
             weight=mc.weight, enabled=mc.enabled, created_at=mc.created_at,
             channel=ChannelResponse(
                 channel_id=ch.channel_id, name=ch.name, type=ch.type.value,
-                endpoint=ch.endpoint, api_key=ch.api_key,
+                endpoint=ch.endpoint, api_key=mask_secret(ch.api_key),
                 priority=ch.priority, timeout=ch.timeout,
                 status=ch.status.value, health_status=ch.health_status.value if hasattr(ch.health_status, "value") else (str(ch.health_status) if ch.health_status else None),
                 upstream_format=ch.upstream_format,

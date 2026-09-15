@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     
     # JWT
     SECRET_KEY: str = "your-secret-key"
+    SECRET_ENCRYPTION_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     DEFAULT_NEW_USER_QUOTA: int = 0        # 新注册用户默认额度
