@@ -24,6 +24,7 @@ from app.schemas.api_key import (
     ApiKeyAdminCreate, ApiKeyAdminUpdate,
     ApiKeyAdminResponse, ApiKeyAdminListResponse,
 )
+from app.services.api_key_freeze_service import reset_api_key_errors
 from app.services.operation_log_service import record_operation
 from app.services.proxy_service import ProxyService, create_proxy_service
 from app.utils.request import extract_client_ip
@@ -57,7 +58,7 @@ def _api_key_response(key: ApiKey, admin: bool = False):
     return response_cls(
         key_id=key.key_id,
         user_id=key.user_id,
-        api_key=key.api_key,
+        api_key="tmk_***" + key.api_key[-6:],
         name=key.key_name,
         status=key.status.value,
         created_at=key.created_at,
@@ -66,6 +67,8 @@ def _api_key_response(key: ApiKey, admin: bool = False):
         expires_at=key.expires_at,
         revoked_at=key.revoked_at,
         revoked_reason=key.revoked_reason,
+        frozen_at=key.frozen_at,
+        frozen_reason=key.frozen_reason,
         last_used_ip=key.last_used_ip,
         last_used_user_agent=key.last_used_user_agent,
         qps_limit=key.qps_limit,
@@ -219,7 +222,7 @@ async def update_api_key_status(
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
-    ).first()
+    ).populate_existing().with_for_update().first()
 
     if not api_key:
         raise HTTPException(
@@ -227,6 +230,8 @@ async def update_api_key_status(
             detail="API Key不存在"
         )
 
+    if api_key.frozen_at:
+        raise HTTPException(status_code=403, detail="API Key已自动冻结，请联系管理员解除冻结")
     old_status = api_key.status.value
     api_key.status = ApiKeyStatus(status_data.status)
     db.commit()
@@ -290,11 +295,13 @@ async def rotate_api_key(
     api_key = db.query(ApiKey).filter(
         ApiKey.key_id == key_id,
         ApiKey.user_id == current_user.user_id
-    ).first()
+    ).populate_existing().with_for_update().first()
 
     if not api_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key不存在")
 
+    if api_key.frozen_at:
+        raise HTTPException(status_code=403, detail="API Key已自动冻结，请先由管理员解除冻结")
     old_fingerprint = api_key.api_key[-6:]
     api_key.api_key = generate_api_key()
     api_key.status = ApiKeyStatus.active
@@ -516,6 +523,36 @@ async def admin_update_api_key(
     return {"message": "更新成功"}
 
 
+@router.put("/admin/{key_id}/unfreeze")
+async def admin_unfreeze_api_key(
+    request: Request,
+    key_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """核查异常调用后由管理员解除自动冻结。"""
+    api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).with_for_update().first()
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API Key不存在")
+    if not api_key.frozen_at or api_key.status != ApiKeyStatus.disabled or api_key.revoked_at:
+        raise HTTPException(status_code=400, detail="该Key不处于可解除的自动冻结状态")
+    reason = api_key.frozen_reason
+    try:
+        reset_api_key_errors(api_key)
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="错误计数清理失败，请稍后重试")
+    api_key.status = ApiKeyStatus.active
+    api_key.frozen_at = None
+    api_key.frozen_reason = None
+    db.commit()
+    record_operation(
+        db=db, operator=current_user, action="unfreeze", target_type="api_key",
+        target_id=key_id, detail={"frozen_reason": reason}, ip_address=extract_client_ip(request),
+    )
+    return {"message": "解除冻结成功"}
+
+
 @router.put("/admin/{key_id}/revoke")
 async def admin_revoke_api_key(
     request: Request,
@@ -555,10 +592,12 @@ async def admin_rotate_api_key(
     db: Session = Depends(get_db)
 ):
     """轮换API Key（管理员）"""
-    api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
+    api_key = db.query(ApiKey).filter(ApiKey.key_id == key_id).populate_existing().with_for_update().first()
     if not api_key:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key不存在")
 
+    if api_key.frozen_at:
+        raise HTTPException(status_code=403, detail="API Key已自动冻结，请先由管理员解除冻结")
     old_fingerprint = api_key.api_key[-6:]
     api_key.api_key = generate_api_key()
     api_key.status = ApiKeyStatus.active

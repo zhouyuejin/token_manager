@@ -3,17 +3,20 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
 import {
   Table, Button, Tag, Space, Modal, Form, Input, DatePicker, InputNumber,
-  Popconfirm
+  Popconfirm, Segmented
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined } from '@ant-design/icons'
-import { createApiKey, deleteApiKey, updateApiKey, revokeApiKey, rotateApiKey, ApiKey } from '../api/apiKeys'
+import { createApiKey, deleteApiKey, updateApiKey, revokeApiKey, rotateApiKey, unfreezeApiKey, ApiKey } from '../api/apiKeys'
+import { useAuthStore } from '../store/auth'
 import { useSwrData } from '../hooks/useSwr'
 import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhitelist'
 import dayjs from 'dayjs'
 
 const ApiKeysPage = () => {
+  const isAdmin = useAuthStore(state => state.user?.role === 'admin')
+  const [adminView, setAdminView] = useState(false)
   // 使用 SWR 获取 API Keys
-  const { data: keysData, isLoading, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>('/api-keys')
+  const { data: keysData, isLoading, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>(adminView && isAdmin ? '/api-keys/admin' : '/api-keys')
   const keysList = keysData?.items || []
   const [modalVisible, setModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
@@ -118,6 +121,16 @@ const ApiKeysPage = () => {
     }
   }
 
+  const handleUnfreeze = async (keyId: string) => {
+    try {
+      await unfreezeApiKey(keyId)
+      message.success('解除冻结成功')
+      fetchKeys()
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key)
     message.success('已复制到剪贴板')
@@ -125,6 +138,7 @@ const ApiKeysPage = () => {
 
   const getLifecycleStatus = (record: ApiKey) => {
     if (record.revoked_at || record.status === 'revoked') return 'revoked'
+    if (record.frozen_at) return 'frozen'
     if (record.expires_at && dayjs(record.expires_at).isBefore(dayjs())) return 'expired'
     return record.status
   }
@@ -153,6 +167,7 @@ const ApiKeysPage = () => {
   }
 
   const columns = [
+    ...(adminView && isAdmin ? [{ title: '所属用户', dataIndex: 'user_id', key: 'user_id' }] : []),
     { 
       title: 'Key名称', 
       dataIndex: 'name', 
@@ -184,6 +199,7 @@ const ApiKeysPage = () => {
         const labelMap: Record<string, string> = {
           active: '启用',
           disabled: '禁用',
+          frozen: '自动冻结',
           revoked: '已吊销',
           expired: '已过期',
         }
@@ -201,6 +217,18 @@ const ApiKeysPage = () => {
           </Tag>
         )
       }
+    },
+    {
+      title: '冻结信息',
+      key: 'freeze_info',
+      render: (_: unknown, record: ApiKey) => record.frozen_at ? (
+        <Space direction="vertical" size={2}>
+          <span>{record.frozen_reason || '异常调用'}</span>
+          <span style={{ color: token.colorTextSecondary }}>
+            {dayjs.utc(record.frozen_at).local().format('YYYY-MM-DD HH:mm:ss')}
+          </span>
+        </Space>
+      ) : <span style={{ color: token.colorTextSecondary }}>—</span>
     },
     {
       title: 'IP白名单',
@@ -249,16 +277,17 @@ const ApiKeysPage = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_: any, record: ApiKey) => (
-        <Space>
-          <Button 
-            type="text" 
-            icon={<CopyOutlined />} 
-            onClick={() => copyKey(record.api_key)}
-            style={{ color: '#3B82F6' }}
+      render: (_: any, record: ApiKey) => adminView && isAdmin ? (
+        record.status === 'disabled' && record.frozen_at ? (
+          <Popconfirm
+            title="确认解除冻结？请先核查异常调用来源。"
+            onConfirm={() => handleUnfreeze(record.key_id)}
           >
-            复制
-          </Button>
+            <Button type="text">解除冻结</Button>
+          </Popconfirm>
+        ) : <span style={{ color: token.colorTextSecondary }}>—</span>
+      ) : (
+        <Space>
           <Button 
             type="text" 
             onClick={() => handleEdit(record)}
@@ -270,7 +299,7 @@ const ApiKeysPage = () => {
             title="确认轮换此Key？旧密钥会立即失效。"
             onConfirm={() => handleRotate(record.key_id)}
           >
-            <Button type="text" icon={<SyncOutlined />} style={{ color: '#8B5CF6' }}>
+            <Button type="text" disabled={!!record.frozen_at} icon={<SyncOutlined />} style={{ color: '#8B5CF6' }}>
               轮换
             </Button>
           </Popconfirm>
@@ -312,20 +341,29 @@ const ApiKeysPage = () => {
         }}>
           API Key 管理
         </h2>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
-          onClick={() => setModalVisible(true)}
-          style={{
-            background: token.colorPrimary,
-            border: 'none',
-            borderRadius: 10,
-            fontFamily: "'Space Grotesk', sans-serif",
-            fontWeight: 500,
-          }}
-        >
-          创建 API Key
-        </Button>
+        <Space>
+          {isAdmin && (
+            <Segmented
+              options={['我的 Key', '全部 Key']}
+              value={adminView ? '全部 Key' : '我的 Key'}
+              onChange={value => setAdminView(value === '全部 Key')}
+            />
+          )}
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setModalVisible(true)}
+            style={{
+              background: token.colorPrimary,
+              border: 'none',
+              borderRadius: 10,
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontWeight: 500,
+            }}
+          >
+            创建 API Key
+          </Button>
+        </Space>
       </div>
 
       <Table

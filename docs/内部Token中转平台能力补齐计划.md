@@ -400,6 +400,18 @@ def check_proxy_rate_limit(
 - 管理后台可看到冻结原因。
 - 用户 API Key 列表和管理员列表能看到自动冻结状态、原因和发生时间。
 
+### Task 1.5 执行记录（2026-09-17）
+
+- **状态：已实现。** Redis Lua 原子记录 API Key 级认证失败、IP 不匹配、额度失败、限流失败和上游 4xx 的 60 秒滚动窗口，以及连续错误类型/次数；成功调用重置连续错误计数，安全异常窗口继续保留。普通/流式上游 4xx 均接入；不存在的密钥无法归属，不累计到其他 Key。
+- 第一版仅在 **60 秒内认证失败或 IP 不匹配累计达到 50 次**时自动 `disabled`；额度、限流和上游错误只记录，不触发冻结。Redis 故障保留原请求认证/拒绝结果，不因计数组件故障引入额外阻断。
+- 冻结原因、时间、系统操作日志和所属用户/管理员站内通知在同一数据库事务落库。条件更新防止重复冻结和通知；Redis 只保存 Key ID 与密钥指纹，不保存明文密钥、请求或响应内容。
+- 用户/管理员 API Key 响应补齐 `frozen_at`、`frozen_reason`，列表只返回掩码 Key。API Key 页面提供管理员“全部 Key”视图，展示所属用户、冻结状态、原因和时间，提供确认后解除冻结。
+- 新增管理员 `PUT /api/v1/api-keys/admin/{key_id}/unfreeze`，清理错误计数再启用，保留操作审计；吊销 Key 不可解除为启用。用户启用/轮换以及管理员轮换不得绕过冻结。状态变更使用行锁，认证遇到冻结标记始终拒绝。
+- 恢复仓库缺失的 Alembic `20260915_1200_api_key_freeze` 迁移文件。本地数据库已存在这一版本及 `frozen_at/frozen_reason/frozen_until` 字段；兼容保留 `frozen_until`，本任务采用管理员解除冻结，不启用自动到期恢复。`alembic current` 与 `upgrade head` 验证通过，无手工修改数据库。
+- 测试先红灯：冻结服务缺失、用户可启用/轮换；审查补充“active 状态仍有冻结标记”的红灯回归后修复。新增测试使用隔离 SQLite 数据库和真实 Redis 随机前缀，测试后删除自身计数器，不调用全库清理 fixture。
+- 验证命令：`docker exec token-backend python -m pytest tests/test_api_key_freeze.py tests/test_api_key_security.py tests/test_proxy_rate_limit.py tests/test_proxy_service_advanced_config.py tests/test_proxy_service_admin_override.py tests/test_user_unlimited_quota.py -q`；前端 `cd frontend && npm run build`。结果：**54 passed**；前端 `tsc && vite build` 通过，仅保留既有大包体积提示。`git diff --check` 通过。
+- 验证边界：后端包含真实认证中间件/HTTP 权限链路、Redis Lua、普通/流式错误计数和迁移升降级测试；前端为构建验证，未做浏览器交互验收。扩展尝试 `test_proxy_service_model_binding.py` 仍因旧 `app.models.provider` 导入而收集失败，不宣称后端全量通过。
+
 ### Phase 1 前端补齐任务
 
 #### Frontend 1.1: API Key 安全配置闭环

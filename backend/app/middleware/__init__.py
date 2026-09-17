@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.database import SessionLocal
 from app.services.proxy_service import ProxyService
+from app.services.api_key_freeze_service import record_api_key_error
 from app.utils.request import extract_client_ip
 
 
@@ -50,6 +51,8 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
             # 验证Key
             key_obj, auth_error = proxy_service.authenticate_api_key(api_key)
             if auth_error or not key_obj:
+                if key_obj:
+                    record_api_key_error(db, key_obj, "auth")
                 return JSONResponse(
                     status_code=401,
                     content={"detail": auth_error or "无效的API Key"}
@@ -64,6 +67,7 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
                 )
 
             if not proxy_service.check_api_key_ip(key_obj, extract_client_ip(request)):
+                record_api_key_error(db, key_obj, "ip_mismatch")
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "IP不在API Key白名单内"}

@@ -65,6 +65,8 @@ class ApiKeyResponse(BaseModel):
     expires_at: Optional[UtcDateTime] = None
     revoked_at: Optional[UtcDateTime] = None
     revoked_reason: Optional[str] = None
+    frozen_at: Optional[UtcDateTime] = None
+    frozen_reason: Optional[str] = None
     last_used_ip: Optional[str] = None
     last_used_user_agent: Optional[str] = None
     qps_limit: int = Field(default=0, ge=0)
@@ -163,6 +165,8 @@ class ApiKeyAdminResponse(BaseModel):
     expires_at: Optional[UtcDateTime] = None
     revoked_at: Optional[UtcDateTime] = None
     revoked_reason: Optional[str] = None
+    frozen_at: Optional[UtcDateTime] = None
+    frozen_reason: Optional[str] = None
     last_used_ip: Optional[str] = None
     last_used_user_agent: Optional[str] = None
     qps_limit: int = Field(default=0, ge=0)

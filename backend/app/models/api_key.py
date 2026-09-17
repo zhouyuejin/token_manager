@@ -41,6 +41,8 @@ class ApiKey(Base):
     last_used_at = Column(DateTime, nullable=True, comment="最后使用时间")
     expires_at = Column(DateTime, nullable=True, comment="过期时间")
     revoked_at = Column(DateTime, nullable=True, comment="吊销时间")
+    frozen_at = Column(DateTime, nullable=True, comment="自动冻结时间")
+    frozen_reason = Column(String(255), nullable=True, comment="自动冻结原因")
     revoked_reason = Column(String(255), nullable=True, comment="吊销原因")
     last_used_ip = Column(String(64), nullable=True, comment="最后使用IP")
     last_used_user_agent = Column(String(500), nullable=True, comment="最后使用User-Agent")
