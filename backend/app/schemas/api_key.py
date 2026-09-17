@@ -6,7 +6,7 @@ API Key 不再保留独立分组权限，统一由用户分组决定。
 GC-9: per-key 额度完全移除。daily_limit / monthly_limit 不再是 ApiKey 的字段。
 Phase 1.3: API Key 保留限流字段（QPS/RPM/TPM/并发），额度仍由 User.quota 负责。
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
@@ -20,6 +20,7 @@ class ApiKeyCreate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    project_id: str = Field(min_length=1, max_length=32)
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
     qps_limit: int = Field(default=0, ge=0)
@@ -38,6 +39,7 @@ class ApiKeyUpdate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    project_id: Optional[str] = Field(default=None, min_length=1, max_length=32)
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
     qps_limit: Optional[int] = Field(default=None, ge=0)
@@ -46,11 +48,22 @@ class ApiKeyUpdate(BaseModel):
     concurrency_limit: Optional[int] = Field(default=None, ge=0)
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
+    @field_validator("project_id")
+    @classmethod
+    def reject_empty_project(cls, value):
+        if value is None or not value.strip():
+            raise ValueError("项目不能为空")
+        return value
+
     model_config = {'populate_by_name': True}
 
 
 class ApiKeyResponse(BaseModel):
     """API Key响应（用户）"""
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    department_id: Optional[str] = None
+    department_name: Optional[str] = None
     key_id: str
     user_id: str
     api_key: str
@@ -91,6 +104,10 @@ class ApiKeyStatusUpdate(BaseModel):
 
 class ApiKeyCreatedResponse(BaseModel):
     """创建API Key成功响应"""
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    department_id: Optional[str] = None
+    department_name: Optional[str] = None
     key_id: str
     api_key: str
     name: str = Field(
@@ -120,6 +137,7 @@ class ApiKeyAdminCreate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    project_id: str = Field(min_length=1, max_length=32)
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
     qps_limit: int = Field(default=0, ge=0)
@@ -138,6 +156,7 @@ class ApiKeyAdminUpdate(BaseModel):
         validation_alias='key_name',
         serialization_alias='name'
     )
+    project_id: Optional[str] = Field(default=None, min_length=1, max_length=32)
     ip_whitelist: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
     qps_limit: Optional[int] = Field(default=None, ge=0)
@@ -146,11 +165,22 @@ class ApiKeyAdminUpdate(BaseModel):
     concurrency_limit: Optional[int] = Field(default=None, ge=0)
     # NO model_group_ids — API Key 权限统一由用户分组决定
 
+    @field_validator("project_id")
+    @classmethod
+    def reject_empty_project(cls, value):
+        if value is None or not value.strip():
+            raise ValueError("项目不能为空")
+        return value
+
     model_config = {'populate_by_name': True}
 
 
 class ApiKeyAdminResponse(BaseModel):
     """API Key响应（管理员）"""
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    department_id: Optional[str] = None
+    department_name: Optional[str] = None
     key_id: str
     user_id: str
     api_key: str

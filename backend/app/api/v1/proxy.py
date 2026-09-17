@@ -6,6 +6,7 @@
 import json
 import time
 import math
+import logging
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Request, HTTPException
@@ -26,6 +27,7 @@ from app.services.rate_limit_service import (
     release_proxy_concurrency,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -192,28 +194,30 @@ async def chat_completions(
                 # 流结束时记录并扣减
                 try:
                     service = create_proxy_service(db)
-                    tokens = {
-                        "prompt_tokens": 0,
-                        "completion_tokens": len(completion_text) // 4,
-                        "total_tokens": len(completion_text) // 4
-                    }
-                    service.record_usage(
-                        user_id=_user_id,
-                        key_id=_key_id,
-                        channel_id=None,
-                        model=_model,
-                        tokens=tokens,
-                        latency_ms=0,
-                        status_code=200,
-                        error_message=None
-                    )
-                    import asyncio
-                    user_obj = db.query(User).filter(User.user_id == _user_id).first()
-                    api_key_obj = db.query(ApiKey).filter(ApiKey.key_id == _key_id).first()
-                    if user_obj and api_key_obj:
-                        asyncio.run(service.deduct_quota(user_obj, api_key_obj, tokens))
+                    metadata = proxy_service.stream_metadata
+                    tokens = (metadata.get('tokens') or proxy_service.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})) if metadata.get('status_code') == 200 else {}
+                    if not metadata.get('recorded'):
+                        service.record_usage(
+                            user_id=_user_id,
+                            key_id=_key_id,
+                            channel_id=metadata.get("channel_id"),
+                            model=_model,
+                            tokens=tokens,
+                            latency_ms=metadata.get("latency_ms", 0),
+                            status_code=metadata.get("status_code", 502),
+                            error_message=metadata.get("error"),
+                            attribution=proxy_service.usage_attribution[_key_id]
+                        )
+                        import asyncio
+                        user_obj = db.query(User).filter(User.user_id == _user_id).first()
+                        api_key_obj = db.query(ApiKey).filter(ApiKey.key_id == _key_id).first()
+                        if user_obj and api_key_obj and metadata.get("status_code") == 200:
+                            asyncio.run(service.deduct_quota(user_obj, api_key_obj, tokens))
+                        else:
+                            db.commit()
                 except Exception:
-                    pass
+                    db.rollback()
+                    logger.exception("流式用量归因记录失败，key_id=%s", _key_id)
                 finally:
                     db.close()
                     release_proxy_concurrency(_rate_limit_redis, _concurrency_key)
@@ -244,16 +248,18 @@ async def chat_completions(
                 await proxy_service.deduct_quota(user, api_key, tokens)
                 return result.get("data", {})
             else:
-                proxy_service.record_usage(
-                    user_id=user.user_id,
-                    key_id=api_key.key_id,
-                    channel_id=result.get("channel_id"),
-                    model=chat_request.model,
-                    tokens=tokens,
-                    latency_ms=result.get("latency_ms", 0),
-                    status_code=result.get("status_code", 500),
-                    error_message=result.get("error")
-                )
+                if not result.get("usage_recorded"):
+                    proxy_service.record_usage(
+                        user_id=user.user_id,
+                        key_id=api_key.key_id,
+                        channel_id=result.get("channel_id"),
+                        model=chat_request.model,
+                        tokens=tokens,
+                        latency_ms=result.get("latency_ms", 0),
+                        status_code=result.get("status_code", 500),
+                        error_message=result.get("error")
+                    )
+                db.commit()
                 raise HTTPException(
                     status_code=result.get("status_code", 500),
                     detail=result.get("error", "请求失败")

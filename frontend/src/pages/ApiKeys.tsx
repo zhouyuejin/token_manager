@@ -12,6 +12,7 @@ import { useSwrData } from '../hooks/useSwr'
 import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhitelist'
 import dayjs from 'dayjs'
 import { getApiKeyStatus, maskKey } from '../utils/security'
+import { Project } from '../api/projects'
 
 const ApiKeysPage = () => {
   const isAdmin = useAuthStore(state => state.user?.role === 'admin')
@@ -31,6 +32,15 @@ const ApiKeysPage = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
+  const { data: projectsData, error: projectsError, isLoading: projectsLoading } = useSwrData<{ items: Project[] }>('/projects', { revalidateOnFocus: true })
+  const { data: editProjectsData, error: editProjectsError, isLoading: editProjectsLoading } = useSwrData<{ items: Project[] }>(
+    adminView && isAdmin && editingKey ? `/projects/admin/users/${editingKey.user_id}/available` : null
+  )
+  const projectOptions = (projectsData?.items || []).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))
+  const editProjectOptions = adminView && isAdmin
+    ? (editProjectsData?.items || []).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))
+    : projectOptions
+
   const [newKey, setNewKey] = useState<string | null>(null)
   const [newKeyTitle, setNewKeyTitle] = useState('创建 API Key')
   const [form] = Form.useForm()
@@ -46,6 +56,7 @@ const ApiKeysPage = () => {
     try {
       const result = await createApiKey({
         name: values.name,
+        project_id: values.project_id,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
         expires_at: values.expires_at?.toISOString?.() || null,
         qps_limit: values.qps_limit ?? 0,
@@ -66,6 +77,7 @@ const ApiKeysPage = () => {
     setEditingKey(record)
     editForm.setFieldsValue({
       name: record.name,
+      project_id: record.project_id,
       ip_whitelist: formatApiKeyWhitelist(record.ip_whitelist),
       expires_at: record.expires_at ? dayjs.utc(record.expires_at).local() : null,
       qps_limit: record.qps_limit,
@@ -81,6 +93,7 @@ const ApiKeysPage = () => {
     try {
       await (adminView && isAdmin ? updateAdminApiKey : updateApiKey)(editingKey.key_id, {
         name: values.name,
+        project_id: values.project_id,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
         expires_at: values.expires_at?.toISOString?.() || null,
         qps_limit: values.qps_limit ?? 0,
@@ -180,6 +193,7 @@ const ApiKeysPage = () => {
   }
 
   const columns = [
+    { title: "所属项目 / 部门", key: "project", render: (_: unknown, record: ApiKey) => <Space direction="vertical" size={2}><span>{record.project_name || record.project_id || "未归因"}</span><span>{record.department_name || record.department_id || "—"}</span></Space> },
     ...(adminView && isAdmin ? [{ title: '所属用户', dataIndex: 'user_id', key: 'user_id' }] : []),
     { 
       title: 'Key名称', 
@@ -413,6 +427,8 @@ const ApiKeysPage = () => {
             <Descriptions.Item label="名称">{detailKey.name}</Descriptions.Item>
             <Descriptions.Item label="Key ID">{detailKey.key_id}</Descriptions.Item>
             <Descriptions.Item label="Key">{maskKey(detailKey.api_key)}</Descriptions.Item>
+            <Descriptions.Item label="所属项目">{detailKey.project_name || detailKey.project_id || "未归因"}</Descriptions.Item>
+            <Descriptions.Item label="所属部门">{detailKey.department_name || detailKey.department_id || "—"}</Descriptions.Item>
             <Descriptions.Item label="所属用户">{detailKey.user_id}</Descriptions.Item>
             <Descriptions.Item label="状态">{statusLabels[getLifecycleStatus(detailKey)] || detailKey.status}</Descriptions.Item>
             <Descriptions.Item label="IP 白名单">{formatApiKeyWhitelist(detailKey.ip_whitelist) || '不限制'}</Descriptions.Item>
@@ -530,6 +546,11 @@ const ApiKeysPage = () => {
           </div>
         ) : (
           <Form form={form} onFinish={handleCreate} layout="vertical">
+            {projectsError && <Alert type="error" message="项目加载失败，请重新打开页面重试" />}
+            {!projectsLoading && !projectsError && !projectOptions.length && <Alert type="warning" message="暂无可用项目，请联系管理员分配项目后创建 Key" />}
+            <Form.Item name="project_id" label="所属项目" rules={[{ required: true, message: '请选择已授权项目' }]}>
+              <Select showSearch optionFilterProp="label" loading={projectsLoading} options={projectOptions} placeholder="请选择项目" />
+            </Form.Item>
             <Form.Item
               name="name"
               label={<span style={{ color: token.colorText }}>Key名称</span>}
@@ -629,6 +650,11 @@ const ApiKeysPage = () => {
         style={{ top: 100 }}
       >
         <Form form={editForm} onFinish={handleUpdate} layout="vertical">
+          {(editProjectsError || projectsError) && <Alert type="error" message="项目加载失败，请重新打开页面重试" />}
+          {!editProjectsLoading && !projectsLoading && !editProjectOptions.length && <Alert type="warning" message="该用户暂无可用项目，请先由管理员分配项目" />}
+          <Form.Item name="project_id" label="所属项目" rules={[{ required: true, message: '请选择已授权项目' }, { validator: (_, value) => editProjectOptions.some(option => option.value === value) ? Promise.resolve() : Promise.reject(new Error('项目未授权或已停用，请重新选择')) }]}>
+            <Select showSearch optionFilterProp="label" loading={editProjectsLoading || projectsLoading} options={editProjectOptions} placeholder="请选择项目" />
+          </Form.Item>
           <Form.Item
             name="name"
             label={<span style={{ color: token.colorText }}>Key名称</span>}

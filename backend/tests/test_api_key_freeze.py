@@ -297,7 +297,7 @@ def test_stream_upstream_4xx_is_counted(session, redis_client, monkeypatch):
     proxy = ProxyService(session)
     key = session.query(ApiKey).first()
     user = session.query(User).filter(User.user_id == 'owner').first()
-    channel = SimpleNamespace(timeout=1, upstream_format='chat', type=ChannelType.openai,
+    channel = SimpleNamespace(channel_id='upstream_channel', timeout=1, upstream_format='chat', type=ChannelType.openai,
                               auth_type='bearer', auth_headers=None, endpoint='https://upstream.test')
     monkeypatch.setattr(proxy, 'select_channel', lambda *args: (channel, 'gpt', 'upstream'))
     real_client = httpx.Client

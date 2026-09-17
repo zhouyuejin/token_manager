@@ -12,6 +12,7 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Set, Tuple
 from functools import reduce
+from decimal import Decimal
 import httpx
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -24,6 +25,8 @@ from app.models.model import Model, ModelStatus
 from app.models.model_channel import ModelChannel
 from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_model_mappings
 from app.models.usage_log import UsageLog
+from app.models.project import Project
+from app.services.project_service import DEFAULT_PROJECT_ID, DEFAULT_DEPARTMENT_ID
 
 from app.services.channel_auth import build_auth_headers, get_upstream_url
 from app.services.api_key_freeze_service import record_api_key_error, record_api_key_success
@@ -39,6 +42,8 @@ class ProxyService:
     
     def __init__(self, db: Session):
         self.db = db
+        self.usage_attribution = {}
+        self.stream_metadata = {}
     
     def verify_api_key(self, api_key: str) -> Optional[ApiKey]:
         """验证API Key"""
@@ -421,6 +426,7 @@ class ProxyService:
         - 4xx (非429): 继续下一 channel
         - 5xx/429/超时: 触发 key/cooldown，继续下一 channel
         """
+        self.capture_usage_attribution(api_key.key_id)
         candidates = self.select_candidates(model_id, user, api_key)
         
         if not candidates:
@@ -434,6 +440,7 @@ class ProxyService:
             )
             return {
                 "success": False,
+                "usage_recorded": True,
                 "status_code": 502,
                 "error": "无可用渠道"
             }
@@ -468,7 +475,9 @@ class ProxyService:
                     last_err = result
                     continue
                 
-                # 其它 4xx
+                # 其它 4xx 同样需要留存失败归因。
+                self._record_usage_failure(user.user_id, api_key.key_id, ch.channel_id, model_id, status_code, result.get("error"))
+                result["usage_recorded"] = True
                 return result
                 
             except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as e:
@@ -488,6 +497,8 @@ class ProxyService:
         
         return {
             "success": False,
+            "usage_recorded": True,
+            "channel_id": attempted_channels[-1] if attempted_channels else None,
             "status_code": last_err.get("status_code", 502) if last_err else 502,
             "error": f"已尝试 {len(attempted_channels)} 个渠道，仍失败"
         }
@@ -585,8 +596,10 @@ class ProxyService:
         流式转发（不做 failover）。
         返回一个生成器，yield SSE chunks。
         """
+        self.capture_usage_attribution(api_key.key_id)
         result = self.select_channel(model_id, user, api_key)
 
+        self.stream_metadata = {"channel_id": None, "status_code": 502, "error": "无可用渠道", "recorded": False}
         if not result:
             self._record_usage_failure(
                 user_id=user.user_id,
@@ -597,17 +610,23 @@ class ProxyService:
                 error="无可用渠道"
             )
 
+            self.stream_metadata["recorded"] = True
+
             def empty():
                 yield 'data: {"error": "无可用渠道"}\n\n'
                 yield "data: [DONE]\n\n"
             return empty()
 
         ch, upstream_model, key = result
+        self.stream_metadata.update(channel_id=ch.channel_id, status_code=502, error=None)
+        start_time = time.time()
 
         def generate():
+            completion_text = ""
             try:
                 with httpx.Client(timeout=ch.timeout) as client:
                     request_data["model"] = upstream_model
+                    request_data["stream"] = True
                     upstream_url = get_upstream_url(ch, model=upstream_model)
                     headers = build_auth_headers(ch, key)
                     headers["Content-Type"] = "application/json"
@@ -615,6 +634,7 @@ class ProxyService:
                         headers.setdefault("anthropic-version", "2023-06-01")
 
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
+                        self.stream_metadata["status_code"] = response.status_code
                         if response.status_code != 200:
                             if 400 <= response.status_code < 500:
                                 record_api_key_error(self.db, api_key, "upstream_4xx")
@@ -632,6 +652,7 @@ class ProxyService:
                                 )
                             except Exception:
                                 pass
+                            self.stream_metadata["error"] = error_msg
                             safe_error = error_msg.replace("\\", "\\\\").replace('"', '\\"')
                             yield f'data: {{"error": "{safe_error}"}}\n\n'
                             yield "data: [DONE]\n\n"
@@ -640,71 +661,90 @@ class ProxyService:
                         record_api_key_success(api_key)
                         for chunk in response.iter_lines():
                             if chunk:
+                                if chunk.startswith('data: ') and chunk[6:].strip() != '[DONE]':
+                                    try:
+                                        data = json.loads(chunk[6:])
+                                        if data.get('error'):
+                                            self.stream_metadata.update(status_code=502, error=str(data['error']))
+                                        if data.get('usage'):
+                                            self.stream_metadata['tokens'] = self.calculate_tokens(request_data, data)
+                                        for choice in data.get('choices', []):
+                                            completion_text += choice.get('delta', {}).get('content') or ''
+                                    except (ValueError, TypeError, AttributeError):
+                                        pass
                                 yield chunk + "\n"
+                        if 'tokens' not in self.stream_metadata:
+                            self.stream_metadata['tokens'] = self.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})
 
             except Exception as e:
+                self.stream_metadata.update(status_code=502, error=str(e))
                 yield f'data: {{"error": "{str(e)}"}}\n\n'
                 yield "data: [DONE]\n\n"
 
+            finally:
+                self.stream_metadata["latency_ms"] = int((time.time() - start_time) * 1000)
+
         return generate()
 
-    def _record_usage_failure(
-        self,
-        user_id: str,
-        key_id: str,
-        channel_id: Optional[str],
-        model: str,
-        status_code: int,
-        error: str
-    ) -> None:
-        """记录失败日志（不扣 quota）"""
-        log_id = f"log_{secrets.token_hex(8)}"
-        usage_log = UsageLog(
-            log_id=log_id,
-            user_id=user_id,
-            key_id=key_id,
-            channel_id=channel_id,
-            model=model,
-            total_tokens=0,
-            latency_ms=0,
-            status_code=status_code,
-            error_message=error
-        )
-        self.db.add(usage_log)
+    def capture_usage_attribution(self, key_id: str):
+        """保存请求开始时的归属，防止调用期间编辑 Key 改写历史。"""
+        if key_id not in self.usage_attribution:
+            key = self.db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
+            project_id = key.project_id if key and key.project_id else DEFAULT_PROJECT_ID
+            project = self.db.query(Project).filter(Project.project_id == project_id).first()
+            self.usage_attribution[key_id] = {
+                "project_id": project_id,
+                "department_id": project.dept_id if project else DEFAULT_DEPARTMENT_ID,
+            }
+        return self.usage_attribution[key_id]
+
+    def _usage_cost(self, model_id, channel_id, tokens, status_code):
+        if status_code != 200:
+            return Decimal('0')
+        model = self.db.query(Model).filter(Model.model_id == model_id).first()
+        if not model and channel_id:
+            model = self.db.query(Model).join(ModelChannel).filter(
+                ModelChannel.channel_id == channel_id, ModelChannel.upstream_model == model_id,
+            ).first()
+        if not model:
+            return Decimal('0')
+        if getattr(model.price_type, 'value', model.price_type) == 'request':
+            return Decimal(model.price_per_request or 0)
+        return (Decimal(tokens.get('prompt_tokens', 0)) * Decimal(model.price_per_1k_input or 0)
+                + Decimal(tokens.get('completion_tokens', 0)) * Decimal(model.price_per_1k_output or 0)) / 1000
+
+    def _record_usage_failure(self, user_id, key_id, channel_id, model, status_code, error):
+        """失败记录使用同一归因路径，费用为零。"""
+        self.record_usage(user_id, key_id, channel_id, model, {}, 0, status_code, error)
         self.db.commit()
 
     def record_usage(
-        self,
-        user_id: str,
-        key_id: str,
-        channel_id: str,
-        model: str,
-        tokens: Dict[str, int],
-        latency_ms: int,
-        status_code: int,
-        error_message: Optional[str] = None
+        self, user_id: str, key_id: str, channel_id: Optional[str], model: str,
+        tokens: Dict[str, int], latency_ms: int, status_code: int,
+        error_message: Optional[str] = None,
+        attribution: Optional[Dict[str, str]] = None,
     ) -> None:
-        """记录用量日志"""
-        log_id = f"log_{secrets.token_hex(8)}"
-        
+        """记录归因和费用快照；字段不会随项目归属或价格变化重算。"""
         usage_log = UsageLog(
-            log_id=log_id,
-            user_id=user_id,
-            key_id=key_id,
-            channel_id=channel_id,
-            model=model,
+            log_id=f"log_{secrets.token_hex(8)}", user_id=user_id, key_id=key_id,
+            channel_id=channel_id, model=model,
+            **(attribution or self.capture_usage_attribution(key_id)),
+            cost_usd=self._usage_cost(model, channel_id, tokens, status_code),
             prompt_tokens=tokens.get("prompt_tokens", 0),
             completion_tokens=tokens.get("completion_tokens", 0),
             total_tokens=tokens.get("total_tokens", 0),
-            latency_ms=latency_ms,
-            status_code=status_code,
-            error_message=error_message
+            latency_ms=latency_ms, status_code=status_code, error_message=error_message,
         )
-        
         self.db.add(usage_log)
 
     def calculate_tokens(self, request_data: Dict[str, Any], response_data: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
         """计算Token数量（估算）"""
+        usage = response_data.get('usage') if response_data else None
+        if usage and ('prompt_tokens' in usage or 'completion_tokens' in usage):
+            prompt = int(usage.get('prompt_tokens', 0) or 0)
+            completion = int(usage.get('completion_tokens', 0) or 0)
+            return {'prompt_tokens': prompt, 'completion_tokens': completion,
+                    'total_tokens': int(usage.get('total_tokens', prompt + completion) or 0)}
         prompt_tokens = 0
         completion_tokens = 0
         

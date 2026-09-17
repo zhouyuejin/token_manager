@@ -16,3 +16,6 @@ from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.notification import Notification, NotificationType
 from app.models.refresh_token import RefreshToken
+
+from app.models.organization import Department
+from app.models.project import Project, UserProject

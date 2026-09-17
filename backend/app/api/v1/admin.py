@@ -9,7 +9,7 @@ import asyncio
 import json
 from typing import Optional, List, Any
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import func, and_
+from sqlalchemy import case, func, and_
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -182,6 +182,7 @@ def _apply_channel_update(channel: Channel, data: ChannelUpdate) -> dict:
 async def get_admin_usage_stats(
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    project_id: Optional[str] = Query(None, description="项目ID"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -198,6 +199,9 @@ async def get_admin_usage_stats(
         func.date(UsageLog.created_at) <= end_date
     )
     
+    if project_id:
+        base_filter = and_(base_filter, UsageLog.project_id == project_id)
+
     total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(base_filter).scalar() or 0
     total_requests = db.query(UsageLog).filter(base_filter).count()
     avg_latency = db.query(func.avg(UsageLog.latency_ms)).filter(base_filter).scalar() or 0
@@ -232,8 +236,9 @@ async def get_admin_usage_stats(
     model_stats = db.query(
         UsageLog.model,
         func.sum(UsageLog.total_tokens).label('tokens'),
-        func.sum(UsageLog.prompt_tokens).label('prompt_tokens'),
-        func.sum(UsageLog.completion_tokens).label('completion_tokens'),
+        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.prompt_tokens), else_=0)).label('prompt_tokens'),
+        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
+        func.sum(UsageLog.cost_usd).label('saved_cost'),
         func.count(UsageLog.id).label('requests')
     ).filter(base_filter).group_by(UsageLog.model).all()
     
@@ -252,20 +257,21 @@ async def get_admin_usage_stats(
         upstream_to_model_id = {up: mid for up, mid in channel_mappings}
     
     # 获取所有需要查询的 model_id
-    target_model_ids = list(set(upstream_to_model_id.values()))
+    target_model_ids = list(set(upstream_to_model_id.values()) | set(upstream_models))
     
     model_info = {m.model_id: m for m in db.query(Model).filter(Model.model_id.in_(target_model_ids)).all()} if target_model_ids else {}
     
     by_model = []
     for s in model_stats:
         # 通过 upstream_model 找到对应的 model_id，再找到模型信息
-        internal_model_id = upstream_to_model_id.get(s.model)
+        internal_model_id = s.model if s.model in model_info else upstream_to_model_id.get(s.model)
         info = model_info.get(internal_model_id) if internal_model_id else None
         if info:
             cost = (float(s.prompt_tokens or 0) / 1000 * float(info.price_per_1k_input or 0) + 
                     float(s.completion_tokens or 0) / 1000 * float(info.price_per_1k_output or 0))
         else:
             cost = 0
+        cost += float(s.saved_cost or 0)
         by_model.append({"model": s.model, "display_name": info.display_name if info else None, "tokens": s.tokens or 0, "requests": s.requests or 0, "cost": round(cost, 4)})
     
     # 按日统计

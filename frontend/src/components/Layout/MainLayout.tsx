@@ -51,6 +51,8 @@ const getPageTitle = (pathname: string): string => {
     "/stats": "仪表盘",
     "/notifications": "消息通知",
     "/admin/users": "用户管理",
+    "/admin/projects": "项目管理",
+    "/admin/departments": "部门管理",
     "/admin/channels": "渠道管理",
     "/admin/models": "模型管理",
     "/admin/model-groups": "模型分组",
@@ -164,6 +166,8 @@ const MainLayout = () => {
             icon: <AppstoreOutlined />,
             label: "管理后台",
             children: [
+              { key: "/admin/departments", icon: <TeamOutlined />, label: "部门管理" },
+              { key: "/admin/projects", icon: <AppstoreOutlined />, label: "项目管理" },
               {
                 key: "/admin/users",
                 icon: <TeamOutlined />,

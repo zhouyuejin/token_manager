@@ -28,6 +28,7 @@ from app.services.api_key_freeze_service import reset_api_key_errors
 from app.services.operation_log_service import record_operation
 from app.services.proxy_service import ProxyService, create_proxy_service
 from app.utils.request import extract_client_ip
+from app.services.project_service import require_user_project
 from datetime import datetime
 
 router = APIRouter()
@@ -53,9 +54,17 @@ def _parse_ip_whitelist(value: Optional[str]) -> List[str]:
         return []
 
 
+def _project_fields(key):
+    project = key.project
+    return {"project_id": key.project_id, "project_name": project.name if project else None,
+            "department_id": project.dept_id if project else None,
+            "department_name": project.department.name if project else None}
+
+
 def _api_key_response(key: ApiKey, admin: bool = False):
     response_cls = ApiKeyAdminResponse if admin else ApiKeyResponse
     return response_cls(
+        **_project_fields(key),
         key_id=key.key_id,
         user_id=key.user_id,
         api_key="tmk_***" + key.api_key[-6:],
@@ -109,6 +118,7 @@ async def create_api_key(
     
     权限由用户所属模型分组决定，不在 API Key 层独立配置。
     """
+    require_user_project(db, current_user.user_id, api_key_data.project_id)
     key_id = generate_key_id()
     api_key = generate_api_key()
 
@@ -117,6 +127,7 @@ async def create_api_key(
         user_id=current_user.user_id,
         api_key=api_key,
         key_name=api_key_data.name,
+        project_id=api_key_data.project_id,
         ip_whitelist=json.dumps(api_key_data.ip_whitelist or []),
         expires_at=api_key_data.expires_at,
         qps_limit=api_key_data.qps_limit or 0,
@@ -138,11 +149,13 @@ async def create_api_key(
         target_id=key_id,
         detail={
             "name": new_api_key.key_name,
+            "project_id": new_api_key.project_id,
         },
         ip_address=extract_client_ip(request),
     )
 
     return ApiKeyCreatedResponse(
+        **_project_fields(new_api_key),
         key_id=new_api_key.key_id,
         api_key=new_api_key.api_key,
         name=new_api_key.key_name,
@@ -177,6 +190,10 @@ async def update_api_key(
         )
 
     changed = {}
+    if "project_id" in api_key_data.model_fields_set:
+        require_user_project(db, api_key.user_id, api_key_data.project_id)
+        changed["project_id"] = api_key_data.project_id
+        api_key.project_id = api_key_data.project_id
     if api_key_data.name is not None:
         changed["name"] = api_key_data.name
         api_key.key_name = api_key_data.name
@@ -321,6 +338,7 @@ async def rotate_api_key(
     )
 
     return ApiKeyCreatedResponse(
+        **_project_fields(api_key),
         key_id=api_key.key_id,
         api_key=api_key.api_key,
         name=api_key.key_name,
@@ -408,12 +426,14 @@ async def admin_create_api_key(
     
     # 如果指定了 user_id，则为该用户创建；否则为管理员自己创建
     target_user_id = api_key_data.user_id or current_user.user_id
+    require_user_project(db, target_user_id, api_key_data.project_id)
 
     new_api_key = ApiKey(
         key_id=key_id,
         user_id=target_user_id,
         api_key=api_key,
         key_name=api_key_data.name,
+        project_id=api_key_data.project_id,
         ip_whitelist=json.dumps(api_key_data.ip_whitelist or []),
         expires_at=api_key_data.expires_at,
         qps_limit=api_key_data.qps_limit or 0,
@@ -435,12 +455,14 @@ async def admin_create_api_key(
         target_id=key_id,
         detail={
             "name": new_api_key.key_name,
+            "project_id": new_api_key.project_id,
             "target_user_id": target_user_id,
         },
         ip_address=extract_client_ip(request),
     )
 
     return ApiKeyCreatedResponse(
+        **_project_fields(new_api_key),
         key_id=new_api_key.key_id,
         api_key=new_api_key.api_key,
         name=new_api_key.key_name,
@@ -492,6 +514,10 @@ async def admin_update_api_key(
         )
 
     changed = {}
+    if "project_id" in api_key_data.model_fields_set:
+        require_user_project(db, api_key.user_id, api_key_data.project_id)
+        changed["project_id"] = api_key_data.project_id
+        api_key.project_id = api_key_data.project_id
     if api_key_data.name is not None and api_key.key_name != api_key_data.name:
         changed["name"] = api_key_data.name
         api_key.key_name = api_key_data.name
@@ -617,6 +643,7 @@ async def admin_rotate_api_key(
     )
 
     return ApiKeyCreatedResponse(
+        **_project_fields(api_key),
         key_id=api_key.key_id,
         api_key=api_key.api_key,
         name=api_key.key_name,
