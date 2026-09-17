@@ -10,7 +10,8 @@ import logging
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Request, HTTPException
-from fastapi.responses import StreamingResponse
+from app.api.streaming import QuotaStreamingResponse
+from app.services.quota_reservation_service import estimate_request
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -132,15 +133,10 @@ async def chat_completions(
     if not group_check["allowed"]:
         raise HTTPException(status_code=403, detail=group_check["message"])
 
-    # 2. 检查额度
-    # 估算本次请求所需 tokens：prompt 字符数/4 + 用户指定的 max_tokens。
-    # max_tokens 为 None 时（未指定）用 100 作为短回复的保守兜底，避免小 quota 用户被拒。
-    prompt_chars = sum(len(m.content or "") for m in chat_request.messages)
-    estimated_tokens = (prompt_chars // 4) + (chat_request.max_tokens if chat_request.max_tokens is not None else 100)
-    quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
-    if not quota_check["allowed"]:
-        record_api_key_error(db, api_key, "quota")
-        raise HTTPException(status_code=403, detail=quota_check["message"])
+    # 限流和预扣采用同一份请求及保守估算。
+    request_data = chat_request.model_dump(exclude={"stream"})
+    request_data = {k: v for k, v in request_data.items() if v is not None}
+    estimated_tokens = sum(estimate_request(request_data))
 
     rate_limit_redis = get_rate_limit_redis_client()
     rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, chat_request.model, estimated_tokens)
@@ -154,20 +150,28 @@ async def chat_completions(
             headers={"Retry-After": str(max(1, math.ceil(retry_after_ms / 1000)))},
         )
     
-    # 3. 构建请求数据
-    request_data = chat_request.model_dump(exclude={"stream"})
-    request_data = {k: v for k, v in request_data.items() if v is not None}
+    try:
+        proxy_service.reserve_quota(user, api_key, chat_request.model, request_data)
+    except BaseException:
+        release_proxy_concurrency(rate_limit_redis, concurrency_key)
+        raise
     
     # 4. 转发请求（带 failover）
     if chat_request.stream:
         # 流式响应
-        stream_gen = proxy_service.forward_stream(chat_request.model, user, api_key, request_data)
+        try:
+            stream_gen = proxy_service.forward_stream(chat_request.model, user, api_key, request_data)
+        except BaseException:
+            proxy_service.release_reservation()
+            release_proxy_concurrency(rate_limit_redis, concurrency_key)
+            raise
         
         _user_id = user.user_id
         _key_id = api_key.key_id
         _model = chat_request.model
         _concurrency_key = concurrency_key
         _rate_limit_redis = rate_limit_redis
+        _reservation_id = proxy_service.reservation_id
         
         def sync_generator():
             from app.core.database import SessionLocal
@@ -194,8 +198,10 @@ async def chat_completions(
                 # 流结束时记录并扣减
                 try:
                     service = create_proxy_service(db)
+                    service.reservation_id = _reservation_id
                     metadata = proxy_service.stream_metadata
-                    tokens = (metadata.get('tokens') or proxy_service.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})) if metadata.get('status_code') == 200 else {}
+                    succeeded = metadata.get('status_code') == 200 and metadata.get('completed')
+                    tokens = (metadata.get('tokens') or proxy_service.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})) if succeeded else {}
                     if not metadata.get('recorded'):
                         service.record_usage(
                             user_id=_user_id,
@@ -204,14 +210,14 @@ async def chat_completions(
                             model=_model,
                             tokens=tokens,
                             latency_ms=metadata.get("latency_ms", 0),
-                            status_code=metadata.get("status_code", 502),
-                            error_message=metadata.get("error"),
+                            status_code=200 if succeeded else (metadata.get("status_code") if metadata.get("status_code") != 200 else 499),
+                            error_message=metadata.get("error") or (None if succeeded else "流式请求未完成"),
                             attribution=proxy_service.usage_attribution[_key_id]
                         )
                         import asyncio
                         user_obj = db.query(User).filter(User.user_id == _user_id).first()
                         api_key_obj = db.query(ApiKey).filter(ApiKey.key_id == _key_id).first()
-                        if user_obj and api_key_obj and metadata.get("status_code") == 200:
+                        if user_obj and api_key_obj and succeeded:
                             asyncio.run(service.deduct_quota(user_obj, api_key_obj, tokens))
                         else:
                             db.commit()
@@ -219,10 +225,14 @@ async def chat_completions(
                     db.rollback()
                     logger.exception("流式用量归因记录失败，key_id=%s", _key_id)
                 finally:
-                    db.close()
-                    release_proxy_concurrency(_rate_limit_redis, _concurrency_key)
+                    try:
+                        stream_gen.close()
+                    finally:
+                        db.close()
         
-        return StreamingResponse(sync_generator(), media_type="text/event-stream")
+        return QuotaStreamingResponse(
+            sync_generator(), db.get_bind(), _reservation_id,
+            on_close=lambda: release_proxy_concurrency(_rate_limit_redis, _concurrency_key))
     else:
         # 普通响应
         try:
@@ -265,7 +275,10 @@ async def chat_completions(
                     detail=result.get("error", "请求失败")
                 )
         finally:
-            release_proxy_concurrency(rate_limit_redis, concurrency_key)
+            try:
+                proxy_service.release_reservation()
+            finally:
+                release_proxy_concurrency(rate_limit_redis, concurrency_key)
 
 
 # ========== v1 前缀路由 ==========

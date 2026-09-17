@@ -261,6 +261,13 @@ def send_daily_reports():
 def setup_scheduler():
     """设置定时任务"""
     scheduler.add_job(
+        expire_quota_reservations,
+        trigger=IntervalTrigger(seconds=60),
+        id='expire_quota_reservations',
+        name='释放过期预扣',
+        replace_existing=True,
+    )
+    scheduler.add_job(
         sync_all_channels,
         trigger=IntervalTrigger(minutes=5),
         id="sync_all_channels",
@@ -285,6 +292,12 @@ def setup_scheduler():
     )
     
     logger.info("定时任务已设置")
+
+
+def expire_quota_reservations():
+    from app.services.quota_reservation_service import QuotaReservationService
+    with SessionLocal() as db:
+        QuotaReservationService(db).expire()
 
 
 def start_scheduler():

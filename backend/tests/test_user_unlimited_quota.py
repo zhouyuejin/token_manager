@@ -105,7 +105,7 @@ def test_unlimited_user_passes_check_quota():
 # Test 3: deduct_quota 不覆盖 unlimited sentinel（quota = -1 保持不变）
 # =============================================================================
 
-def test_deduct_quota_does_not_overwrite_unlimited_sentinel():
+def test_deduct_quota_does_not_overwrite_unlimited_sentinel(db):
     """
     deduct_quota 只累加 quota_used，不修改 quota。
     对于 unlimited 用户（quota = -1），sentinel 值不被覆盖。
@@ -121,24 +121,23 @@ def test_deduct_quota_does_not_overwrite_unlimited_sentinel():
         quota_used=100,
     )
 
-    mock_key = MagicMock()
-    mock_key.last_used_at = None
-
-    # Mock db.commit 避免真实数据库操作
-    mock_db = MagicMock()
-    svc = ProxyService(mock_db)
+    from app.models.api_key import ApiKey
+    key = ApiKey(key_id='unlimited', user_id='u3', api_key='unlimited', key_name='test')
+    db.add_all([user, key])
+    db.commit()
+    svc = ProxyService(db)
 
     # deduct_quota 是 async，手动运行 event loop
     asyncio.get_event_loop().run_until_complete(
-        svc.deduct_quota(user, mock_key, {"total_tokens": 500})
+        svc.deduct_quota(user, key, {"total_tokens": 500})
     )
 
     # 验证 quota 未被修改（unlimited sentinel 保持 -1）
     assert user.quota == -1
     # 验证 quota_used 正常累加
     assert user.quota_used == 100 + 500
-    # 验证 commit 被调用（扣减逻辑执行过）
-    mock_db.commit.assert_called_once()
+    db.refresh(user)
+    assert user.quota_used == 600
 
 
 # =============================================================================

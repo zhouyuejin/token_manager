@@ -44,6 +44,29 @@ class ProxyService:
         self.db = db
         self.usage_attribution = {}
         self.stream_metadata = {}
+        self.reservation_id = None
+
+    def reserve_quota(self, user, api_key, model, request_data):
+        from app.services.quota_reservation_service import QuotaReservationService
+        from fastapi import HTTPException
+        try:
+            self.reservation_id = QuotaReservationService(self.db).reserve(
+                user, api_key, model, request_data, self.capture_usage_attribution(api_key.key_id))
+        except HTTPException as exc:
+            if exc.status_code == 403:
+                record_api_key_error(self.db, api_key, 'quota')
+            raise
+        return self.reservation_id
+
+    def release_reservation(self):
+        from app.services.quota_reservation_service import QuotaReservationService
+        if self.reservation_id:
+            self.db.rollback()
+            QuotaReservationService(self.db).release(self.reservation_id)
+
+    def reservation_lease(self):
+        from app.services.quota_reservation_service import QuotaReservationService
+        return QuotaReservationService(self.db).lease(self.reservation_id)
     
     def verify_api_key(self, api_key: str) -> Optional[ApiKey]:
         """验证API Key"""
@@ -451,7 +474,8 @@ class ProxyService:
         for ch, mc, key in candidates:
             attempted_channels.append(ch.channel_id)
             try:
-                result = self._forward_one(ch, mc.upstream_model, key, request_data)
+                with self.reservation_lease():
+                    result = self._forward_one(ch, mc.upstream_model, key, request_data)
                 
                 if result["success"]:
                     record_api_key_success(api_key)
@@ -624,7 +648,7 @@ class ProxyService:
         def generate():
             completion_text = ""
             try:
-                with httpx.Client(timeout=ch.timeout) as client:
+                with self.reservation_lease(), httpx.Client(timeout=ch.timeout) as client:
                     request_data["model"] = upstream_model
                     request_data["stream"] = True
                     upstream_url = get_upstream_url(ch, model=upstream_model)
@@ -675,6 +699,7 @@ class ProxyService:
                                 yield chunk + "\n"
                         if 'tokens' not in self.stream_metadata:
                             self.stream_metadata['tokens'] = self.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})
+                        self.stream_metadata['completed'] = True
 
             except Exception as e:
                 self.stream_metadata.update(status_code=502, error=str(e))
@@ -725,11 +750,18 @@ class ProxyService:
         attribution: Optional[Dict[str, str]] = None,
     ) -> None:
         """记录归因和费用快照；字段不会随项目归属或价格变化重算。"""
+        usage_cost = self._usage_cost(model, channel_id, tokens, status_code)
+        if self.reservation_id:
+            from app.models.quota_reservation import QuotaReservation
+            from app.services.quota_reservation_service import cost
+            reservation = self.db.get(QuotaReservation, self.reservation_id)
+            usage_cost = cost(reservation, tokens) if status_code == 200 else Decimal('0')
+            attribution = {'project_id': reservation.project_id, 'department_id': reservation.department_id}
         usage_log = UsageLog(
             log_id=f"log_{secrets.token_hex(8)}", user_id=user_id, key_id=key_id,
             channel_id=channel_id, model=model,
             **(attribution or self.capture_usage_attribution(key_id)),
-            cost_usd=self._usage_cost(model, channel_id, tokens, status_code),
+            cost_usd=usage_cost,
             prompt_tokens=tokens.get("prompt_tokens", 0),
             completion_tokens=tokens.get("completion_tokens", 0),
             total_tokens=tokens.get("total_tokens", 0),
@@ -772,11 +804,16 @@ class ProxyService:
     ) -> None:
         """扣减额度"""
         total_tokens = tokens.get("total_tokens", 0)
-        
-        user.quota_used += total_tokens
-        api_key.last_used_at = datetime.now()
-        
-        self.db.commit()
+        if self.reservation_id:
+            from app.services.quota_reservation_service import QuotaReservationService
+            if not QuotaReservationService(self.db).commit(self.reservation_id, tokens):
+                raise RuntimeError('预扣状态已终结，无法结算')
+        else:
+            from sqlalchemy import update
+            self.db.execute(update(User).where(User.user_id == user.user_id).values(quota_used=User.quota_used + total_tokens))
+            api_key.last_used_at = datetime.now()
+            self.db.commit()
+        self.db.refresh(user)
         
         quota_remain = user.quota - user.quota_used
         if user.quota > 0 and quota_remain / user.quota <= 0.2 and user.quota_low_alert:
