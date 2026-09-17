@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Drawer, Collapse, Button, Tag } from 'antd'
+import { Drawer, Collapse, Button, Tag, Alert } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { Link } from 'react-router-dom'
+import { useAuthStore } from '../store/auth'
 import type { Notification } from '../store/notification'
 
 // 通知类型颜色 / 图标 / 中文名映射。
@@ -66,6 +68,7 @@ export default function NotificationDetailDrawer({
   onDelete,
 }: NotificationDetailDrawerProps) {
   const { token, isDark } = useThemeToken()
+  const isAdmin = useAuthStore(state => state.user?.role === 'admin')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [markLoading, setMarkLoading] = useState(false)
   // 记录已经自动标记过的 notif_id，防止 React StrictMode 在开发态双调用 effect
@@ -109,6 +112,11 @@ export default function NotificationDetailDrawer({
     }
   }
 
+  let freezeMetadata = notification?.metadata
+  if (typeof freezeMetadata === 'string') {
+    try { freezeMetadata = JSON.parse(freezeMetadata) } catch { freezeMetadata = null }
+  }
+  const isFreezeNotification = !!(freezeMetadata?.key_id && freezeMetadata?.frozen_at)
   const typeConf = notification ? getTypeConfig(notification.type) : null
   const metadataJson = notification ? formatMetadata(notification.metadata) : null
   const showMetadataCollapse = notification ? hasMetadata(notification.metadata) : false
@@ -220,6 +228,9 @@ export default function NotificationDetailDrawer({
               : '未读'}
           </div>
 
+          {isFreezeNotification && <Alert type="warning" showIcon message={freezeMetadata.reason || 'API Key 已自动冻结'}
+            description={<><div>{isAdmin ? '请核查调用来源、凭证和 IP 白名单，修正异常后在全部 Key 视图解除冻结。' : '请检查客户端凭证和 IP 白名单，联系管理员核查并解除冻结。'}</div><Link to="/api-keys" onClick={onClose}>前往 API Key 管理</Link></>}
+            style={{ marginBottom: 16 }} />}
           {/* 内容 */}
           <div
             style={{

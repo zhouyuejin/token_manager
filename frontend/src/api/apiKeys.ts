@@ -55,3 +55,6 @@ export const rotateApiKey = (keyId: string) =>
 
 export const unfreezeApiKey = (keyId: string) =>
   put(`/api-keys/admin/${keyId}/unfreeze`, {})
+
+export const updateAdminApiKey = (keyId: string, data: Partial<CreateApiKeyParams>) =>
+  put(`/api-keys/admin/${keyId}`, data)

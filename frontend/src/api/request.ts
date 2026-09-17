@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } fro
 import { $message } from '../utils/message'
 import { useAuthStore } from '../store/auth'
 import { refresh as refreshApi } from './auth'
+import { getRequestErrorMessage } from '../utils/security'
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -92,7 +93,7 @@ request.interceptors.response.use(
         return request.request(config)
       } catch {
         await useAuthStore.getState().logout()
-        $message.error('登录已过期，请重新登录')
+        $message.error(getRequestErrorMessage(error.response?.data, '登录已过期，请重新登录'))
         return Promise.reject(error)
       }
     }
@@ -100,28 +101,16 @@ request.interceptors.response.use(
     // 已经是重试后的 401 → 直接登出
     if (status === 401) {
       await useAuthStore.getState().logout()
-      $message.error('登录已过期，请重新登录')
+      $message.error(getRequestErrorMessage(error.response?.data, '登录已过期，请重新登录'))
       return Promise.reject(error)
     }
 
     if (status === 403) {
-      $message.error('没有权限')
+      $message.error(getRequestErrorMessage(error.response?.data, '没有权限'))
     } else if (status === 429) {
-      $message.error('请求过于频繁，请稍后重试')
+      $message.error(getRequestErrorMessage(error.response?.data, '请求过于频繁，请稍后重试'))
     } else if (error.response?.data) {
-      // Pydantic 422 把 detail 写成 [{loc, msg, type, ...}, ...] 数组，
-      // 不能直接当 React 节点渲染（会触发 "Objects are not valid as a React child"）。
-      const detail = (data: any): string => {
-        if (typeof data?.detail === 'string') return data.detail
-        if (Array.isArray(data?.detail)) {
-          return data.detail
-            .map((e: any) => `${(e?.loc || []).join('.')}: ${e?.msg || ''}`)
-            .filter(Boolean)
-            .join('; ')
-        }
-        return ''
-      }
-      $message.error(detail(error.response.data) || error.message || '网络错误')
+      $message.error(getRequestErrorMessage(error.response.data, error.message || '网络错误'))
     } else {
       $message.error(error.message || '网络错误')
     }

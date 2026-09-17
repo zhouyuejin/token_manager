@@ -3,21 +3,31 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
 import {
   Table, Button, Tag, Space, Modal, Form, Input, DatePicker, InputNumber,
-  Popconfirm, Segmented
+  Popconfirm, Segmented, Select, Drawer, Descriptions, Alert
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined } from '@ant-design/icons'
-import { createApiKey, deleteApiKey, updateApiKey, revokeApiKey, rotateApiKey, unfreezeApiKey, ApiKey } from '../api/apiKeys'
+import { createApiKey, deleteApiKey, updateApiKey, updateAdminApiKey, revokeApiKey, rotateApiKey, unfreezeApiKey, updateApiKeyStatus, ApiKey } from '../api/apiKeys'
 import { useAuthStore } from '../store/auth'
 import { useSwrData } from '../hooks/useSwr'
 import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhitelist'
 import dayjs from 'dayjs'
+import { getApiKeyStatus, maskKey } from '../utils/security'
 
 const ApiKeysPage = () => {
   const isAdmin = useAuthStore(state => state.user?.role === 'admin')
   const [adminView, setAdminView] = useState(false)
   // 使用 SWR 获取 API Keys
-  const { data: keysData, isLoading, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>(adminView && isAdmin ? '/api-keys/admin' : '/api-keys')
-  const keysList = keysData?.items || []
+  const { data: keysData, isLoading, error: keysError, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>(adminView && isAdmin ? '/api-keys/admin' : '/api-keys', { refreshInterval: 30000, revalidateOnFocus: true })
+  const [userFilter, setUserFilter] = useState<string>()
+  const [statusFilter, setStatusFilter] = useState<string>()
+  const [detailKeyId, setDetailKeyId] = useState<string | null>(null)
+  const allKeys = keysData?.items || []
+  const keysList = allKeys.filter(key => !(adminView && isAdmin) ||
+    ((!userFilter || key.user_id === userFilter) && (!statusFilter || getApiKeyStatus(key) === statusFilter)))
+  const detailKey = allKeys.find(key => key.key_id === detailKeyId)
+  const statusLabels: Record<string, string> = { active: '启用', disabled: '禁用', frozen: '自动冻结', revoked: '已吊销', expired: '已过期' }
+  const formatTime = (value?: string | null) => value ? dayjs.utc(value).local().format('YYYY-MM-DD HH:mm:ss') : '—'
+
   const [modalVisible, setModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
@@ -57,7 +67,7 @@ const ApiKeysPage = () => {
     editForm.setFieldsValue({
       name: record.name,
       ip_whitelist: formatApiKeyWhitelist(record.ip_whitelist),
-      expires_at: record.expires_at ? dayjs(record.expires_at) : null,
+      expires_at: record.expires_at ? dayjs.utc(record.expires_at).local() : null,
       qps_limit: record.qps_limit,
       rpm_limit: record.rpm_limit,
       tpm_limit: record.tpm_limit,
@@ -69,7 +79,7 @@ const ApiKeysPage = () => {
   const handleUpdate = async (values: any) => {
     if (!editingKey) return
     try {
-      await updateApiKey(editingKey.key_id, {
+      await (adminView && isAdmin ? updateAdminApiKey : updateApiKey)(editingKey.key_id, {
         name: values.name,
         ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
         expires_at: values.expires_at?.toISOString?.() || null,
@@ -131,17 +141,20 @@ const ApiKeysPage = () => {
     }
   }
 
+  const handleStatusChange = async (record: ApiKey) => {
+    try {
+      await updateApiKeyStatus(record.key_id, record.status === 'active' ? 'disabled' : 'active')
+      message.success('状态已更新')
+      fetchKeys()
+    } catch { /* 统一请求拦截器显示错误 */ }
+  }
+
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key)
     message.success('已复制到剪贴板')
   }
 
-  const getLifecycleStatus = (record: ApiKey) => {
-    if (record.revoked_at || record.status === 'revoked') return 'revoked'
-    if (record.frozen_at) return 'frozen'
-    if (record.expires_at && dayjs(record.expires_at).isBefore(dayjs())) return 'expired'
-    return record.status
-  }
+  const getLifecycleStatus = getApiKeyStatus
 
   const renderRateLimits = (record: ApiKey) => {
     const limits = [
@@ -186,7 +199,7 @@ const ApiKeysPage = () => {
           color: token.colorTextSecondary,
           fontSize: 13,
         }}>
-          {key.substring(0, 10)}...{key.substring(key.length - 4)}
+          {maskKey(key)}
         </span>
       )
     },
@@ -196,13 +209,6 @@ const ApiKeysPage = () => {
       key: 'status',
       render: (_: string, record: ApiKey) => {
         const status = getLifecycleStatus(record)
-        const labelMap: Record<string, string> = {
-          active: '启用',
-          disabled: '禁用',
-          frozen: '自动冻结',
-          revoked: '已吊销',
-          expired: '已过期',
-        }
         const success = status === 'active'
         return (
           <Tag
@@ -213,13 +219,13 @@ const ApiKeysPage = () => {
               border: 'none',
             }}
           >
-            {labelMap[status] || status}
+            {statusLabels[status] || status}
           </Tag>
         )
       }
     },
     {
-      title: '冻结信息',
+      title: '安全原因',
       key: 'freeze_info',
       render: (_: unknown, record: ApiKey) => record.frozen_at ? (
         <Space direction="vertical" size={2}>
@@ -228,7 +234,7 @@ const ApiKeysPage = () => {
             {dayjs.utc(record.frozen_at).local().format('YYYY-MM-DD HH:mm:ss')}
           </span>
         </Space>
-      ) : <span style={{ color: token.colorTextSecondary }}>—</span>
+      ) : <span style={{ color: token.colorTextSecondary }}>{record.revoked_reason || (getLifecycleStatus(record) === 'expired' ? '已超过过期时间' : '—')}</span>
     },
     {
       title: 'IP白名单',
@@ -275,17 +281,28 @@ const ApiKeysPage = () => {
       )
     },
     {
+      title: '最近使用',
+      key: 'last_used',
+      render: (_: unknown, record: ApiKey) => <Space direction="vertical" size={2}><span>{formatTime(record.last_used_at)}</span><span>{record.last_used_ip || '—'}</span></Space>
+    },
+    {
+      title: '详情',
+      key: 'detail',
+      render: (_: unknown, record: ApiKey) => <Button type="link" onClick={() => setDetailKeyId(record.key_id)}>查看详情</Button>
+    },
+    {
       title: '操作',
       key: 'action',
       render: (_: any, record: ApiKey) => adminView && isAdmin ? (
-        record.status === 'disabled' && record.frozen_at ? (
+        <Space><Button type="text" onClick={() => handleEdit(record)}>编辑安全配置</Button>
+        {record.status === 'disabled' && record.frozen_at ? (
           <Popconfirm
             title="确认解除冻结？请先核查异常调用来源。"
             onConfirm={() => handleUnfreeze(record.key_id)}
           >
             <Button type="text">解除冻结</Button>
           </Popconfirm>
-        ) : <span style={{ color: token.colorTextSecondary }}>—</span>
+        ) : null}</Space>
       ) : (
         <Space>
           <Button 
@@ -295,6 +312,9 @@ const ApiKeysPage = () => {
           >
             编辑
           </Button>
+          <Popconfirm title={record.status === 'active' ? '确认禁用此 Key？' : '确认启用此 Key？'} onConfirm={() => handleStatusChange(record)}>
+            <Button type="text" disabled={!!record.frozen_at || getLifecycleStatus(record) === 'revoked'}>{record.status === 'active' ? '禁用' : '启用'}</Button>
+          </Popconfirm>
           <Popconfirm
             title="确认轮换此Key？旧密钥会立即失效。"
             onConfirm={() => handleRotate(record.key_id)}
@@ -307,7 +327,7 @@ const ApiKeysPage = () => {
             title="确认吊销此Key？吊销后不能再调用代理。"
             onConfirm={() => handleRevoke(record.key_id)}
           >
-            <Button type="text" icon={<StopOutlined />} danger>
+            <Button type="text" disabled={getLifecycleStatus(record) === 'revoked'} icon={<StopOutlined />} danger>
               吊销
             </Button>
           </Popconfirm>
@@ -352,7 +372,7 @@ const ApiKeysPage = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setModalVisible(true)}
+            onClick={() => { setNewKey(null); setNewKeyTitle('创建 API Key'); form.resetFields(); setModalVisible(true) }}
             style={{
               background: token.colorPrimary,
               border: 'none',
@@ -366,7 +386,15 @@ const ApiKeysPage = () => {
         </Space>
       </div>
 
+      {adminView && isAdmin && <Space wrap style={{ marginBottom: 16 }}>
+        <Select allowClear showSearch placeholder="按所属用户筛选" style={{ width: 240 }} value={userFilter} onChange={setUserFilter}
+          options={[...new Set(allKeys.map(key => key.user_id))].map(id => ({ label: id, value: id }))} />
+        <Select allowClear placeholder="按安全状态筛选" style={{ width: 180 }} value={statusFilter} onChange={setStatusFilter}
+          options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} />
+      </Space>}
+      {keysError && <Alert type="error" showIcon message="API Key 列表加载失败" description={<Button onClick={() => mutateKeys()}>重新加载</Button>} style={{ marginBottom: 16 }} />}
       <Table
+        scroll={{ x: 'max-content' }}
         columns={columns}
         dataSource={keysList}
         rowKey="key_id"
@@ -378,6 +406,29 @@ const ApiKeysPage = () => {
         }}
       />
 
+      <Drawer title="API Key 安全详情" open={!!detailKeyId} onClose={() => setDetailKeyId(null)} width={560}>
+        {detailKey && <>
+          {detailKey.frozen_at && <Alert type="error" showIcon message={detailKey.frozen_reason || '异常调用自动冻结'} description="请核查调用来源和客户端凭证，联系管理员解除冻结。" style={{ marginBottom: 16 }} />}
+          <Descriptions column={1} bordered>
+            <Descriptions.Item label="名称">{detailKey.name}</Descriptions.Item>
+            <Descriptions.Item label="Key ID">{detailKey.key_id}</Descriptions.Item>
+            <Descriptions.Item label="Key">{maskKey(detailKey.api_key)}</Descriptions.Item>
+            <Descriptions.Item label="所属用户">{detailKey.user_id}</Descriptions.Item>
+            <Descriptions.Item label="状态">{statusLabels[getLifecycleStatus(detailKey)] || detailKey.status}</Descriptions.Item>
+            <Descriptions.Item label="IP 白名单">{formatApiKeyWhitelist(detailKey.ip_whitelist) || '不限制'}</Descriptions.Item>
+            <Descriptions.Item label="过期时间">{detailKey.expires_at ? formatTime(detailKey.expires_at) : '永不过期'}</Descriptions.Item>
+            <Descriptions.Item label="吊销时间">{formatTime(detailKey.revoked_at)}</Descriptions.Item>
+            <Descriptions.Item label="吊销原因">{detailKey.revoked_reason || '—'}</Descriptions.Item>
+            <Descriptions.Item label="冻结时间">{formatTime(detailKey.frozen_at)}</Descriptions.Item>
+            <Descriptions.Item label="冻结原因">{detailKey.frozen_reason || '—'}</Descriptions.Item>
+            <Descriptions.Item label="最后使用时间">{formatTime(detailKey.last_used_at)}</Descriptions.Item>
+            <Descriptions.Item label="最后使用 IP">{detailKey.last_used_ip || '—'}</Descriptions.Item>
+            <Descriptions.Item label="User-Agent">{detailKey.last_used_user_agent || '—'}</Descriptions.Item>
+            {(['qps_limit', 'rpm_limit', 'tpm_limit', 'concurrency_limit'] as const).map((field, i) =>
+              <Descriptions.Item key={field} label={['QPS', 'RPM', 'TPM（估算 Token）', '并发'][i]}>{detailKey[field] || '不限制'}</Descriptions.Item>)}
+          </Descriptions>
+        </>}
+      </Drawer>
       {/* 创建Key弹窗 */}
       <Modal
         title={

@@ -8,6 +8,7 @@ export interface Channel {
   endpoint: string
   api_key: string // masked; full upstream key is never returned
   extra_keys?: string[] // masked values in responses; plaintext only in create/update payloads
+  extra_keys_revision?: string
   key_strategy?: 'round_robin' | 'random' | 'sequential'
   priority: number
   timeout: number
@@ -59,7 +60,7 @@ export const getChannels = () => get<{ total: number; items: Channel[] }>('/admi
 export const createChannel = (data: Partial<Channel>) =>
   post<Channel>('/admin/channels', data)
 
-export const updateChannel = (channelId: string, data: Partial<Channel>) =>
+export const updateChannel = (channelId: string, data: Partial<Channel> & { extra_key_updates?: Record<number, string | null> }) =>
   put(`/admin/channels/${channelId}`, data)
 
 export const deleteChannel = (channelId: string) =>

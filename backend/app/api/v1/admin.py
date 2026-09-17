@@ -4,6 +4,7 @@
 Channel (渠道) 和 Model (模型) 管理
 """
 import secrets
+import hashlib
 import asyncio
 import json
 from typing import Optional, List, Any
@@ -101,6 +102,7 @@ def _channel_response(channel: Channel, *, bound_models_count: Optional[int] = N
         endpoint=channel.endpoint,
         api_key=mask_secret(channel.api_key),
         extra_keys=_mask_extra_keys(channel.extra_keys),
+        extra_keys_revision=hashlib.sha256((channel.extra_keys or "").encode()).hexdigest(),
         key_strategy=channel.key_strategy,
         priority=channel.priority or 0,
         timeout=channel.timeout or 60,
@@ -128,7 +130,25 @@ def _channel_response(channel: Channel, *, bound_models_count: Optional[int] = N
 
 def _apply_channel_update(channel: Channel, data: ChannelUpdate) -> dict:
     changed = {}
+    updates = data.extra_key_updates
+    updated_keys = None
+    if updates:
+        revision = hashlib.sha256((channel.extra_keys or "").encode()).hexdigest()
+        if data.extra_keys_revision != revision:
+            raise HTTPException(status_code=409, detail="额外 Key 已被修改，请刷新页面后重试")
+        if data.extra_keys is not None:
+            raise HTTPException(status_code=400, detail="不能同时整体替换和逐项修改额外 Key")
+        keys = json.loads(channel.extra_keys) if channel.extra_keys else []
+        if any(index < 0 or index >= len(keys) for index in updates):
+            raise HTTPException(status_code=400, detail="额外 Key 索引无效，请刷新后重试")
+        if any(value is not None and (not value.strip() or value.strip() == "null" or "..." in value or "*" in value) for value in updates.values()):
+            raise HTTPException(status_code=400, detail="替换 Key 不能为空或掩码")
+        keys = [encrypt_secret(updates[index].strip()) if index in updates else key
+                for index, key in enumerate(keys) if index not in updates or updates[index] is not None]
+        updated_keys = json.dumps(keys) if keys else None
     for field, value in data.model_dump(exclude_unset=True).items():
+        if field in ("extra_key_updates", "extra_keys_revision"):
+            continue
         if value is None:
             continue
         if field == "api_key":
@@ -150,6 +170,9 @@ def _apply_channel_update(channel: Channel, data: ChannelUpdate) -> dict:
         if getattr(channel, field) != value:
             changed[field] = changed_value
             setattr(channel, field, value)
+    if updates:
+        channel.extra_keys = updated_keys
+        changed["extra_keys"] = "***" if updated_keys else None
     return changed
 
 
@@ -605,6 +628,7 @@ async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: Use
         ))
     
     return ChannelWithModelsResponse(
+        extra_keys_revision=hashlib.sha256((channel.extra_keys or "").encode()).hexdigest(),
         channel_id=channel.channel_id, name=channel.name, type=channel.type.value,
         endpoint=channel.endpoint, api_key=mask_secret(channel.api_key), extra_keys=_mask_extra_keys(channel.extra_keys),
         key_strategy=channel.key_strategy, priority=channel.priority, timeout=channel.timeout,
@@ -623,7 +647,7 @@ async def get_channel(channel_id: str, db: Session = Depends(get_db), admin: Use
 @router.put("/channels/{channel_id}")
 async def update_channel(channel_id: str, data: ChannelUpdate, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """更新渠道"""
-    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).with_for_update().first()
     if not channel:
         raise HTTPException(status_code=404, detail="渠道不存在")
     
