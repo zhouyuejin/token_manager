@@ -19,6 +19,7 @@ from app.models.model import Model, ModelStatus
 from app.models.channel import Channel, ChannelStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.services.proxy_service import ProxyService, create_proxy_service
+from app.services.api_key_freeze_service import record_api_key_error
 from app.services.rate_limit_service import (
     check_proxy_rate_limit,
     get_rate_limit_redis_client,
@@ -136,12 +137,14 @@ async def chat_completions(
     estimated_tokens = (prompt_chars // 4) + (chat_request.max_tokens if chat_request.max_tokens is not None else 100)
     quota_check = proxy_service.check_quota(user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
+        record_api_key_error(db, api_key, "quota")
         raise HTTPException(status_code=403, detail=quota_check["message"])
 
     rate_limit_redis = get_rate_limit_redis_client()
     rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, chat_request.model, estimated_tokens)
     concurrency_key = rate_limit.get("concurrency_key")
     if not rate_limit["allowed"]:
+        record_api_key_error(db, api_key, "rate_limit")
         retry_after_ms = rate_limit.get("retry_after_ms", 1000)
         raise HTTPException(
             status_code=429,

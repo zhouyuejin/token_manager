@@ -26,6 +26,7 @@ from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_mod
 from app.models.usage_log import UsageLog
 
 from app.services.channel_auth import build_auth_headers, get_upstream_url
+from app.services.api_key_freeze_service import record_api_key_error, record_api_key_success
 from app.services.secret_crypto import decrypt_secret
 
 
@@ -54,7 +55,7 @@ class ProxyService:
 
         error = self.get_api_key_auth_error(key)
         if error:
-            return None, error
+            return key, error
         return key, None
 
     @staticmethod
@@ -62,6 +63,8 @@ class ProxyService:
         status_value = getattr(getattr(api_key, "status", None), "value", getattr(api_key, "status", None))
         if status_value == "revoked" or getattr(api_key, "revoked_at", None):
             return "API Key已吊销"
+        if getattr(api_key, "frozen_at", None):
+            return "API Key已自动冻结，请联系管理员：" + (api_key.frozen_reason or "异常调用")
         if status_value != "active":
             return "无效的API Key"
 
@@ -444,12 +447,15 @@ class ProxyService:
                 result = self._forward_one(ch, mc.upstream_model, key, request_data)
                 
                 if result["success"]:
+                    record_api_key_success(api_key)
                     # 如果不是第一个候选，说明走了降级
                     if ch.channel_id != candidates[0][0].channel_id:
                         self.bump_channel_failure(ch)
                     return result
                 
                 status_code = result.get("status_code", 500)
+                if 400 <= status_code < 500:
+                    record_api_key_error(self.db, api_key, "upstream_4xx")
                 
                 # 用户/认证错误：不重试
                 if status_code in {400, 401, 403, 404}:
@@ -610,6 +616,8 @@ class ProxyService:
 
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
                         if response.status_code != 200:
+                            if 400 <= response.status_code < 500:
+                                record_api_key_error(self.db, api_key, "upstream_4xx")
                             # stream 上下文需先读 body 才能解析 JSON 错误
                             error_msg = f"HTTP {response.status_code}"
                             try:
@@ -629,6 +637,7 @@ class ProxyService:
                             yield "data: [DONE]\n\n"
                             return
 
+                        record_api_key_success(api_key)
                         for chunk in response.iter_lines():
                             if chunk:
                                 yield chunk + "\n"

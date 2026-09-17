@@ -2,6 +2,7 @@ import { get, post, put, del } from './request'
 
 export interface ApiKey {
   key_id: string
+  user_id: string
   api_key: string
   name: string
   ip_whitelist: string[]
@@ -10,6 +11,8 @@ export interface ApiKey {
   last_used_at: string | null
   expires_at?: string | null
   revoked_at?: string | null
+  frozen_at?: string | null
+  frozen_reason?: string | null
   revoked_reason?: string | null
   last_used_ip?: string | null
   last_used_user_agent?: string | null
@@ -31,7 +34,7 @@ export interface CreateApiKeyParams {
 
 export const getApiKeys = () => get<{ items: ApiKey[] }>('/api-keys')
 
-export const getAllApiKeys = () => get<{ items: ApiKey[] }>('/api-keys/admin/all')
+export const getAllApiKeys = () => get<{ items: ApiKey[] }>('/api-keys/admin')
 
 export const createApiKey = (data: CreateApiKeyParams) => 
   post<{ api_key: string; name: string; key_id: string }>('/api-keys', data)
@@ -49,3 +52,6 @@ export const revokeApiKey = (keyId: string, reason?: string) =>
 
 export const rotateApiKey = (keyId: string) =>
   post<{ api_key: string; name: string; key_id: string; expires_at?: string | null }>(`/api-keys/${keyId}/rotate`, {})
+
+export const unfreezeApiKey = (keyId: string) =>
+  put(`/api-keys/admin/${keyId}/unfreeze`, {})

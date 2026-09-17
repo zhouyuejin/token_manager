@@ -15,6 +15,7 @@ from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
 from app.dependencies import get_current_user
 from app.services.proxy_service import create_proxy_service
+from app.services.api_key_freeze_service import record_api_key_error
 
 router = APIRouter()
 
@@ -302,6 +303,7 @@ async def send_message(
     estimated_tokens = (prompt_chars // 4) + (data.max_tokens if data.max_tokens is not None else 100)
     quota_check = proxy_service.check_quota(current_user, api_key, estimated_tokens)
     if not quota_check["allowed"]:
+        record_api_key_error(db, api_key, "quota")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=quota_check["message"])
     
     # 第一条消息生成标题
