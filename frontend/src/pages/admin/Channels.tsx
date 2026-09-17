@@ -188,6 +188,7 @@ const ChannelsPage = () => {
         return <Tag color={colors[h as keyof typeof colors] || 'default'}>{h}</Tag>
       }
     },
+    { title: '密钥', key: 'keys', width: 130, render: (_: unknown, record: Channel) => `主 Key ${record.api_key ? '已配置' : '未配置'} · 额外 ${record.extra_keys?.length || 0} 个` },
     { title: '优先级', dataIndex: 'priority', key: 'priority', width: 80 },
     { 
       title: '配额', key: 'quota', width: 200,

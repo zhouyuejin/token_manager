@@ -449,6 +449,20 @@ def check_proxy_rate_limit(
 - 429、403、401 的关键原因不会只显示“请求失败”。
 - 自动冻结后用户和管理员都能看到状态变化。
 
+### Phase 1 前端补齐执行记录（2026-09-17）
+
+**状态：Frontend 1.1–1.3 已实现，构建和针对性测试通过；登录后的浏览器交互验收待完成。**
+
+- Frontend 1.1：管理员全部 Key 视图增加所属用户与安全状态筛选、管理员安全配置编辑；列表和详情展示最近使用时间/IP、User-Agent、白名单、过期/吊销/冻结信息及四类限流参数。用户可确认启用/禁用；已吊销或自动冻结的 Key 不提供普通启用操作。列表与详情只显示掩码，明文沿用创建/轮换结果弹窗的一次性展示，重新创建时重置结果状态。
+- Key 列表每 30 秒以及窗口重新聚焦时刷新，详情跟随当前列表数据更新；加载失败提供重新加载入口。管理员筛选基于当前全量列表，未引入新的服务端分页契约。
+- Frontend 1.2：渠道主 Key 区分保持/替换；额外 Key 支持保持、逐项替换/移除、整体替换和清空。前端禁止把 `null`、空字符串或掩码作为真实 Key 提交，保持模式省略对应密钥字段，清空发送 `extra_keys: []`。渠道列表只展示配置状态和额外 Key 数量。
+- 为支持逐项修改，`ChannelUpdate` 增加 `extra_key_updates`（原数组索引到新明文或 `null`，`null` 表示移除）；后端保留其他项原密文，新值加密，操作日志只记录 `***`。禁止与整体替换同时提交，非法索引/替换值在写入前拒绝，渠道更新加行锁。列表和详情返回密文列表摘要 `extra_keys_revision`，逐项提交必须携带该版本，过期编辑返回 409，避免并发移除后误改另一项；无需数据库迁移。
+- Frontend 1.3：统一 HTTP 错误解析保留 401/403/429 后端原因，同时保留 422 字段校验反馈；聊天普通 HTTP 错误和流内错误对象显示具体原因。冻结通知详情展示原因、按角色提供处理建议及 API Key 管理入口。
+- 测试先红后绿：前端先复现非法密钥被接受、逐项更新未转换，以及状态/掩码/错误解析能力缺失；后端先复现逐项更新被忽略、非法索引未拒绝，并补充过期版本拒绝和真实详情 GET → 逐项 PUT → 旧版本 PUT 拒绝的 HTTP 回归测试（使用测试数据库和管理员依赖替换）。
+- 前端验证：`node --test frontend/src/utils/security.test.mjs frontend/src/utils/channelForm.test.mjs frontend/src/utils/apiKeyWhitelist.test.mjs`，**12 passed**；`cd frontend && npm run build`，`tsc && vite build` 通过，保留既有大包提示。
+- 后端验证：`docker exec token-backend python -m pytest tests/test_channel_secret_crypto.py tests/test_api_key_security.py tests/test_api_key_freeze.py tests/test_admin_channel_advanced.py tests/test_channel_advanced_config_schema.py -q`，**47 passed**，保留既有 Pydantic/SQLAlchemy 警告。`git diff --check` 通过。
+- 验证边界：浏览器访问 `http://localhost:3002/api-keys` 被跳转到登录页，未使用凭证登录，未执行创建/轮换/吊销/替换等真实页面操作；不宣称浏览器交互验收或全量后端测试通过。
+
 ### 阶段验收
 
 - API Key IP 白名单、过期、吊销、轮换、限流都有后端测试。

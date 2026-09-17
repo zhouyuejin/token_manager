@@ -32,3 +32,36 @@ test('prepareChannelPayload keeps new api key and parses extra keys', async () =
     { api_key: 'sk-new', extra_keys: ['sk-extra'] },
   )
 })
+
+test('channel key payload rejects null, blank and masked replacements', async () => {
+  const { prepareChannelPayload } = await loadModule()
+  for (const extra_keys of ['null', '[null]', '[""]', '["  "]', '["sk-old...1234"]', '["***"]']) {
+    assert.throws(() => prepareChannelPayload({ extra_keys }, true))
+  }
+  assert.throws(() => prepareChannelPayload({ api_key: 'sk-old...1234' }, true))
+  assert.deepEqual(prepareChannelPayload({ extra_keys: '[]' }, true), { extra_keys: [] })
+})
+
+test('per-item extra key edits omit unchanged secrets and explicitly delete selected items', async () => {
+  const { prepareChannelPayload } = await loadModule()
+  assert.deepEqual(prepareChannelPayload({ extra_key_edits: [{ action: 'keep' }, { action: 'replace', value: 'sk-new' }, { action: 'remove' }] }, true), {
+    extra_key_updates: { 1: 'sk-new', 2: null },
+  })
+  assert.deepEqual(prepareChannelPayload({ extra_key_edits: [{ action: 'keep' }] }, true), {})
+  assert.throws(() => prepareChannelPayload({ extra_key_edits: [{ action: 'replace', value: '' }] }, true))
+})
+
+test('explicit channel modes preserve, replace or clear keys without leaking form controls', async () => {
+  const { prepareChannelPayload } = await loadModule()
+  assert.deepEqual(prepareChannelPayload({ main_key_action: 'keep', api_key: 'sk-stale', extra_keys_action: 'keep', extra_keys: '["sk-stale"]' }, true), {})
+  assert.deepEqual(prepareChannelPayload({ extra_keys_action: 'clear', extra_keys: '' }, true), { extra_keys: [] })
+  assert.throws(() => prepareChannelPayload({ main_key_action: 'replace', api_key: '' }, true))
+})
+
+test('secret list revision is sent only for individual updates', async () => {
+  const { prepareChannelPayload } = await loadModule()
+  assert.deepEqual(prepareChannelPayload({ extra_keys_action: 'keep', extra_keys_revision: 'revision' }, true), {})
+  assert.deepEqual(prepareChannelPayload({ extra_keys_action: 'edit', extra_keys_revision: 'revision', extra_key_edits: [{ action: 'remove' }] }, true), {
+    extra_keys_revision: 'revision', extra_key_updates: { 0: null },
+  })
+})

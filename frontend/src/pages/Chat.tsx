@@ -1,3 +1,4 @@
+import { getRequestErrorMessage } from '../utils/security'
 import { useState, useEffect } from 'react'
 import { loadModelConfig, saveModelConfig } from '../utils/chatStorage'
 import { stripThinkTags } from '../utils/thinkTag'
@@ -128,20 +129,10 @@ const Chat: React.FC = () => {
 
       if (!response.ok) {
         const errorText = await response.text()
-        // 尝试解析后端返回的 JSON 错误格式 {"detail":"..."}
-        let errorMessage = '请求失败'
+        let errorMessage = errorText || '请求失败'
         try {
-          const parsed = JSON.parse(errorText)
-          if (parsed.detail) {
-            errorMessage = parsed.detail
-          } else if (parsed.message) {
-            errorMessage = parsed.message
-          } else {
-            errorMessage = errorText || '请求失败'
-          }
-        } catch {
-          errorMessage = errorText || '请求失败'
-        }
+          errorMessage = getRequestErrorMessage(JSON.parse(errorText), '请求失败')
+        } catch { /* 保留纯文本错误 */ }
         throw new Error(errorMessage)
       }
 
@@ -177,7 +168,7 @@ const Chat: React.FC = () => {
             // 后端透传的上游错误（如 CodingPlan 订阅过期、模型不可用等）
             // 必须在内层 try 之外检查，否则会被 swallow
             if (parsed.error) {
-              streamError = new Error(parsed.error)
+              streamError = new Error(getRequestErrorMessage(parsed.error, '代理调用失败'))
               break
             }
 

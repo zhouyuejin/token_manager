@@ -127,6 +127,8 @@ class ChannelUpdate(BaseModel):
     endpoint: Optional[str] = None
     api_key: Optional[str] = None
     extra_keys: Optional[List[str]] = None
+    extra_key_updates: Optional[Dict[int, Optional[str]]] = None
+    extra_keys_revision: Optional[str] = None
     key_strategy: Optional[str] = None
     priority: Optional[int] = None
     timeout: Optional[int] = None
@@ -152,6 +154,7 @@ class ChannelResponse(BaseModel):
     endpoint: str
     api_key: str
     extra_keys: Optional[List[str]] = None
+    extra_keys_revision: str = ""
     key_strategy: str = "round_robin"
     priority: int
     timeout: int
