@@ -2,6 +2,10 @@ import { get, post, put, del } from './request'
 
 export interface ApiKey {
   key_id: string
+  project_id?: string | null
+  project_name?: string | null
+  department_id?: string | null
+  department_name?: string | null
   user_id: string
   api_key: string
   name: string
@@ -23,6 +27,7 @@ export interface ApiKey {
 }
 
 export interface CreateApiKeyParams {
+  project_id: string
   name: string
   ip_whitelist?: string[]
   expires_at?: string | null

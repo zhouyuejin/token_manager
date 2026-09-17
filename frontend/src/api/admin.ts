@@ -41,6 +41,7 @@ export interface AdminStats {
 export const getAdminStats = (params: {
   start_date: string
   end_date: string
+  project_id?: string
 }) => get<AdminStats>('/admin/stats/usage', { params })
 
 // 系统概览数据

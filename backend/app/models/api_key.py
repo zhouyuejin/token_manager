@@ -31,6 +31,9 @@ class ApiKey(Base):
     api_key = Column(String(64), unique=True, nullable=False, index=True, comment="API Key")
     key_name = Column(String(100), nullable=True, comment="Key名称")
 
+    project_id = Column(String(32), nullable=True, index=True, comment="所属项目")
+    project = relationship("Project", primaryjoin="foreign(ApiKey.project_id) == Project.project_id", viewonly=True)
+
     # IP白名单
     ip_whitelist = Column(Text, nullable=True, comment="IP白名单JSON")
     

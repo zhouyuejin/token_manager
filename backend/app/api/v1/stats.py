@@ -3,7 +3,7 @@
 """
 from datetime import datetime, timedelta
 from typing import Optional
-from sqlalchemy import func, and_
+from sqlalchemy import case, func, and_
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -76,8 +76,9 @@ async def get_usage_stats(
     model_stats = db.query(
         UsageLog.model,
         func.sum(UsageLog.total_tokens).label('tokens'),
-        func.sum(UsageLog.prompt_tokens).label('prompt_tokens'),
-        func.sum(UsageLog.completion_tokens).label('completion_tokens'),
+        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.prompt_tokens), else_=0)).label('prompt_tokens'),
+        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
+        func.sum(UsageLog.cost_usd).label('saved_cost'),
         func.count(UsageLog.id).label('requests')
     ).filter(
         and_(
@@ -103,7 +104,7 @@ async def get_usage_stats(
         upstream_to_model_id = {up: mid for up, mid in channel_mappings}
     
     # 获取所有需要查询的 model_id
-    target_model_ids = list(set(upstream_to_model_id.values()))
+    target_model_ids = list(set(upstream_to_model_id.values()) | set(upstream_models))
     
     model_mappings = []
     if target_model_ids:
@@ -120,7 +121,7 @@ async def get_usage_stats(
     by_model = []
     for stat in model_stats:
         # 通过 upstream_model 找到对应的 model_id，再找到模型信息
-        internal_model_id = upstream_to_model_id.get(stat.model)
+        internal_model_id = stat.model if stat.model in model_info_map else upstream_to_model_id.get(stat.model)
         model_info = model_info_map.get(internal_model_id) if internal_model_id else None
         # 计算成本：(输入token数/1000)*输入单价 + (输出token数/1000)*输出单价
         if model_info:
@@ -134,8 +135,9 @@ async def get_usage_stats(
         else:
             cost = 0.0
         
+        cost += float(stat.saved_cost or 0)
         by_model.append(ModelUsage(
-            model=model_info.display_name if model_info else stat.model,
+            model=(model_info.display_name or stat.model) if model_info else stat.model,
             tokens=stat.tokens or 0,
             requests=stat.requests,
             cost=round(cost, 4)

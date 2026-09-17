@@ -394,6 +394,7 @@ async def send_message(
 async def _stream_generator(proxy_service, request_data, conversation_id, user_msg_id, current_user, api_key, db):
     """流式响应生成器"""
     content = ""
+    model_id = request_data["model"]
     try:
         stream_gen = proxy_service.forward_stream(request_data["model"], current_user, api_key, request_data)
         for chunk in stream_gen:
@@ -411,11 +412,17 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
                     pass
             yield chunk + "\n\n"
         
-        assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=request_data["model"], tokens=len(content) // 4)
+        metadata = proxy_service.stream_metadata
+        if metadata.get("status_code") != 200:
+            if not metadata.get("recorded"):
+                proxy_service.record_usage(current_user.user_id, api_key.key_id, metadata.get("channel_id"), model_id, {}, metadata.get("latency_ms", 0), metadata.get("status_code", 502), metadata.get("error"))
+                db.commit()
+            return
+        assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=model_id, tokens=len(content) // 4)
         db.add(assistant_msg)
-        tokens = {"total_tokens": len(content) // 4, "prompt_tokens": 0, "completion_tokens": len(content) // 4}
-        proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=None, model=request_data["model"],
-                                   tokens=tokens, latency_ms=0, status_code=200, error_message=None)
+        tokens = metadata.get("tokens") or proxy_service.calculate_tokens(request_data, {"choices": [{"message": {"content": content}}]})
+        proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=metadata.get("channel_id"), model=model_id,
+                                   tokens=tokens, latency_ms=metadata.get("latency_ms", 0), status_code=200, error_message=None)
         await proxy_service.deduct_quota(current_user, api_key, tokens)
         db.commit()
     except Exception as e:

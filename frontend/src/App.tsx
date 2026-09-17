@@ -12,6 +12,7 @@ import Notifications from './pages/Notifications'
 import Settings from './pages/Settings'
 import Chat from './pages/Chat'
 import AdminUsers from './pages/admin/Users'
+import ProjectsPage from './pages/admin/Projects'
 import AdminChannels from './pages/admin/Channels'
 import ChannelForm from './pages/admin/ChannelForm'
 import ChannelBindings from './pages/admin/ChannelBindings'
@@ -107,6 +108,8 @@ function App() {
             }>
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route path="projects" element={<ProjectsPage />} />
+              <Route path="departments" element={<ProjectsPage departmentsOnly />} />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="channels/new" element={<ChannelForm />} />
               <Route path="channels/:channelId/edit" element={<ChannelForm />} />

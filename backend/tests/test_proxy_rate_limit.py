@@ -98,7 +98,7 @@ def test_blocks_and_releases_concurrency_limit():
 
 def test_rejects_negative_rate_limit_config():
     with pytest.raises(ValidationError):
-        ApiKeyCreate(name="bad", qps_limit=-1)
+        ApiKeyCreate(name="bad", project_id="project_test", qps_limit=-1)
 
     with pytest.raises(ValidationError):
         ApiKeyUpdate(rpm_limit=-1)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Row, Col, Card, Statistic, DatePicker, Typography, Empty, Tooltip } from 'antd'
+import { Row, Col, Card, Statistic, DatePicker, Typography, Empty, Tooltip, Select, Alert, Button, Space } from 'antd'
 import { 
   UserOutlined, 
   CloudServerOutlined, 
@@ -14,7 +14,8 @@ import {
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
 import { getAdminStats, AdminStats } from '../api/admin'
-import { useSwrDataWithParams } from '../hooks/useSwr'
+import { Project } from '../api/projects'
+import { useSwrData, useSwrDataWithParams } from '../hooks/useSwr'
 
 const { RangePicker } = DatePicker
 const { Text } = Typography
@@ -44,12 +45,16 @@ const AdminDashboard: React.FC = () => {
     dayjs()
   ])
 
+  const [projectId, setProjectId] = useState<string>()
+  const { data: projectsData, error: projectsError, mutate: mutateProjects } = useSwrData<{ items: Project[] }>("/projects/admin")
+
   // 使用 SWR 获取统计数据
   const statsParams = {
     start_date: dateRange[0].format('YYYY-MM-DD'),
     end_date: dateRange[1].format('YYYY-MM-DD'),
+    ...(projectId ? { project_id: projectId } : {}),
   }
-  const { data: statsData, isLoading } = useSwrDataWithParams<AdminStats>(
+  const { data: statsData, isLoading, error: statsError, mutate: mutateStats } = useSwrDataWithParams<AdminStats>(
     token ? '/admin/stats/usage' : null,
     token ? statsParams : null
   )
@@ -60,6 +65,7 @@ const AdminDashboard: React.FC = () => {
 
   // 同步 SWR 数据到 state
   useEffect(() => {
+    setStats(statsData || null)
     if (statsData) {
       setStats(statsData)
       setSystemStats({
@@ -531,6 +537,8 @@ const AdminDashboard: React.FC = () => {
         }}>
           仪表盘
         </h2>
+        <Space wrap>
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目（含历史未归因）" value={projectId} onChange={setProjectId} style={{ width: 280 }} options={(projectsData?.items || []).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
         <RangePicker
           value={dateRange as any}
           onChange={(dates: any) => {
@@ -544,7 +552,10 @@ const AdminDashboard: React.FC = () => {
             borderRadius: 10,
           }}
         />
+        </Space>
       </div>
+
+      {(projectsError || statsError) && <Alert type="error" showIcon message={statsError ? "统计加载失败" : "项目加载失败"} action={<Button onClick={() => { mutateStats(); mutateProjects() }}>重试</Button>} style={{ marginBottom: 16 }} />}
 
       {/* 统计卡片 */}
       <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
@@ -590,7 +601,7 @@ const AdminDashboard: React.FC = () => {
           >
             <Statistic
               title={
-                <Tooltip title="费用 = 输入token × 输入价 + 输出token × 输出价（由模型映射的 price_per_1k_input/output 计算，单位 USD）。下方为按当前速率折合的月度预估。">
+                <Tooltip title="新日志使用调用时保存的费用，单位 USD。上游返回用量时按真实 Token 计费，否则使用估算用量；历史未保存费用的日志按当前价格估算。月度费用按当前查询速率折合。">
                   <span style={{
                     color: 'rgba(148, 163, 184, 0.8)',
                     display: 'flex',
@@ -598,7 +609,7 @@ const AdminDashboard: React.FC = () => {
                     justifyContent: 'space-between',
                     gap: 8,
                   }}>
-                    <span>预估费用</span>
+                    <span>费用</span>
                     {hasUsage && (
                       <span style={{
                         fontSize: 12,

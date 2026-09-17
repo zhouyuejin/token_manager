@@ -1,7 +1,7 @@
 """
 用量日志模型
 """
-from sqlalchemy import Column, BigInteger, String, Integer, DateTime, Text
+from sqlalchemy import Column, BigInteger, String, Integer, DateTime, Text, Numeric
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -18,6 +18,10 @@ class UsageLog(Base):
     channel_id = Column(String(32), nullable=True, index=True, comment="渠道ID")
     model = Column(String(50), nullable=False, index=True, comment="模型ID")
     
+    project_id = Column(String(32), nullable=True, index=True, comment="项目快照")
+    department_id = Column(String(32), nullable=True, index=True, comment="部门快照")
+    cost_usd = Column(Numeric(18, 8), nullable=True, comment="本次费用USD，旧日志为空")
+
     # Token 统计
     prompt_tokens = Column(Integer, default=0, comment="输入Token数")
     completion_tokens = Column(Integer, default=0, comment="输出Token数")
