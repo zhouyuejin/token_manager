@@ -103,3 +103,39 @@ h1, h2, h3, h4, h5, h6 {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ============================================================
+   antd Table 固定列背景不透明化
+   原因：dark/purple/green/ocean 四个深色主题把
+        Table.colorBgContainer 设为 'transparent'，导致
+        .ant-table-cell-fix-left/right 也透明，水平滚动时
+        下方单元格内容从固定列底下透出，造成"文字重叠"。
+   方案：用每主题已有的 var(--color-card) 实色覆盖固定列背景，
+        并显式保留行 hover / 选中态效果。
+   ============================================================ */
+.ant-table-cell-fix-left,
+.ant-table-cell-fix-right,
+.ant-table-cell-fix-left-first,
+.ant-table-cell-fix-right-first,
+.ant-table-cell-fix-left-last,
+.ant-table-cell-fix-right-last {
+  background: var(--color-card) !important;
+}
+
+.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left,
+.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right,
+.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left-first,
+.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right-first,
+.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left-last,
+.ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right-last {
+  background: var(--ant-table-row-hover-bg) !important;
+}
+
+.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-left,
+.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-right,
+.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-left-first,
+.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-right-first,
+.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-left-last,
+.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-right-last {
+  background: var(--ant-table-row-selected-bg) !important;
+}
