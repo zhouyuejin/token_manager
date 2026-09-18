@@ -42,7 +42,10 @@ const Billing = () => {
     finally { setSaving(false) }
   }
 
-  const money = (value: string | number) => `$${Number(value).toFixed(8)}`
+  const money = (value: string | number) => {
+    const n = Number(value)
+    return `$${n === 0 ? '0.00' : Math.abs(n) < 0.01 ? n.toFixed(8) : n.toFixed(2)}`
+  }
   const columns = [
     { title: '维度', dataIndex: 'scope_type', render: (value: string) => value === 'project' ? '项目' : '部门' },
     { title: '名称', dataIndex: 'scope_name' },
@@ -54,7 +57,7 @@ const Billing = () => {
     { title: '告警阈值', dataIndex: 'thresholds', render: (values: number[]) => values.map(t => `${t}%`).join(' / ') },
     { title: '超预算策略', dataIndex: 'policy', render: (value: string) => value === 'block' ? '阻断' : '仅告警' },
     { title: '状态', dataIndex: 'enabled', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '启用' : '停用'}</Tag> },
-    { title: '操作', key: 'actions', render: (_: unknown, row: Budget) => <Button onClick={() => open(row)}>配置</Button> }
+    { title: '操作', key: 'actions', width: 120, fixed: 'right' as const, render: (_: unknown, row: Budget) => <Button onClick={() => open(row)}>配置</Button> }
   ]
   const options = kind === 'project'
     ? (projects?.items || []).map(row => ({ value: row.project_id, label: row.name }))
