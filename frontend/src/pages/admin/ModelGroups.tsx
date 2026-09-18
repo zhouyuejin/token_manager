@@ -109,7 +109,7 @@ const ModelIdsCell: React.FC<ModelIdsCellProps> = ({ modelIds, models, onManage 
         trigger="hover"
         open={popoverOpen}
         onOpenChange={setPopoverOpen}
-        destroyTooltipOnHide={{ keepParent: false }}
+        destroyOnHidden
         placement="bottomLeft"
         overlayStyle={{ width: 360 }}
       >

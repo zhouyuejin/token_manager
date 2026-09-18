@@ -1,16 +1,16 @@
 // Plain-Node test for stripThinkTags. Run with:
 //   node --test frontend/src/utils/thinkTag.test.mjs
 //
-// Re-exports the TS helper via esbuild-like transpile is overkill here,
-// so we mirror the regex instead. The contract tested is the *behavior*
-// — if you change the regex in thinkTag.ts, mirror it here.
-
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import ts from 'typescript'
 
-// Mirror of THINK_TAG_RE from thinkTag.ts. Keep these in sync.
-const THINK_TAG_RE = /<think>[\s\S]*?<\/think>/g
-const stripThinkTags = (content) => (content ?? '').replace(THINK_TAG_RE, '')
+const source = await readFile(new URL('./thinkTag.ts', import.meta.url), 'utf8')
+const { outputText } = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext },
+})
+const { stripThinkTags } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
 
 test('returns empty string for empty input', () => {
   assert.equal(stripThinkTags(''), '')
@@ -41,12 +41,25 @@ test('strips multiple think blocks', () => {
   assert.equal(stripThinkTags(input), '中间结尾')
 })
 
-test('does not match unclosed think block', () => {
-  // Half-streamed content where closing tag hasn't arrived yet.
-  // We deliberately do NOT eat unclosed blocks, so the user sees
-  // the partial state instead of losing the trailing answer.
+test('hides unclosed think block while streaming', () => {
   const input = '<think>用户问的是 X\n答案是 Y'
-  assert.equal(stripThinkTags(input), input)
+  assert.equal(stripThinkTags(input), '')
+  assert.equal(stripThinkTags('正文<think>尚未完成'), '正文')
+})
+
+test('keeps reasoning hidden at every character boundary of a stream', () => {
+  const thinking = '<think>正在分析问题</think>'
+  for (let length = 1; length <= thinking.length; length++) {
+    assert.equal(stripThinkTags(thinking.slice(0, length)), '', `boundary ${length}`)
+  }
+  assert.equal(stripThinkTags(`${thinking}正式`), '正式')
+  assert.equal(stripThinkTags(`${thinking}正式回复`), '正式回复')
+})
+
+test('preserves answers before a second partially streamed think tag', () => {
+  assert.equal(stripThinkTags('<think>first</think>正文<thi'), '正文')
+  assert.equal(stripThinkTags('<think>first</think>正文<think>second</thi'), '正文')
+  assert.equal(stripThinkTags('比较：1 < 2'), '比较：1 < 2')
 })
 
 test('handles think block containing newlines', () => {

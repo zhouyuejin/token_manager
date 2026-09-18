@@ -48,8 +48,8 @@ def estimate_request(request_data):
     if not isinstance(output, int) or isinstance(output, bool) or output <= 0:
         raise HTTPException(422, 'max_tokens 必须为正整数')
     request_data['max_tokens'] = output
-    # 字节数而非字符数/4，涵盖中文和 role；消息封装预留开销。
-    prompt = 32 + sum(len(str(m.get('content') or '').encode('utf-8'))
+    # 字节数涵盖中文和 role；上游消息模板开销不在 content 中，额外预留 256 tokens。
+    prompt = 256 + sum(len(str(m.get('content') or '').encode('utf-8'))
                       + len(str(m.get('role') or '').encode('utf-8')) + 16
                       for m in request_data.get('messages', []))
     return prompt, output

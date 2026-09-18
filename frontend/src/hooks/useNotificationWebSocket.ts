@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { notification } from 'antd'
+import { App } from 'antd'
 import { useAuthStore } from '../store/auth'
 import { useNotificationStore } from '../store/notification'
 
@@ -17,6 +17,7 @@ const getWsBaseUrl = () => {
 }
 
 export const useNotificationWebSocket = () => {
+  const { notification } = App.useApp()
   const token = useAuthStore((s) => s.token)
   const setUnreadCount = useNotificationStore((s) => s.setUnreadCount)
   const addNotification = useNotificationStore((s) => s.addNotification)
@@ -125,5 +126,5 @@ export const useNotificationWebSocket = () => {
       }
       reconnectAttempts.current = 0
     }
-  }, [token])
+  }, [token, notification, setUnreadCount, addNotification])
 }

@@ -664,6 +664,7 @@ class ProxyService:
         def generate():
             completion_text = ""
             done = False
+            finished = False
             try:
                 with self.reservation_lease(), httpx.Client(timeout=timeout) as client:
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
@@ -705,14 +706,18 @@ class ProxyService:
                                             self.stream_metadata['tokens'] = self.calculate_tokens(request_data, data)
                                         for choice in data.get('choices', []):
                                             completion_text += choice.get('delta', {}).get('content') or ''
+                                            if choice.get('finish_reason'):
+                                                finished = True
                                     except (ValueError, TypeError, AttributeError):
                                         pass
                                 yield chunk + "\n"
-                        if not done:
+                        if not done and not finished:
                             raise RuntimeError('上游流式响应缺少结束标记')
                         if 'tokens' not in self.stream_metadata:
                             self.stream_metadata['tokens'] = self.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})
                         self.stream_metadata['completed'] = True
+                        if not done:
+                            yield "data: [DONE]\n\n"
 
             except Exception as e:
                 self.stream_metadata.update(status_code=502, error=str(e))
@@ -835,8 +840,9 @@ class ProxyService:
             self.db.commit()
         self.db.refresh(user)
         
-        quota_remain = user.quota - user.quota_used
-        if user.quota > 0 and quota_remain / user.quota <= 0.2 and user.quota_low_alert:
+        unlimited = user.role == UserRole.admin or user.quota < 0
+        quota_remain = None if unlimited else user.quota - user.quota_used
+        if not unlimited and user.quota > 0 and quota_remain / user.quota <= 0.2 and user.quota_low_alert:
             from app.services.notification_service import create_notification
             from app.models.notification import NotificationType
             try:
@@ -854,13 +860,14 @@ class ProxyService:
         if total_tokens > 1000 and user.quota_change_alert:
             from app.services.notification_service import create_notification
             from app.models.notification import NotificationType
+            balance_text = '当前额度无限制' if unlimited else f'当前剩余 {quota_remain} tokens'
             try:
                 await create_notification(
                     db=self.db,
                     user_id=user.user_id,
                     notif_type=NotificationType.quota_decrease,
                     title="额度已扣减",
-                    content=f"本次消费 {total_tokens} tokens，当前剩余 {quota_remain} tokens。",
+                    content=f"本次消费 {total_tokens} tokens，{balance_text}。",
                     metadata={"deducted": total_tokens, "quota_remain": quota_remain}
                 )
             except Exception:

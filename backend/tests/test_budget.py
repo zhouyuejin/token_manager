@@ -242,7 +242,7 @@ def test_cost_overrun_rejected_even_when_total_tokens_fit_reservation(db, scope)
     db.commit()
     rid = reserve(db, scope)
     with pytest.raises(HTTPException) as error:
-        QuotaReservationService(db).commit(rid, {'prompt_tokens': 100, 'completion_tokens': 0, 'total_tokens': 100})
+        QuotaReservationService(db).commit(rid, {'prompt_tokens': 300, 'completion_tokens': 0, 'total_tokens': 300})
     assert error.value.status_code == 502
     assert db.get(QuotaReservation, rid).status == 'reserved'
 
