@@ -20,3 +20,4 @@ from app.models.refresh_token import RefreshToken
 from app.models.organization import Department
 from app.models.project import Project, UserProject
 from app.models.quota_reservation import QuotaReservation
+from app.models.budget import Budget, BudgetAlert

@@ -1,7 +1,7 @@
 """
 用量日志模型
 """
-from sqlalchemy import Column, BigInteger, String, Integer, DateTime, Text, Numeric
+from sqlalchemy import Column, BigInteger, String, Integer, DateTime, Text, Numeric, Index
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -21,6 +21,7 @@ class UsageLog(Base):
     project_id = Column(String(32), nullable=True, index=True, comment="项目快照")
     department_id = Column(String(32), nullable=True, index=True, comment="部门快照")
     cost_usd = Column(Numeric(18, 8), nullable=True, comment="本次费用USD，旧日志为空")
+    reservation_id = Column(String(32), nullable=True, index=True, comment="预扣关联，避免预算重复计费")
 
     # Token 统计
     prompt_tokens = Column(Integer, default=0, comment="输入Token数")
@@ -35,3 +36,5 @@ class UsageLog(Base):
     error_message = Column(Text, nullable=True, comment="错误信息")
     
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
+    __table_args__ = (Index('ix_usage_project_month', 'project_id', 'created_at'),
+                     Index('ix_usage_department_month', 'department_id', 'created_at'))

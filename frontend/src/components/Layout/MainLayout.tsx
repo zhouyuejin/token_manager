@@ -18,6 +18,7 @@ import {
   TeamOutlined,
   CloudOutlined,
   AppstoreOutlined,
+  DollarOutlined,
   LogoutOutlined,
   BellOutlined,
   FileSearchOutlined,
@@ -52,6 +53,7 @@ const getPageTitle = (pathname: string): string => {
     "/notifications": "消息通知",
     "/admin/users": "用户管理",
     "/admin/projects": "项目管理",
+    "/admin/billing": "预算管理",
     "/admin/departments": "部门管理",
     "/admin/channels": "渠道管理",
     "/admin/models": "模型管理",
@@ -168,6 +170,7 @@ const MainLayout = () => {
             children: [
               { key: "/admin/departments", icon: <TeamOutlined />, label: "部门管理" },
               { key: "/admin/projects", icon: <AppstoreOutlined />, label: "项目管理" },
+              { key: "/admin/billing", icon: <DollarOutlined />, label: "预算管理" },
               {
                 key: "/admin/users",
                 icon: <TeamOutlined />,

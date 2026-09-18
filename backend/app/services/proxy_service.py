@@ -775,6 +775,7 @@ class ProxyService:
             channel_id=channel_id, model=model,
             **(attribution or self.capture_usage_attribution(key_id)),
             cost_usd=usage_cost,
+            reservation_id=self.reservation_id,
             prompt_tokens=tokens.get("prompt_tokens", 0),
             completion_tokens=tokens.get("completion_tokens", 0),
             total_tokens=tokens.get("total_tokens", 0),

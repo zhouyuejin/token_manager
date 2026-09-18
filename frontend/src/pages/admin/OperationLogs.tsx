@@ -35,6 +35,7 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   user: '用户',
   project: '项目',
   department: '部门',
+  budget: '预算',
   api_key: 'API Key',
   channel: '渠道',
   model: '模型',

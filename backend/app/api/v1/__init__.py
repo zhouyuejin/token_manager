@@ -4,6 +4,7 @@ API路由
 from fastapi import APIRouter
 
 from app.api.v1 import auth, users, api_keys, proxy, stats, admin, logs, model_groups, chat, notifications, projects
+from app.api.v1 import billing
 
 api_router = APIRouter()
 
@@ -38,3 +39,4 @@ api_router.include_router(model_groups.router, prefix="/admin/model-groups", tag
 api_router.include_router(logs.router, prefix="/admin/logs", tags=["日志"])
 
 api_router.include_router(projects.router, prefix="/projects", tags=["部门与项目"])
+api_router.include_router(billing.router, prefix="/admin/billing", tags=["预算"])
