@@ -33,3 +33,105 @@ body * {
 .ant-motion-collapse-legacy-collapse {
   transition: none !important;
 }
+
+/* ============================================================
+   AI 对话 Markdown 渲染微调（XMarkdown）
+   作用域：.chat-md，仅作用于 Chat 消息气泡内的 markdown 容器
+   设计目标：在彩色气泡背景（用户蓝、AI 灰）下保持对比度
+   ============================================================ */
+.chat-md {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.chat-md code {
+  padding: 0.1em 0.4em;
+  margin: 0 0.15em;
+  font-size: 0.88em;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+  background: rgba(127, 127, 127, 0.22);
+  border-radius: 4px;
+  word-break: break-word;
+}
+
+.chat-md pre {
+  margin: 0.6em 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 0.88em;
+  line-height: 1.5;
+}
+
+.chat-md pre code {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+.chat-md a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+
+.chat-md blockquote {
+  margin: 0.5em 0;
+  padding: 0.2em 0.8em;
+  border-left: 3px solid currentColor;
+  border-left-color: rgba(127, 127, 127, 0.55);
+  opacity: 0.92;
+}
+
+.chat-md table {
+  font-size: 0.9em;
+  border-collapse: collapse;
+}
+
+.chat-md table th,
+.chat-md table td {
+  padding: 6px 10px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+}
+
+.chat-md table thead {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.chat-md h1,
+.chat-md h2,
+.chat-md h3,
+.chat-md h4,
+.chat-md h5,
+.chat-md h6 {
+  margin: 0.6em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.chat-md h1:first-child,
+.chat-md h2:first-child,
+.chat-md h3:first-child,
+.chat-md h4:first-child,
+.chat-md h5:first-child,
+.chat-md h6:first-child { margin-top: 0; }
+.chat-md h1 { font-size: 1.35em; }
+.chat-md h2 { font-size: 1.2em; }
+.chat-md h3 { font-size: 1.08em; }
+.chat-md h4,
+.chat-md h5,
+.chat-md h6 { font-size: 1em; }
+
+.chat-md ul,
+.chat-md ol {
+  padding-left: 1.4em;
+}
+
+.chat-md img {
+  max-width: 100%;
+  border-radius: 6px;
+}
