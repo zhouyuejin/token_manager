@@ -83,8 +83,9 @@ class QuotaReservationService:
                 created_at=now, updated_at=now, expires_at=now + timedelta(seconds=LEASE_SECONDS))
             row.estimated_cost_usd = cost(row, {'prompt_tokens': prompt, 'completion_tokens': output})
             self.db.add(row)
+            reservation_id = row.reservation_id
             self.db.commit()
-            return row.reservation_id
+            return reservation_id
         except RedisError as exc:
             self.db.rollback()
             raise HTTPException(503, '预扣服务不可用，请稍后重试') from exc

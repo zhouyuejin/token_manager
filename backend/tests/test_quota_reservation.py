@@ -109,7 +109,9 @@ def test_all_entrypoints_reserve_and_finish(db, account, SessionLocal, monkeypat
             return httpx.Response(status, json={'error': {'message': 'failed'}})
         data = {'choices': [{'message': {'content': 'hello'}}], 'usage': {'prompt_tokens': 2, 'completion_tokens': 40, 'total_tokens': 42}}
         if stream:
-            return httpx.Response(200, text='data: '+json.dumps(data)+'\n\ndata: [DONE]\n\n')
+            content = {'choices': [{'delta': {'content': 'hello'}}]}
+            usage = {'choices': [], 'usage': data['usage']}
+            return httpx.Response(200, text='data: '+json.dumps(content)+'\n\ndata: '+json.dumps(usage)+'\n\ndata: [DONE]\n\n')
         return httpx.Response(200, json=data)
     real_client = httpx.Client
     monkeypatch.setattr('app.services.proxy_service.httpx.Client', lambda **kw: real_client(transport=httpx.MockTransport(upstream), **kw))
@@ -128,6 +130,8 @@ def test_all_entrypoints_reserve_and_finish(db, account, SessionLocal, monkeypat
     response = TestClient(app).post('/api/conv/messages' if chat else '/api/chat/completions', json=payload)
     assert response.status_code == (200 if stream or status == 200 else 503), response.text
     assert observed and observed[0]['max_tokens'] == 100
+    if stream:
+        assert observed[0]['stream_options']['include_usage'] is True
     assert occupied == [1]
     db.rollback()  # 流式在独立 session 结算，结束 MySQL repeatable-read 快照。
     db.expire_all()
@@ -305,3 +309,98 @@ def test_stream_send_exception_closes_generator_and_releases(db, account):
     db.rollback()
     assert closed == [True]
     assert db.get(QuotaReservation, rid).status == 'released'
+
+
+def test_truncated_stream_is_not_successful(db, account, monkeypatch):
+    import httpx
+    from app.models.channel import Channel, ChannelType
+    channel = Channel(channel_id='selected', name='test', type=ChannelType.openai,
+                      endpoint='https://test.invalid', timeout=10, upstream_format='chat', auth_type='bearer')
+    monkeypatch.setattr(ProxyService, 'select_channel', lambda *args: (channel, 'upstream', 'fake'))
+    client = httpx.Client
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text='data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'))
+    monkeypatch.setattr('app.services.proxy_service.httpx.Client', lambda **kw: client(transport=transport, **kw))
+    service = ProxyService(db)
+    user = db.query(User).filter_by(user_id=account).one()
+    key = db.query(ApiKey).filter_by(key_id=account).one()
+    request = {'messages': [{'role': 'user', 'content': 'hi'}], 'max_tokens': 100}
+    service.reserve_quota(user, key, 'priced', request)
+    list(service.forward_stream('priced', user, key, request))
+    assert service.stream_metadata['status_code'] == 502
+    assert not service.stream_metadata.get('completed')
+    service.release_reservation()
+    from app.models.quota_reservation import QuotaReservation
+    assert db.get(QuotaReservation, service.reservation_id).status == 'released'
+
+
+def test_reserved_request_requires_real_consistent_usage(db, account):
+    service = ProxyService(db)
+    reserve(db, account)
+    from app.models.quota_reservation import QuotaReservation
+    service.reservation_id = db.query(QuotaReservation).one().reservation_id
+    for response in [
+        {'choices': [{'message': {'content': '您好'}}]},
+        {'usage': {'prompt_tokens': -2, 'completion_tokens': 42, 'total_tokens': 40}},
+        {'usage': {'prompt_tokens': 2, 'completion_tokens': 40, 'total_tokens': 1}},
+    ]:
+        with pytest.raises(HTTPException) as exc:
+            service.calculate_tokens({'messages': [{'content': '你好'}]}, response)
+        assert exc.value.status_code == 502
+    service.release_reservation()
+
+
+def test_proxy_stream_allows_renewal_with_single_connection_pool(db, account, monkeypatch):
+    import asyncio
+    import httpx
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from starlette.requests import Request
+    from app.api.v1 import proxy
+    from app.models.channel import Channel, ChannelType
+    from app.models.quota_reservation import QuotaReservation
+    from app.services.quota_reservation_service import QuotaReservationService
+    import app.core.database as database
+    db.add(Channel(channel_id='pooled', name='test', type=ChannelType.openai,
+                   endpoint='https://test.invalid', timeout=10, upstream_format='chat', auth_type='bearer', api_key='fake'))
+    db.commit()
+    engine = create_engine(db.get_bind().url, pool_size=1, max_overflow=0, pool_timeout=0.2)
+    sessions = sessionmaker(bind=engine)
+    monkeypatch.setattr(database, 'SessionLocal', sessions)
+    monkeypatch.setattr(ProxyService, 'check_model_group_access', lambda *args: {'allowed': True})
+    monkeypatch.setattr(ProxyService, 'select_channel', lambda self, *args: (self.db.query(Channel).filter_by(channel_id='pooled').one(), 'upstream', 'fake'))
+    renewed = []
+    class LongStream(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n'
+            # 上游仍在读取时尝试续期；池只有一个连接，不能被请求 session 占住。
+            with sessions() as check:
+                rid = check.query(QuotaReservation).filter_by(user_id=account).one().reservation_id
+                QuotaReservationService(check).renew(rid)
+                renewed.append(True)
+            yield b'data: {"usage":{"prompt_tokens":2,"completion_tokens":40,"total_tokens":42}}\n\ndata: [DONE]\n\n'
+    real_client = httpx.Client
+    monkeypatch.setattr('app.services.proxy_service.httpx.Client', lambda **kw: real_client(
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, stream=LongStream())), **kw))
+    with sessions() as session:
+        request = Request({'type': 'http', 'headers': []})
+        request.state.user = session.query(User).filter_by(user_id=account).one()
+        request.state.api_key = session.query(ApiKey).filter_by(key_id=account).one()
+        loop = asyncio.new_event_loop()
+        async def consume():
+            response = await proxy.chat_completions(request, proxy.ChatCompletionRequest(
+                model='priced', messages=[{'role': 'user', 'content': 'hi'}], max_tokens=100, stream=True), session)
+            async def receive():
+                await asyncio.Event().wait()
+            async def send(message):
+                if b'[DONE]' in message.get('body', b''):
+                    with sessions() as check:
+                        assert check.query(QuotaReservation).filter_by(user_id=account).one().status == 'committed'
+            await response({'type': 'http', 'asgi': {'version': '3.0'}}, receive, send)
+        try:
+            loop.run_until_complete(consume())
+        finally:
+            loop.close()
+    with sessions() as check:
+        assert check.query(QuotaReservation).filter_by(user_id=account).one().status == 'committed'
+    assert renewed == [True]
+    engine.dispose()

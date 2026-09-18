@@ -406,6 +406,7 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
                 code = metadata.get('status_code', 502)
                 proxy_service.record_usage(current_user.user_id, api_key.key_id, metadata.get("channel_id"), model_id, {}, metadata.get("latency_ms", 0), 499 if code == 200 else code, metadata.get("error") or '流式请求未完成')
                 db.commit()
+            yield 'data: [DONE]\n\n'
             return
         assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=model_id, tokens=len(content) // 4)
         db.add(assistant_msg)
@@ -414,6 +415,7 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
                                    tokens=tokens, latency_ms=metadata.get("latency_ms", 0), status_code=200, error_message=None)
         await proxy_service.deduct_quota(current_user, api_key, tokens)
         db.commit()
+        yield 'data: [DONE]\n\n'
     except Exception as e:
         yield f'data: {{"error": "{str(e)}"}}\n\n'
         yield "data: [DONE]\n\n"

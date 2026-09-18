@@ -159,6 +159,9 @@ async def chat_completions(
     # 4. 转发请求（带 failover）
     if chat_request.stream:
         # 流式响应
+        _user_id = user.user_id
+        _key_id = api_key.key_id
+        _model = chat_request.model
         try:
             stream_gen = proxy_service.forward_stream(chat_request.model, user, api_key, request_data)
         except BaseException:
@@ -166,9 +169,6 @@ async def chat_completions(
             release_proxy_concurrency(rate_limit_redis, concurrency_key)
             raise
         
-        _user_id = user.user_id
-        _key_id = api_key.key_id
-        _model = chat_request.model
         _concurrency_key = concurrency_key
         _rate_limit_redis = rate_limit_redis
         _reservation_id = proxy_service.reservation_id
@@ -176,10 +176,15 @@ async def chat_completions(
         def sync_generator():
             from app.core.database import SessionLocal
             db = SessionLocal()
+            done = False
+            settlement_error = None
             try:
                 completion_text = ""
                 for chunk in stream_gen:
                     line = chunk.strip()
+                    if line == 'data: [DONE]':
+                        done = True
+                        continue  # 结算完成后才向客户端发终止标记。
                     if line.startswith("data: "):
                         data_str = line[6:]
                         if data_str and data_str != "[DONE]":
@@ -223,12 +228,17 @@ async def chat_completions(
                             db.commit()
                 except Exception:
                     db.rollback()
+                    settlement_error = '流式结算失败，预扣将释放，请联系管理员检查渠道用量'
                     logger.exception("流式用量归因记录失败，key_id=%s", _key_id)
                 finally:
                     try:
                         stream_gen.close()
                     finally:
                         db.close()
+            if settlement_error:
+                yield 'data: ' + json.dumps({'error': settlement_error}, ensure_ascii=False) + '\n\n'
+            if done:
+                yield 'data: [DONE]\n\n'
         
         return QuotaStreamingResponse(
             sync_generator(), db.get_bind(), _reservation_id,
