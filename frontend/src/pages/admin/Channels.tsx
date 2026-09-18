@@ -219,7 +219,7 @@ const ChannelsPage = () => {
       )
     },
     {
-      title: '操作', key: 'action', width: 200,
+      title: '操作', key: 'action', width: 200, fixed: 'right' as const,
       render: (_: any, record: Channel) => (
         <Space>
           <Tooltip title="编辑"><Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/channels/${record.channel_id}/edit`)} /></Tooltip>
@@ -251,7 +251,7 @@ return (
       </div>
 
       <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading}
-          scroll={{ y: "calc(100vh - 320px)" }} />
+          scroll={{ x: 1500, y: "calc(100vh - 320px)" }} />
 
 
       {/* 配置 Modal */}

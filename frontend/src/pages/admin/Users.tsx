@@ -268,6 +268,7 @@ const UsersPage = () => {
     {
       title: '操作',
       key: 'action',
+      fixed: 'right' as const,
       render: (_: any, record: User) => (
         <Space>
           <Button
@@ -331,6 +332,7 @@ const UsersPage = () => {
         columns={columns}
         rowKey="user_id"
         loading={loading}
+        scroll={{ x: 1500 }}
         pagination={{
           pageSize: 10,
           showSizeChanger: false,
