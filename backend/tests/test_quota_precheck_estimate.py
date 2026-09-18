@@ -14,7 +14,9 @@ from app.services.quota_reservation_service import estimate_request
 def test_request_estimation_includes_input_and_enforces_output(messages, output, want):
     request = {'messages': messages, 'max_tokens': output}
     assert estimate_request(request) == want
-    assert request['max_tokens'] == want[1]
+    # 估算函数不应污染入参:配额预扣使用的默认上限(1024)只用于本地估算,
+    # 不应被回写到 request_data,否则下游发给上游时会变成隐式 max_tokens 上限,导致长回答被截断。
+    assert request.get('max_tokens') == output
 
 
 @pytest.mark.parametrize('output', [0, -1, True])

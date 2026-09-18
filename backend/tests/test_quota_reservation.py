@@ -151,7 +151,8 @@ def test_price_snapshot_and_default_output_bound(db, account):
     service = ProxyService(db)
     request = {'messages': [{'role': 'user', 'content': '你好'}]}
     rid = service.reserve_quota(user, key, 'priced', request)
-    assert request['max_tokens'] == 1024
+    # 前端未传 max_tokens 时不应被配额预扣回写;预扣仍按 1024 估算。
+    assert request.get('max_tokens') is None
     assert db.get(QuotaReservation, rid).estimated_tokens == 1306
     db.query(Model).filter_by(model_id='priced').update({'price_per_1k_input': 100, 'price_per_1k_output': 200})
     db.commit()
@@ -228,7 +229,8 @@ def test_minimax_message_template_usage_fits_reservation(db, account):
     assert row.actual_cost_usd == Decimal('2.253')
     db.refresh(user)
     assert user.quota_used == 1229
-    assert request['max_tokens'] == 1024
+    # 同上:reserve_quota 不应把估算默认 1024 写回 request。
+    assert request.get('max_tokens') is None
 
 
 def test_upstream_overrun_cannot_spend_another_requests_reservation(db, account):
