@@ -857,7 +857,7 @@ class ProxyService:
             except Exception:
                 pass
         
-        if total_tokens > 1000 and user.quota_change_alert:
+        if user.quota_change_alert and total_tokens > 0:
             from app.services.notification_service import create_notification
             from app.models.notification import NotificationType
             balance_text = '当前额度无限制' if unlimited else f'当前剩余 {quota_remain} tokens'
