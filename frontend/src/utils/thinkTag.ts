@@ -9,7 +9,9 @@
 // not on stored data: backend should still record what the model actually
 // returned so future debugging has the full signal.
 
-const THINK_TAG_RE = /<think>[\s\S]*?<\/think>/g
+// Hide unfinished blocks too: the closing tag may arrive in a later chunk.
+const THINK_TAG_RE = /<think>[\s\S]*?(?:<\/think>|$)/g
+const PARTIAL_THINK_TAG_RE = /<(?:t|th|thi|thin|think)?$/
 
 export const stripThinkTags = (content: string): string =>
-  (content ?? '').replace(THINK_TAG_RE, '')
+  (content ?? '').replace(THINK_TAG_RE, '').replace(PARTIAL_THINK_TAG_RE, '')

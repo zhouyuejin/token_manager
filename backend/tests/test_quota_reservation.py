@@ -16,7 +16,7 @@ from app.services.proxy_service import ProxyService
 @pytest.fixture
 def account(db):
     uid = uuid.uuid4().hex
-    db.add_all([User(user_id=uid, username=uid, email=uid+'@test', password='hash', quota=200),
+    db.add_all([User(user_id=uid, username=uid, email=uid+'@test', password='hash', quota=500),
                 ApiKey(key_id=uid, user_id=uid, api_key=uid, key_name='test'),
                 Model(model_id='priced', price_per_1k_input=1, price_per_1k_output=2)])
     db.commit()
@@ -152,7 +152,7 @@ def test_price_snapshot_and_default_output_bound(db, account):
     request = {'messages': [{'role': 'user', 'content': '你好'}]}
     rid = service.reserve_quota(user, key, 'priced', request)
     assert request['max_tokens'] == 1024
-    assert db.get(QuotaReservation, rid).estimated_tokens == 1082
+    assert db.get(QuotaReservation, rid).estimated_tokens == 1306
     db.query(Model).filter_by(model_id='priced').update({'price_per_1k_input': 100, 'price_per_1k_output': 200})
     db.commit()
     tokens = {'prompt_tokens': 2, 'completion_tokens': 40, 'total_tokens': 42}
@@ -208,6 +208,27 @@ def test_expired_record_cannot_be_charged_or_renewed(db, account):
     with pytest.raises(RuntimeError):
         service.renew(rid)
     assert db.query(User).filter_by(user_id=account).one().quota_used == 0
+
+
+def test_minimax_message_template_usage_fits_reservation(db, account):
+    from app.models.quota_reservation import QuotaReservation
+    from app.services.quota_reservation_service import QuotaReservationService
+    db.query(User).filter_by(user_id=account).update({'quota': 2000})
+    db.commit()
+    user = db.query(User).filter_by(user_id=account).one()
+    key = db.query(ApiKey).filter_by(key_id=account).one()
+    request = {'messages': [{'role': 'user', 'content': 'a' * 85}]}
+    rid = ProxyService(db).reserve_quota(user, key, 'priced', request)
+    # 实际 MiniMax-M3 故障样本：85 字节消息，输入 205，输出达到 1024 上限。
+    tokens = {'prompt_tokens': 205, 'completion_tokens': 1024, 'total_tokens': 1229}
+    assert QuotaReservationService(db).commit(rid, tokens)
+    row = db.get(QuotaReservation, rid)
+    assert row.status == 'committed'
+    assert row.actual_tokens == 1229
+    assert row.actual_cost_usd == Decimal('2.253')
+    db.refresh(user)
+    assert user.quota_used == 1229
+    assert request['max_tokens'] == 1024
 
 
 def test_upstream_overrun_cannot_spend_another_requests_reservation(db, account):
@@ -286,6 +307,34 @@ def test_unlimited_and_admin_still_record_actual_usage(db, account, admin):
     assert user.quota == (0 if admin else -1)
 
 
+@pytest.mark.parametrize('role,quota,remaining', [
+    ('admin', -1, None), ('admin', 500, None),
+    ('user', -1, None), ('user', 5000, 3780),
+])
+def test_consumption_notification_displays_unlimited_or_actual_balance(db, account, role, quota, remaining):
+    import asyncio
+    import json
+    from app.models.user import UserRole
+    from app.models.notification import Notification, NotificationType
+    user = db.query(User).filter_by(user_id=account).one()
+    key = db.query(ApiKey).filter_by(key_id=account).one()
+    user.role, user.quota = UserRole(role), quota
+    db.commit()
+    service = ProxyService(db)
+    service.reserve_quota(user, key, 'priced', {'messages': [{'role': 'user', 'content': 'a' * 85}]})
+    asyncio.run(service.deduct_quota(user, key, {
+        'prompt_tokens': 196, 'completion_tokens': 1024, 'total_tokens': 1220,
+    }))
+    notice = db.query(Notification).filter_by(type=NotificationType.quota_decrease).one()
+    expected_balance = '当前额度无限制' if remaining is None else '当前剩余 3780 tokens'
+    assert notice.content == f'本次消费 1220 tokens，{expected_balance}。'
+    assert json.loads(notice.extra_data)['quota_remain'] == remaining
+    assert db.query(Notification).filter_by(type=NotificationType.quota_low).count() == 0
+    db.refresh(user)
+    assert user.quota == quota
+    assert user.quota_used == 1220
+
+
 def test_stream_send_exception_closes_generator_and_releases(db, account):
     import asyncio
     from app.api.streaming import QuotaStreamingResponse
@@ -317,23 +366,29 @@ def test_stream_send_exception_closes_generator_and_releases(db, account):
     assert db.get(QuotaReservation, rid).status == 'released'
 
 
-def test_truncated_stream_is_not_successful(db, account, monkeypatch):
+@pytest.mark.parametrize('ending', ['', 'data: [DONE]\n\n',
+                                    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'])
+def test_stream_completion_markers(db, account, monkeypatch, ending):
     import httpx
     from app.models.channel import Channel, ChannelType
     channel = Channel(channel_id='selected', name='test', type=ChannelType.openai,
                       endpoint='https://test.invalid', timeout=10, upstream_format='chat', auth_type='bearer')
     monkeypatch.setattr(ProxyService, 'select_channel', lambda *args: (channel, 'upstream', 'fake'))
     client = httpx.Client
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, text='data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'))
+    usage = 'data: {"usage":{"prompt_tokens":2,"completion_tokens":4,"total_tokens":6}}\n\n'
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text='data: {"choices":[{"delta":{"content":"partial"}}]}\n\n' + ending + usage))
     monkeypatch.setattr('app.services.proxy_service.httpx.Client', lambda **kw: client(transport=transport, **kw))
     service = ProxyService(db)
     user = db.query(User).filter_by(user_id=account).one()
     key = db.query(ApiKey).filter_by(key_id=account).one()
     request = {'messages': [{'role': 'user', 'content': 'hi'}], 'max_tokens': 100}
     service.reserve_quota(user, key, 'priced', request)
-    list(service.forward_stream('priced', user, key, request))
-    assert service.stream_metadata['status_code'] == 502
-    assert not service.stream_metadata.get('completed')
+    chunks = list(service.forward_stream('priced', user, key, request))
+    assert service.stream_metadata['status_code'] == (200 if ending else 502)
+    assert bool(service.stream_metadata.get('completed')) == bool(ending)
+    if ending:
+        assert service.stream_metadata['tokens']['total_tokens'] == 6
+        assert any(chunk.strip() == 'data: [DONE]' for chunk in chunks)
     service.release_reservation()
     from app.models.quota_reservation import QuotaReservation
     assert db.get(QuotaReservation, service.reservation_id).status == 'released'
