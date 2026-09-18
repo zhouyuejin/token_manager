@@ -263,6 +263,12 @@ def test_migration_on_mysql(db):
         assert {i['name'] for i in inspector.get_indexes('quota_reservations')} == {
             'ix_quota_reservations_user_id', 'ix_quota_reservations_key_id', 'ix_reservation_expiry'}
         assert len(inspector.get_columns('quota_reservations')) == 18
+        # 恢复当前模型需要的后续预算迁移字段，仅操作专用测试库。
+        budget_spec = importlib.util.spec_from_file_location('budget_mysql_migration', path.parent / '20260918_1200_budgets.py')
+        budget_migration = importlib.util.module_from_spec(budget_spec)
+        budget_spec.loader.exec_module(budget_migration)
+        budget_migration.op = Operations(MigrationContext.configure(conn))
+        budget_migration.upgrade()
 
 
 @pytest.mark.parametrize('admin', [False, True])

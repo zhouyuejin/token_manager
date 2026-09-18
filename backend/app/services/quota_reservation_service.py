@@ -4,7 +4,7 @@ import logging
 from contextlib import contextmanager
 from threading import Event, Thread
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 
 from fastapi import HTTPException
 from redis.exceptions import RedisError
@@ -16,6 +16,7 @@ from app.models.api_key import ApiKey
 from app.models.model import Model
 from app.models.quota_reservation import QuotaReservation
 from app.services.rate_limit_service import get_rate_limit_redis_client
+from app.services.budget_service import BudgetService, current_month
 
 
 LEASE_SECONDS = 300
@@ -33,9 +34,12 @@ return 1
 
 def cost(row, tokens):
     if row.price_type == 'request':
-        return Decimal(row.request_price)
-    return (Decimal(tokens.get('prompt_tokens', 0)) * Decimal(row.input_price)
+        amount = Decimal(row.request_price)
+    else:
+        amount = (Decimal(tokens.get('prompt_tokens', 0)) * Decimal(row.input_price)
             + Decimal(tokens.get('completion_tokens', 0)) * Decimal(row.output_price)) / 1000
+    # 最小记账单位为 USD 1e-8；预扣、结算和日志采用一致的向上舍入。
+    return amount.quantize(Decimal('0.00000001'), rounding=ROUND_CEILING)
 
 
 def estimate_request(request_data):
@@ -62,9 +66,13 @@ class QuotaReservationService:
         prompt, output = estimate_request(request_data)
         amount = prompt + output
         uid, kid = user.user_id, key.key_id
+        # 结束鉴权/归因只读事务；组织锁取得后才建立新快照，避免旧快照漏掉并发预扣。
+        self.db.rollback()
         try:
             locked = self._user(uid)
-            outstanding = self.db.query(QuotaReservation).filter_by(user_id=uid, status='reserved').with_for_update().all()
+            now = datetime.utcnow()
+            budgets = BudgetService(self.db).lock_budgets(attribution, current_month(now))
+            outstanding = self.db.query(QuotaReservation).filter_by(user_id=uid, status='reserved').populate_existing().all()
             available = locked.quota - locked.quota_used - sum(r.estimated_tokens for r in outstanding)
             unlimited = locked.role == UserRole.admin or locked.quota < 0
             if not get_rate_limit_redis_client().eval(_ADMIT, 1, 'quota:admit:' + uid,
@@ -73,7 +81,6 @@ class QuotaReservationService:
             model = self.db.query(Model).filter_by(model_id=model_id).first()
             if not model:
                 raise HTTPException(404, '模型不存在，无法预扣')
-            now = datetime.utcnow()
             row = QuotaReservation(
                 reservation_id=secrets.token_hex(16), user_id=uid, key_id=kid, model=model_id,
                 **attribution, estimated_tokens=amount,
@@ -82,6 +89,7 @@ class QuotaReservationService:
                 request_price=model.price_per_request, status='reserved',
                 created_at=now, updated_at=now, expires_at=now + timedelta(seconds=LEASE_SECONDS))
             row.estimated_cost_usd = cost(row, {'prompt_tokens': prompt, 'completion_tokens': output})
+            BudgetService(self.db).admit(budgets, row.estimated_cost_usd)
             self.db.add(row)
             reservation_id = row.reservation_id
             self.db.commit()
@@ -98,6 +106,7 @@ class QuotaReservationService:
         if row is None:
             return None, None
         user = self._user(row.user_id)
+        BudgetService(self.db).lock_budgets({'project_id': row.project_id, 'department_id': row.department_id}, current_month(row.created_at))
         row = self.db.query(QuotaReservation).filter_by(reservation_id=rid).populate_existing().with_for_update().one()
         return user, row
 
@@ -116,7 +125,10 @@ class QuotaReservationService:
                 raise HTTPException(502, '上游用量超过预扣上限，拒绝结算，请联系管理员检查模型配置')
             row.actual_tokens = actual
             row.actual_cost_usd = cost(row, tokens)
+            if row.actual_cost_usd > row.estimated_cost_usd:
+                raise HTTPException(502, '上游费用超过预扣上限，拒绝结算，请联系管理员检查模型配置')
             row.status = 'committed'
+            row.budget_accounted = True
             row.updated_at = datetime.utcnow()
             self.db.execute(update(User).where(User.user_id == user.user_id).values(quota_used=User.quota_used + actual))
             self.db.execute(update(ApiKey).where(ApiKey.key_id == row.key_id).values(last_used_at=datetime.utcnow()))

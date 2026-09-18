@@ -260,6 +260,8 @@ def send_daily_reports():
 
 def setup_scheduler():
     """设置定时任务"""
+    scheduler.add_job(check_budget_alerts, trigger=IntervalTrigger(seconds=60),
+                      id='check_budget_alerts', name='检查预算阈值告警', replace_existing=True)
     scheduler.add_job(
         expire_quota_reservations,
         trigger=IntervalTrigger(seconds=60),
@@ -298,6 +300,12 @@ def expire_quota_reservations():
     from app.services.quota_reservation_service import QuotaReservationService
     with SessionLocal() as db:
         QuotaReservationService(db).expire()
+
+
+async def check_budget_alerts():
+    from app.services.budget_service import BudgetService
+    with SessionLocal() as db:
+        await BudgetService(db).check_alerts()
 
 
 def start_scheduler():
