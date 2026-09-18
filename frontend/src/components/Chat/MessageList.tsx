@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Spin, Empty, Avatar } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons'
+import { XMarkdown } from '@ant-design/x-markdown'
 import { ChatMessage } from '../../api/chat'
 import { stripThinkTags } from '../../utils/thinkTag'
 import dayjs from 'dayjs'
@@ -38,17 +39,6 @@ const MessageList: React.FC<MessageListProps> = ({
     }
   }
 
-  // 格式化消息内容
-  const formatContent = (content: string) => {
-    const lines = stripThinkTags(content).split('\n')
-    return lines.map((line, i) => (
-      <span key={i}>
-        {line}
-        {i < lines.length - 1 && <br />}
-      </span>
-    ))
-  }
-
   if (loading && messages.length === 0) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -79,6 +69,11 @@ const MessageList: React.FC<MessageListProps> = ({
     >
       {messages.map((msg, index) => {
         const isUser = msg.role === 'user'
+        const isLast = index === messages.length - 1
+        // 只对"当前正在流式输出的最后一条 assistant 消息"启用 XMarkdown 的增量渲染
+        // 否则传 streaming 会触发未完成块的额外处理,反而抖动
+        const isStreamingMsg = streaming && isLast && !isUser
+        const displayContent = stripThinkTags(msg.content)
         return (
           <div
             key={msg.message_id || index}
@@ -98,7 +93,7 @@ const MessageList: React.FC<MessageListProps> = ({
                 flexShrink: 0,
               }}
             />
-            
+
             {/* 消息内容 */}
             <div
               style={{
@@ -108,13 +103,20 @@ const MessageList: React.FC<MessageListProps> = ({
                 background: isUser ? token.colorPrimary : (isDark ? '#2a2a2a' : '#F1F5F9'),
                 color: isDark ? '#e0e0e0' : '#1E293B',
                 wordBreak: 'break-word',
-                whiteSpace: 'pre-wrap',
+                // 不再设置 whiteSpace: pre-wrap —— XMarkdown 自己处理空白与换行
               }}
             >
-              <div style={{ marginBottom: '4px' }}>
-                {formatContent(msg.content)}
-              </div>
-              
+              <XMarkdown
+                content={displayContent}
+                className="chat-md"
+                style={{ color: 'inherit' }}
+                streaming={
+                  isStreamingMsg
+                    ? { hasNextChunk: true, tail: { content: '▋' } }
+                    : undefined
+                }
+              />
+
               {/* 底部操作栏和时间 */}
               <div
                 style={{
@@ -127,7 +129,7 @@ const MessageList: React.FC<MessageListProps> = ({
                 }}
               >
                 <span>{dayjs.utc(msg.created_at).local().format('HH:mm')}</span>
-                
+
                 {!isUser && (
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <CopyOutlined
@@ -149,10 +151,10 @@ const MessageList: React.FC<MessageListProps> = ({
           </div>
         )
       })}
-      
+
       {streaming && (
         <div style={{ padding: '12px', opacity: 0.6, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Spin size="small" /> 
+          <Spin size="small" />
           <span>AI 正在思考...</span>
         </div>
       )}
