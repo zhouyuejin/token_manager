@@ -307,6 +307,8 @@ const ApiKeysPage = () => {
     {
       title: '操作',
       key: 'action',
+      width: 320,
+      fixed: 'right' as const,
       render: (_: any, record: ApiKey) => adminView && isAdmin ? (
         <Space><Button type="text" onClick={() => handleEdit(record)}>编辑安全配置</Button>
         {record.status === 'disabled' && record.frozen_at ? (
