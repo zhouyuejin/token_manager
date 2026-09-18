@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, Set, Tuple
 from functools import reduce
 from decimal import Decimal
+from types import SimpleNamespace
 import httpx
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -474,8 +475,7 @@ class ProxyService:
         for ch, mc, key in candidates:
             attempted_channels.append(ch.channel_id)
             try:
-                with self.reservation_lease():
-                    result = self._forward_one(ch, mc.upstream_model, key, request_data)
+                result = self._forward_one(ch, mc.upstream_model, key, request_data)
                 
                 if result["success"]:
                     record_api_key_success(api_key)
@@ -544,9 +544,12 @@ class ProxyService:
         headers["Content-Type"] = "application/json"
         if channel.upstream_format == "anthropic" or (channel.upstream_format == "auto" and channel.type.value == "anthropic"):
             headers.setdefault("anthropic-version", "2023-06-01")
+        timeout = channel.timeout
+        if self.reservation_id:
+            self.db.commit()  # 上游等待期间不占数据库连接，给租约和其它请求使用。
 
         try:
-            with httpx.Client(timeout=channel.timeout) as client:
+            with self.reservation_lease(), httpx.Client(timeout=timeout) as client:
                 response = client.post(
                     upstream_url,
                     json=request_data,
@@ -644,19 +647,25 @@ class ProxyService:
         ch, upstream_model, key = result
         self.stream_metadata.update(channel_id=ch.channel_id, status_code=502, error=None)
         start_time = time.time()
+        timeout = ch.timeout
+        request_data['model'] = upstream_model
+        request_data['stream'] = True
+        upstream_url = get_upstream_url(ch, model=upstream_model)
+        headers = build_auth_headers(ch, key)
+        headers['Content-Type'] = 'application/json'
+        if ch.upstream_format == 'anthropic' or (ch.upstream_format == 'auto' and ch.type.value == 'anthropic'):
+            headers.setdefault('anthropic-version', '2023-06-01')
+        if '/chat/completions' in upstream_url:
+            request_data['stream_options'] = {'include_usage': True}
+        key_snapshot = SimpleNamespace(key_id=api_key.key_id, api_key=api_key.api_key)
+        if self.reservation_id:
+            self.db.commit()  # 先取完标量快照，流式读取和续期不占两条连接。
 
         def generate():
             completion_text = ""
+            done = False
             try:
-                with self.reservation_lease(), httpx.Client(timeout=ch.timeout) as client:
-                    request_data["model"] = upstream_model
-                    request_data["stream"] = True
-                    upstream_url = get_upstream_url(ch, model=upstream_model)
-                    headers = build_auth_headers(ch, key)
-                    headers["Content-Type"] = "application/json"
-                    if ch.upstream_format == "anthropic" or (ch.upstream_format == "auto" and ch.type.value == "anthropic"):
-                        headers.setdefault("anthropic-version", "2023-06-01")
-
+                with self.reservation_lease(), httpx.Client(timeout=timeout) as client:
                     with client.stream("POST", upstream_url, json=request_data, headers=headers) as response:
                         self.stream_metadata["status_code"] = response.status_code
                         if response.status_code != 200:
@@ -682,9 +691,11 @@ class ProxyService:
                             yield "data: [DONE]\n\n"
                             return
 
-                        record_api_key_success(api_key)
+                        record_api_key_success(key_snapshot)
                         for chunk in response.iter_lines():
                             if chunk:
+                                if chunk.startswith('data: ') and chunk[6:].strip() == '[DONE]':
+                                    done = True
                                 if chunk.startswith('data: ') and chunk[6:].strip() != '[DONE]':
                                     try:
                                         data = json.loads(chunk[6:])
@@ -697,6 +708,8 @@ class ProxyService:
                                     except (ValueError, TypeError, AttributeError):
                                         pass
                                 yield chunk + "\n"
+                        if not done:
+                            raise RuntimeError('上游流式响应缺少结束标记')
                         if 'tokens' not in self.stream_metadata:
                             self.stream_metadata['tokens'] = self.calculate_tokens(request_data, {'choices': [{'message': {'content': completion_text}}]})
                         self.stream_metadata['completed'] = True
@@ -771,12 +784,18 @@ class ProxyService:
 
     def calculate_tokens(self, request_data: Dict[str, Any], response_data: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
         """计算Token数量（估算）"""
+        from fastapi import HTTPException
         usage = response_data.get('usage') if response_data else None
         if usage and ('prompt_tokens' in usage or 'completion_tokens' in usage):
             prompt = int(usage.get('prompt_tokens', 0) or 0)
             completion = int(usage.get('completion_tokens', 0) or 0)
+            total = int(usage.get('total_tokens', prompt + completion) or 0)
+            if self.reservation_id and (prompt < 0 or completion < 0 or total != prompt + completion):
+                raise HTTPException(502, '上游用量无效，拒绝结算')
             return {'prompt_tokens': prompt, 'completion_tokens': completion,
-                    'total_tokens': int(usage.get('total_tokens', prompt + completion) or 0)}
+                    'total_tokens': total}
+        if self.reservation_id and response_data is not None:
+            raise HTTPException(502, '上游未返回真实用量，无法结算，请检查渠道 usage 支持')
         prompt_tokens = 0
         completion_tokens = 0
         
