@@ -337,6 +337,31 @@ def test_consumption_notification_displays_unlimited_or_actual_balance(db, accou
     assert user.quota_used == 1220
 
 
+def test_consumption_notification_fires_below_legacy_threshold(db, account):
+    """守护 deduct_quota 的额度变动通知:单次消费 <= 1000 也必须触发。
+
+    历史 bug:deduct_quota 设置了 `total_tokens > 1000` 的硬阈值,普通 AI 对话
+    几百 token 永远过不去,即使 user.quota_change_alert=True 也不会产生通知。"""
+    import asyncio
+    import json
+    from app.models.notification import Notification, NotificationType
+    user = db.query(User).filter_by(user_id=account).one()
+    key = db.query(ApiKey).filter_by(key_id=account).one()
+    user.quota = 5000
+    user.quota_change_alert = True
+    db.commit()
+    service = ProxyService(db)
+    service.reserve_quota(user, key, 'priced', {'messages': [{'role': 'user', 'content': 'a' * 85}]})
+    asyncio.run(service.deduct_quota(user, key, {
+        'prompt_tokens': 96, 'completion_tokens': 412, 'total_tokens': 508,
+    }))
+    notice = db.query(Notification).filter_by(type=NotificationType.quota_decrease).one()
+    assert notice.content == '本次消费 508 tokens，当前剩余 4492 tokens。'
+    assert json.loads(notice.extra_data)['deducted'] == 508
+    db.refresh(user)
+    assert user.quota_used == 508
+
+
 def test_stream_send_exception_closes_generator_and_releases(db, account):
     import asyncio
     from app.api.streaming import QuotaStreamingResponse
