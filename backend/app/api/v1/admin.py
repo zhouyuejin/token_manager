@@ -515,6 +515,7 @@ async def adjust_quota(user_id: str, data: QuotaAdjustRequest, request: Request,
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
+    balance_before = user.quota
     if data.set_unlimited:
         user.quota = -1
         detail = {"quota": -1, "reason": data.reason, "action": "set_unlimited"}
@@ -526,7 +527,16 @@ async def adjust_quota(user_id: str, data: QuotaAdjustRequest, request: Request,
         detail = {"quota": data.amount, "reason": data.reason, "action": "set"}
     else:
         raise HTTPException(status_code=400, detail="参数错误")
-    
+
+    from app.models.quota_record import QuotaRecord, QuotaRecordType
+    delta = user.quota - balance_before
+    if delta:
+        db.add(QuotaRecord(
+            record_id=secrets.token_hex(16), user_id=user.user_id,
+            type=QuotaRecordType.increase if delta > 0 else QuotaRecordType.decrease,
+            amount=abs(delta), balance_before=balance_before, balance_after=user.quota,
+            source="admin", reason=data.reason, operator_id=admin.user_id,
+        ))
     db.commit()
     record_operation(db=db, operator=admin, action="adjust_quota", target_type="user", target_id=user_id, detail=detail, ip_address=extract_client_ip(request))
     return {"message": "额度调整成功"}

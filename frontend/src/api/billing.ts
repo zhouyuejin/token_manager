@@ -1,4 +1,4 @@
-import { get, put } from './request'
+import { get, post, put } from './request'
 
 export interface BudgetSave {
   amount_usd: string
@@ -46,3 +46,43 @@ export interface MyBilling {
 }
 
 export const getMyBilling = () => get<MyBilling>('/stats/billing')
+
+export type ReconcileStatus = 'running' | 'normal' | 'abnormal' | 'failed'
+
+export interface ReconcileReport {
+  report_id: string
+  business_date: string
+  status: ReconcileStatus
+  reservation_count: number
+  usage_count: number
+  quota_record_count: number
+  anomaly_count: number
+  started_at: string
+  finished_at?: string | null
+  error_message?: string | null
+}
+
+export interface ReconcileReportList {
+  total: number
+  items: ReconcileReport[]
+  coverage_started_at: string
+  timezone: string
+  grace_minutes: number
+  history_rule: string
+}
+
+export interface ReconcileItem {
+  item_id: string
+  anomaly_type: string
+  reservation_id?: string | null
+  usage_log_id?: number | null
+  quota_record_id?: string | null
+  user_id?: string | null
+  expected_value?: string | null
+  actual_value?: string | null
+  detail: string
+  created_at: string
+}
+
+export const runReconcile = (businessDate: string) =>
+  post<ReconcileReport>(`/admin/billing/reconcile/run/${businessDate}`)
