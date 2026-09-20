@@ -10,12 +10,14 @@ import {
   CheckCircleOutlined,
   BarChartOutlined,
   DollarOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import dayjs from 'dayjs'
-import { getAdminStats, AdminStats } from '../api/admin'
-import { Project } from '../api/projects'
+import { exportUsageReport, AdminStats, UsageReportParams } from '../api/admin'
+import { Department, Project } from '../api/projects'
 import { useSwrData, useSwrDataWithParams } from '../hooks/useSwr'
+import { useMessage } from '../utils/message'
 
 const { RangePicker } = DatePicker
 const { Text } = Typography
@@ -46,13 +48,26 @@ const AdminDashboard: React.FC = () => {
   ])
 
   const [projectId, setProjectId] = useState<string>()
+  const [departmentId, setDepartmentId] = useState<string>()
+  const [userId, setUserId] = useState<string>()
+  const [model, setModel] = useState<string>()
+  const [channelId, setChannelId] = useState<string>()
+  const [exporting, setExporting] = useState(false)
+  const message = useMessage()
   const { data: projectsData, error: projectsError, mutate: mutateProjects } = useSwrData<{ items: Project[] }>("/projects/admin")
+  const { data: departmentsData } = useSwrData<{ items: Department[] }>("/projects/admin/departments")
+  const { data: usersData } = useSwrData<{ items: { user_id: string; username: string }[] }>("/admin/users?page_size=100")
+  const { data: channelsData } = useSwrData<{ items: { channel_id: string; name: string }[] }>("/admin/channels")
 
   // 使用 SWR 获取统计数据
-  const statsParams = {
+  const statsParams: UsageReportParams = {
     start_date: dateRange[0].format('YYYY-MM-DD'),
     end_date: dateRange[1].format('YYYY-MM-DD'),
+    ...(departmentId ? { department_id: departmentId } : {}),
     ...(projectId ? { project_id: projectId } : {}),
+    ...(userId ? { user_id: userId } : {}),
+    ...(model ? { model } : {}),
+    ...(channelId ? { channel_id: channelId } : {}),
   }
   const { data: statsData, isLoading, error: statsError, mutate: mutateStats } = useSwrDataWithParams<AdminStats>(
     token ? '/admin/stats/usage' : null,
@@ -83,12 +98,30 @@ const AdminDashboard: React.FC = () => {
   // 计算总费用
   const totalCost = useMemo(() => {
     if (!stats?.by_model) return 0
-    return stats.by_model.reduce((sum, item) => sum + (item.cost || 0), 0)
+    return stats.total_cost ?? stats.by_model.reduce((sum, item) => sum + (item.cost || 0), 0)
   }, [stats, isDark, token])
   const hasUsage = (stats?.by_model?.length || 0) > 0
   // 当前查询覆盖的天数（>=1，避免除 0）；用于把周期内成本折合成月预估
   const dayCount = Math.max(1, dateRange[1].diff(dateRange[0], 'day') + 1)
   const monthlyCost = totalCost * (30 / dayCount)
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const blob = await exportUsageReport(statsParams)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `usage_report_${statsParams.start_date}_${statsParams.end_date}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+      message.success('报表导出成功')
+    } catch {
+      message.error('报表导出失败，筛选条件已保留')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // 获取模型显示名称
   const getModelDisplayName = (model: string, displayName?: string) => {
@@ -538,7 +571,11 @@ const AdminDashboard: React.FC = () => {
           仪表盘
         </h2>
         <Space wrap>
-        <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目（含历史未归因）" value={projectId} onChange={setProjectId} style={{ width: 280 }} options={(projectsData?.items || []).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部部门" value={departmentId} onChange={value => { setDepartmentId(value); if (value && !projectsData?.items.find(project => project.project_id === projectId && project.dept_id === value)) setProjectId(undefined) }} style={{ width: 140 }} options={(departmentsData?.items || []).map(row => ({ value: row.dept_id, label: row.name }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目" value={projectId} onChange={setProjectId} style={{ width: 200 }} options={(projectsData?.items || []).filter(project => !departmentId || project.dept_id === departmentId).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部用户" value={userId} onChange={setUserId} style={{ width: 140 }} options={(usersData?.items || []).map(row => ({ value: row.user_id, label: row.username }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: row.display_name || row.model }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部渠道" value={channelId} onChange={setChannelId} style={{ width: 140 }} options={(channelsData?.items || []).map(row => ({ value: row.channel_id, label: row.name }))} />
         <RangePicker
           value={dateRange as any}
           onChange={(dates: any) => {
@@ -552,8 +589,13 @@ const AdminDashboard: React.FC = () => {
             borderRadius: 10,
           }}
         />
+        <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={handleExport}>导出 CSV</Button>
         </Space>
       </div>
+
+      <Text type="secondary" style={{ display: 'block', margin: '-12px 0 16px' }}>
+        导出范围：{statsParams.start_date} 至 {statsParams.end_date}，当前筛选下 {stats?.total_requests || 0} 次请求 / {(stats?.total_tokens || 0).toLocaleString()} Token / ${totalCost.toFixed(8)}
+      </Text>
 
       {(projectsError || statsError) && <Alert type="error" showIcon message={statsError ? "统计加载失败" : "项目加载失败"} action={<Button onClick={() => { mutateStats(); mutateProjects() }}>重试</Button>} style={{ marginBottom: 16 }} />}
 

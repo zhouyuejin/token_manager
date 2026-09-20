@@ -7,11 +7,14 @@ import secrets
 import hashlib
 import asyncio
 import json
+import csv
+import io
+from decimal import Decimal
 from typing import Optional, List, Any
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import case, func, and_
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -21,6 +24,8 @@ from app.models.channel_quota import ChannelQuota, QuotaType, SyncStatus
 from app.models.model import Model, ModelStatus, PriceType
 from app.models.model_channel import ModelChannel
 from app.models.usage_log import UsageLog
+from app.models.organization import Department
+from app.models.project import Project
 from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
     AdminStatsResponse,
@@ -41,6 +46,30 @@ from app.services.secret_crypto import encrypt_secret, mask_secret
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
+
+
+def _usage_filter(start_date, end_date, department_id=None, project_id=None,
+                  user_id=None, model=None, channel_id=None):
+    filters = [
+        func.date(UsageLog.created_at) >= start_date,
+        func.date(UsageLog.created_at) <= end_date,
+    ]
+    for column, value in (
+        (UsageLog.department_id, department_id), (UsageLog.project_id, project_id),
+        (UsageLog.user_id, user_id), (UsageLog.model, model),
+        (UsageLog.channel_id, channel_id),
+    ):
+        if value:
+            filters.append(column == value)
+    return and_(*filters)
+
+
+def _csv_row(values):
+    values = [f"'{value}" if isinstance(value, str) and value.startswith(("=", "+", "-", "@")) else value
+              for value in values]
+    output = io.StringIO()
+    csv.writer(output).writerow(values)
+    return output.getvalue()
 
 
 def _apply_role_transition(user: "User", new_role_value: str, changed: dict) -> bool:
@@ -182,7 +211,11 @@ def _apply_channel_update(channel: Channel, data: ChannelUpdate) -> dict:
 async def get_admin_usage_stats(
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    department_id: Optional[str] = Query(None, description="部门ID"),
     project_id: Optional[str] = Query(None, description="项目ID"),
+    user_id: Optional[str] = Query(None, description="用户ID"),
+    model: Optional[str] = Query(None, description="模型"),
+    channel_id: Optional[str] = Query(None, description="渠道ID"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -194,13 +227,9 @@ async def get_admin_usage_stats(
     if not start_date:
         start_date = (datetime.now() - td(days=7)).strftime("%Y-%m-%d")
     
-    base_filter = and_(
-        func.date(UsageLog.created_at) >= start_date,
-        func.date(UsageLog.created_at) <= end_date
+    base_filter = _usage_filter(
+        start_date, end_date, department_id, project_id, user_id, model, channel_id
     )
-    
-    if project_id:
-        base_filter = and_(base_filter, UsageLog.project_id == project_id)
 
     total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(base_filter).scalar() or 0
     total_requests = db.query(UsageLog).filter(base_filter).count()
@@ -262,6 +291,7 @@ async def get_admin_usage_stats(
     model_info = {m.model_id: m for m in db.query(Model).filter(Model.model_id.in_(target_model_ids)).all()} if target_model_ids else {}
     
     by_model = []
+    total_cost = 0.0
     for s in model_stats:
         # 通过 upstream_model 找到对应的 model_id，再找到模型信息
         internal_model_id = s.model if s.model in model_info else upstream_to_model_id.get(s.model)
@@ -272,6 +302,7 @@ async def get_admin_usage_stats(
         else:
             cost = 0
         cost += float(s.saved_cost or 0)
+        total_cost += cost
         by_model.append({"model": s.model, "display_name": info.display_name if info else None, "tokens": s.tokens or 0, "requests": s.requests or 0, "cost": round(cost, 4)})
     
     # 按日统计
@@ -285,10 +316,84 @@ async def get_admin_usage_stats(
     
     return AdminStatsResponse(
         total_tokens=total_tokens, total_requests=total_requests,
+        total_cost=round(total_cost, 8),
         avg_latency_ms=round(avg_latency, 2) if avg_latency else 0,
         success_rate=round(success_rate, 2),
         by_user=by_user, by_channel=by_channel, by_model=by_model, by_day=by_day,
         by_provider=by_channel  # 兼容
+    )
+
+
+@router.get("/stats/usage/export")
+async def export_admin_usage(
+    start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    department_id: Optional[str] = Query(None, description="部门ID"),
+    project_id: Optional[str] = Query(None, description="项目ID"),
+    user_id: Optional[str] = Query(None, description="用户ID"),
+    model: Optional[str] = Query(None, description="模型"),
+    channel_id: Optional[str] = Query(None, description="渠道ID"),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """按管理员统计口径流式导出逐笔用量。"""
+    end_date = end_date or datetime.now().strftime("%Y-%m-%d")
+    start_date = start_date or (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    base_filter = _usage_filter(
+        start_date, end_date, department_id, project_id, user_id, model, channel_id
+    )
+
+    users = {row.user_id: row.username for row in db.query(User.user_id, User.username).all()}
+    departments = {row.dept_id: row.name for row in db.query(Department.dept_id, Department.name).all()}
+    projects = {row.project_id: row.name for row in db.query(Project.project_id, Project.name).all()}
+    channels = {row.channel_id: row.name for row in db.query(Channel.channel_id, Channel.name).all()}
+    model_channels = db.query(ModelChannel.upstream_model, ModelChannel.model_id).all()
+    upstream_to_model = {row.upstream_model: row.model_id for row in model_channels}
+    model_ids = {row.model_id for row in model_channels}
+    model_ids.update(row[0] for row in db.query(UsageLog.model).filter(base_filter).distinct())
+    prices = {row.model_id: row for row in db.query(Model).filter(Model.model_id.in_(model_ids)).all()}
+
+    def cost(row):
+        if row.cost_usd is not None:
+            return row.cost_usd
+        price = prices.get(row.model) or prices.get(upstream_to_model.get(row.model))
+        if not price:
+            return 0
+        return (Decimal(row.prompt_tokens or 0) / 1000 * price.price_per_1k_input
+                + Decimal(row.completion_tokens or 0) / 1000 * price.price_per_1k_output)
+
+    def content():
+        yield "\ufeff" + _csv_row([
+            "时间", "部门", "项目", "用户", "API Key", "模型", "渠道",
+            "输入Token", "输出Token", "总Token", "成本(USD)", "状态码",
+        ])
+        totals = {"prompt": 0, "completion": 0, "tokens": 0, "cost": Decimal("0"), "requests": 0}
+        query = db.query(UsageLog).filter(base_filter).order_by(UsageLog.created_at, UsageLog.id)
+        for row in query.yield_per(500):
+            row_cost = Decimal(cost(row))
+            totals["prompt"] += row.prompt_tokens or 0
+            totals["completion"] += row.completion_tokens or 0
+            totals["tokens"] += row.total_tokens or 0
+            totals["cost"] += row_cost
+            totals["requests"] += 1
+            yield _csv_row([
+                row.created_at.isoformat(sep=" ") if row.created_at else "",
+                departments.get(row.department_id, row.department_id or ""),
+                projects.get(row.project_id, row.project_id or ""),
+                users.get(row.user_id, row.user_id), row.key_id, row.model,
+                channels.get(row.channel_id, row.channel_id or ""),
+                row.prompt_tokens or 0, row.completion_tokens or 0, row.total_tokens or 0,
+                f"{row_cost:.8f}", row.status_code,
+            ])
+        yield _csv_row([
+            "汇总", "", "", "", "", "", "", totals["prompt"], totals["completion"],
+            totals["tokens"], f'{totals["cost"]:.8f}', f'{totals["requests"]} 次请求',
+        ])
+
+    filename = f"usage_report_{start_date}_{end_date}.csv"
+    return StreamingResponse(
+        content(), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

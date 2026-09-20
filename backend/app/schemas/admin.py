@@ -416,6 +416,7 @@ class AdminStatsResponse(BaseModel):
     """管理员用量统计响应"""
     total_tokens: int = 0
     total_requests: int = 0
+    total_cost: float = 0
     avg_latency_ms: float = 0
     success_rate: float = 100.0
     by_user: List[UserUsage] = []

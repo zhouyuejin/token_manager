@@ -1,5 +1,15 @@
 import { get } from './request'
 
+export interface UsageReportParams {
+  start_date: string
+  end_date: string
+  department_id?: string
+  project_id?: string
+  user_id?: string
+  model?: string
+  channel_id?: string
+}
+
 export interface AdminUserUsage {
   user_id: string
   username: string
@@ -30,6 +40,7 @@ export interface AdminDailyUsage {
 export interface AdminStats {
   total_tokens: number
   total_requests: number
+  total_cost: number
   avg_latency_ms: number
   success_rate: number
   by_user: AdminUserUsage[]
@@ -38,11 +49,11 @@ export interface AdminStats {
   by_day: AdminDailyUsage[]
 }
 
-export const getAdminStats = (params: {
-  start_date: string
-  end_date: string
-  project_id?: string
-}) => get<AdminStats>('/admin/stats/usage', { params })
+export const getAdminStats = (params: UsageReportParams) =>
+  get<AdminStats>('/admin/stats/usage', { params })
+
+export const exportUsageReport = (params: UsageReportParams) =>
+  get<Blob>('/admin/stats/usage/export', { params, responseType: 'blob', timeout: 120000 })
 
 // 系统概览数据
 export interface SystemOverview {
