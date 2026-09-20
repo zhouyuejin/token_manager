@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.budget import Budget
+from app.models.quota_reservation import QuotaReservation
 from app.models.user import User
 from app.services.budget_service import BudgetService, current_month, month_bounds
 from app.services.operation_log_service import record_operation
@@ -60,6 +61,24 @@ async def list_budgets(month: str = Query(default=None), admin: User = Depends(r
     month = validate_month(month or current_month())
     rows = db.query(Budget).filter_by(month=month).order_by(Budget.scope_type, Budget.scope_id).all()
     return {'month': month, 'items': [response(db, row) for row in rows]}
+
+
+@router.get('/reservations')
+async def list_reservations(month: str = Query(default=None), status: str = Query(default=None),
+                            admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    month = validate_month(month or current_month())
+    start, end = month_bounds(month)
+    query = db.query(QuotaReservation).filter(
+        QuotaReservation.created_at >= start, QuotaReservation.created_at < end)
+    if status:
+        if status not in {'reserved', 'committed', 'released', 'expired'}:
+            raise HTTPException(422, '预扣状态无效')
+        query = query.filter(QuotaReservation.status == status)
+    rows = query.order_by(QuotaReservation.created_at.desc()).limit(200).all()
+    return {'month': month, 'items': [{field: getattr(row, field) for field in (
+        'reservation_id', 'user_id', 'key_id', 'project_id', 'department_id', 'model',
+        'estimated_tokens', 'actual_tokens', 'estimated_cost_usd', 'actual_cost_usd',
+        'status', 'created_at', 'updated_at', 'expires_at')} for row in rows]}
 
 
 @router.put('/budgets/{scope_type}/{scope_id}/{month}')

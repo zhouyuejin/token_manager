@@ -8,6 +8,7 @@ export interface UsageReportParams {
   user_id?: string
   model?: string
   channel_id?: string
+  key_id?: string
 }
 
 export interface AdminUserUsage {

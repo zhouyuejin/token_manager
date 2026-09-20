@@ -14,8 +14,14 @@ from app.models.api_key import ApiKey
 from app.models.usage_log import UsageLog
 from app.models.model import Model as ModelMapping, ModelStatus as ModelMappingStatus
 from app.models.model_channel import ModelChannel
+from app.models.budget import Budget
+from app.models.project import Project
+from app.models.organization import Department
+from app.models.quota_reservation import QuotaReservation
+from app.models.channel import Channel
 from app.dependencies import get_current_user
 from app.schemas.stats import UsageStatsResponse, ModelUsage, DailyUsage
+from app.services.budget_service import BudgetService, current_month
 
 router = APIRouter()
 
@@ -24,6 +30,11 @@ router = APIRouter()
 async def get_usage_stats(
     start_date: Optional[str] = Query(None, description="开始日期 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
+    department_id: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    key_id: Optional[str] = Query(None),
+    model: Optional[str] = Query(None),
+    channel_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -40,33 +51,21 @@ async def get_usage_stats(
     user_id = current_user.user_id
     
     # 用量日志查询
-    query = db.query(UsageLog).filter(
-        and_(
-            UsageLog.user_id == user_id,
-            func.date(UsageLog.created_at) >= start_date,
-            func.date(UsageLog.created_at) <= end_date
-        )
-    )
+    filters = [UsageLog.user_id == user_id, func.date(UsageLog.created_at) >= start_date,
+               func.date(UsageLog.created_at) <= end_date]
+    for column, value in ((UsageLog.department_id, department_id), (UsageLog.project_id, project_id), (UsageLog.key_id, key_id),
+                          (UsageLog.model, model), (UsageLog.channel_id, channel_id)):
+        if value:
+            filters.append(column == value)
+    query = db.query(UsageLog).filter(and_(*filters))
     
     # 基础统计
-    total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(
-        and_(
-            UsageLog.user_id == user_id,
-            func.date(UsageLog.created_at) >= start_date,
-            func.date(UsageLog.created_at) <= end_date
-        )
-    ).scalar() or 0
+    total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(and_(*filters)).scalar() or 0
     
     total_requests = query.count()
     
     # 平均延迟
-    avg_latency = db.query(func.avg(UsageLog.latency_ms)).filter(
-        and_(
-            UsageLog.user_id == user_id,
-            func.date(UsageLog.created_at) >= start_date,
-            func.date(UsageLog.created_at) <= end_date
-        )
-    ).scalar() or 0
+    avg_latency = db.query(func.avg(UsageLog.latency_ms)).filter(and_(*filters)).scalar() or 0
     
     # 成功率
     success_count = query.filter(UsageLog.status_code == 200).count()
@@ -80,13 +79,7 @@ async def get_usage_stats(
         func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
         func.sum(UsageLog.cost_usd).label('saved_cost'),
         func.count(UsageLog.id).label('requests')
-    ).filter(
-        and_(
-            UsageLog.user_id == user_id,
-            func.date(UsageLog.created_at) >= start_date,
-            func.date(UsageLog.created_at) <= end_date
-        )
-    ).group_by(UsageLog.model).all()
+    ).filter(and_(*filters)).group_by(UsageLog.model).all()
     
     # 获取模型显示名称和价格
     # UsageLog.model 存储的是 upstream_model，需要通过 ModelChannel 映射到 model_id
@@ -119,6 +112,7 @@ async def get_usage_stats(
     model_info_map = {m.model_id: m for m in model_mappings}
     
     by_model = []
+    total_cost = 0.0
     for stat in model_stats:
         # 通过 upstream_model 找到对应的 model_id，再找到模型信息
         internal_model_id = stat.model if stat.model in model_info_map else upstream_to_model_id.get(stat.model)
@@ -136,6 +130,7 @@ async def get_usage_stats(
             cost = 0.0
         
         cost += float(stat.saved_cost or 0)
+        total_cost += cost
         by_model.append(ModelUsage(
             model=(model_info.display_name or stat.model) if model_info else stat.model,
             tokens=stat.tokens or 0,
@@ -148,13 +143,7 @@ async def get_usage_stats(
         func.date(UsageLog.created_at).label('date'),
         func.sum(UsageLog.total_tokens).label('tokens'),
         func.count(UsageLog.id).label('requests')
-    ).filter(
-        and_(
-            UsageLog.user_id == user_id,
-            func.date(UsageLog.created_at) >= start_date,
-            func.date(UsageLog.created_at) <= end_date
-        )
-    ).group_by(func.date(UsageLog.created_at)).order_by(func.date(UsageLog.created_at)).all()
+    ).filter(and_(*filters)).group_by(func.date(UsageLog.created_at)).order_by(func.date(UsageLog.created_at)).all()
     
     by_day = [
         DailyUsage(
@@ -170,9 +159,55 @@ async def get_usage_stats(
         total_requests=total_requests,
         avg_latency_ms=int(avg_latency),
         success_rate=round(success_rate, 2),
+        total_cost=round(total_cost, 8),
         by_model=by_model,
         by_day=by_day
     )
+
+
+@router.get('/billing')
+async def get_my_billing(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """用户只能查看自己 Key 归属项目的当月预算和未结预扣。"""
+    keys = db.query(ApiKey).filter(ApiKey.user_id == current_user.user_id).all()
+    project_ids = {row.project_id for row in keys if row.project_id}
+    projects = db.query(Project).filter(Project.project_id.in_(project_ids)).all() if project_ids else []
+    department_ids = {row.dept_id for row in projects if row.dept_id}
+    month = current_month()
+    budgets = db.query(Budget).filter(Budget.month == month, Budget.enabled.is_(True),
+        ((Budget.scope_type == 'project') & Budget.scope_id.in_(project_ids)) |
+        ((Budget.scope_type == 'department') & Budget.scope_id.in_(department_ids))).all() if project_ids else []
+    names = {row.project_id: row.name for row in projects}
+    names.update({row.dept_id: row.name for row in db.query(Department).filter(Department.dept_id.in_(department_ids)).all()})
+    service = BudgetService(db)
+    reservations = db.query(QuotaReservation).filter_by(user_id=current_user.user_id, status='reserved').order_by(
+        QuotaReservation.created_at.desc()).all()
+    return {
+        'month': month,
+        'budgets': [{**{field: getattr(row, field) for field in ('budget_id', 'scope_type', 'scope_id', 'amount_usd', 'policy')},
+                     'scope_name': names.get(row.scope_id, row.scope_id), **service.summary(row)} for row in budgets],
+        'reservations': [{field: getattr(row, field) for field in ('reservation_id', 'key_id', 'project_id', 'model',
+                         'estimated_tokens', 'estimated_cost_usd', 'status', 'created_at', 'expires_at')} for row in reservations],
+    }
+
+
+@router.get('/options')
+async def get_my_usage_options(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    keys = db.query(ApiKey).filter(ApiKey.user_id == current_user.user_id).all()
+    project_ids = {row.project_id for row in keys if row.project_id}
+    projects = db.query(Project).filter(Project.project_id.in_(project_ids)).all() if project_ids else []
+    department_ids = {row.dept_id for row in projects}
+    departments = db.query(Department).filter(Department.dept_id.in_(department_ids)).all() if department_ids else []
+    models = [row[0] for row in db.query(UsageLog.model).filter_by(user_id=current_user.user_id).distinct().all()]
+    channel_ids = [row[0] for row in db.query(UsageLog.channel_id).filter(
+        UsageLog.user_id == current_user.user_id, UsageLog.channel_id.is_not(None)).distinct().all()]
+    channel_names = {row.channel_id: row.name for row in db.query(Channel).filter(Channel.channel_id.in_(channel_ids)).all()} if channel_ids else {}
+    return {
+        'keys': [{'key_id': row.key_id, 'name': row.key_name, 'project_id': row.project_id} for row in keys],
+        'projects': [{'project_id': row.project_id, 'name': row.name, 'department_id': row.dept_id} for row in projects],
+        'departments': [{'department_id': row.dept_id, 'name': row.name} for row in departments],
+        'models': models,
+        'channels': [{'channel_id': value, 'name': channel_names.get(value, value)} for value in channel_ids],
+    }
 
 
 @router.get("/usage/by-model")

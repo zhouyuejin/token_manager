@@ -5,6 +5,7 @@ export interface UsageStats {
   total_requests: number
   avg_latency_ms: number
   success_rate: number
+  total_cost: number
   by_model: {
     model: string
     tokens: number
@@ -21,7 +22,11 @@ export interface UsageStats {
 export const getUsageStats = (params: {
   start_date: string
   end_date: string
-  group_by?: string
+  department_id?: string
+  project_id?: string
+  key_id?: string
+  model?: string
+  channel_id?: string
 }) => get<UsageStats>('/stats/usage', { params })
 
 export interface AdminStats {
