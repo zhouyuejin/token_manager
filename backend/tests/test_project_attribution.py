@@ -95,6 +95,30 @@ def test_update_rejects_clear_and_unassigned_project_rotate_preserves(ctx):
     assert client.get(f"/projects/admin/{p1['project_id']}/users").json()['user_ids'] == ['owner']
 
 
+def test_delete_only_allows_unused_projects_and_departments(ctx):
+    db, client = ctx
+    project = setup_project(client)
+
+    assert client.delete(f"/projects/admin/departments/{project['dept_id']}").status_code == 409
+    client.put(f"/projects/admin/{project['project_id']}/users", json={'user_ids': ['owner']})
+    assert client.delete(f"/projects/admin/{project['project_id']}").status_code == 409
+
+    client.put(f"/projects/admin/{project['project_id']}/users", json={'user_ids': []})
+    assert client.delete(f"/projects/admin/{project['project_id']}").status_code == 200
+    assert client.delete(f"/projects/admin/departments/{project['dept_id']}").status_code == 200
+
+
+def test_delete_project_rejects_existing_key_to_preserve_attribution(ctx):
+    db, client = ctx
+    project = setup_project(client, user_ids=['owner'])
+    assert client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).status_code == 200
+    client.put(f"/projects/admin/{project['project_id']}/users", json={'user_ids': []})
+
+    response = client.delete(f"/projects/admin/{project['project_id']}")
+    assert response.status_code == 409
+    assert response.json()['detail'] == '项目已有关联 Key，请改为停用'
+
+
 def test_usage_snapshots_cost_department_and_failure_zero(ctx):
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
@@ -276,6 +300,8 @@ def test_non_admin_cannot_manage_project_or_departments(ctx):
     client.app.dependency_overrides.pop(require_admin)
     assert client.get('/projects/admin').status_code == 403
     assert client.post('/projects/admin/departments', json={'name': '部门'}).status_code == 403
+    assert client.delete('/projects/admin/unknown').status_code == 403
+    assert client.delete('/projects/admin/departments/unknown').status_code == 403
     assert client.put('/projects/admin/unknown/users', json={'user_ids': ['owner']}).status_code == 403
 
 

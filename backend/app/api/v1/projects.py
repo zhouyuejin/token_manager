@@ -9,6 +9,10 @@ from app.dependencies import get_current_user, require_admin
 from app.models.user import User
 from app.models.organization import Department
 from app.models.project import Project, UserProject
+from app.models.api_key import ApiKey
+from app.models.usage_log import UsageLog
+from app.models.quota_reservation import QuotaReservation
+from app.models.budget import Budget
 from app.services.operation_log_service import record_operation
 from app.utils.request import extract_client_ip
 
@@ -99,6 +103,23 @@ async def update_department(dept_id: str, data: DepartmentSave, request: Request
     return department_response(row)
 
 
+@router.delete('/admin/departments/{dept_id}')
+async def delete_department(dept_id: str, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.query(Department).filter(Department.dept_id == dept_id).first()
+    if not row:
+        raise HTTPException(404, '部门不存在')
+    if db.query(Project.project_id).filter(Project.dept_id == dept_id).first():
+        raise HTTPException(409, '部门下存在项目，请先处理项目')
+    if (db.query(UsageLog.log_id).filter(UsageLog.department_id == dept_id).first()
+            or db.query(QuotaReservation.reservation_id).filter(QuotaReservation.department_id == dept_id).first()
+            or db.query(Budget.budget_id).filter(Budget.scope_type == 'department', Budget.scope_id == dept_id).first()):
+        raise HTTPException(409, '部门已有历史归因或预算数据，请改为停用')
+    db.delete(row)
+    db.commit()
+    audit(db, request, admin, 'delete', 'department', dept_id, {'name': row.name})
+    return {'message': '删除成功'}
+
+
 @router.get('/admin')
 async def list_projects(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     rows = db.query(Project).options(joinedload(Project.department)).all()
@@ -129,6 +150,24 @@ async def update_project(project_id: str, data: ProjectSave, request: Request, a
     db.refresh(row)
     audit(db, request, admin, 'update', 'project', project_id, data.model_dump())
     return project_response(row)
+
+
+@router.delete('/admin/{project_id}')
+async def delete_project(project_id: str, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = get_project(db, project_id)
+    if db.query(UserProject.user_id).filter(UserProject.project_id == project_id).first():
+        raise HTTPException(409, '项目已分配用户，请先撤销分配')
+    if db.query(ApiKey.key_id).filter(ApiKey.project_id == project_id).first():
+        raise HTTPException(409, '项目已有关联 Key，请改为停用')
+    if (db.query(UsageLog.log_id).filter(UsageLog.project_id == project_id).first()
+            or db.query(QuotaReservation.reservation_id).filter(QuotaReservation.project_id == project_id).first()
+            or db.query(Budget.budget_id).filter(Budget.scope_type == 'project', Budget.scope_id == project_id).first()):
+        raise HTTPException(409, '项目已有历史归因或预算数据，请改为停用')
+    detail = {'name': row.name, 'dept_id': row.dept_id}
+    db.delete(row)
+    db.commit()
+    audit(db, request, admin, 'delete', 'project', project_id, detail)
+    return {'message': '删除成功'}
 
 
 @router.get('/admin/{project_id}/users')
