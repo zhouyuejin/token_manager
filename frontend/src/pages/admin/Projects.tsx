@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Alert, Button, Card, Form, Input, Modal, Select, Space, Table, Tag } from 'antd'
-import { Department, Project, saveDepartment, saveProject, getProjectUsers, setProjectUsers } from '../../api/projects'
+import { Alert, Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from 'antd'
+import { Department, Project, saveDepartment, saveProject, getProjectUsers, setProjectUsers, deleteDepartment, deleteProject } from '../../api/projects'
 import { User } from '../../api/users'
+import { ApiKey } from '../../api/apiKeys'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
 
@@ -29,6 +30,8 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const { data: memberUsers, error: memberUsersError } = useSwrDataWithParams<{ items: User[] }>(
     membersProject ? '/admin/users' : null, { page: 1, page_size: 100, keyword: memberSearch }
   )
+  const { data: keysData, error: keysError, isLoading: keysLoading } = useSwrData<{ items: ApiKey[] }>(membersProject ? '/api-keys/admin' : null)
+  const projectKeys = (keysData?.items || []).filter(key => key.project_id === membersProject?.project_id)
   const userOptions = (users?.items || []).map(user => ({ value: user.user_id, label: `${user.username} (${user.user_id})` }))
   if (editing?.owner_user_id && !userOptions.some(option => option.value === editing.owner_user_id)) {
     userOptions.push({ value: editing.owner_user_id, label: editing.owner_user_id })
@@ -87,6 +90,15 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     finally { setSaving(false) }
   }
 
+  const remove = async (row: Department | Project) => {
+    try {
+      if (departmentsOnly) await deleteDepartment(row.dept_id)
+      else await deleteProject((row as Project).project_id)
+      message.success(`${title}删除成功`)
+      mutate()
+    } catch { /* 请求拦截器显示关联数据提示 */ }
+  }
+
   const columns = [
     { title: `${title}名称`, dataIndex: 'name' },
     ...(!departmentsOnly ? [{ title: '所属部门', dataIndex: 'department_name' }] : []),
@@ -94,7 +106,10 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, row: Department | Project) => <Space>
       <Button onClick={() => openForm(row)}>编辑</Button>
-      {!departmentsOnly && <Button onClick={() => openMembers(row as Project)}>分配用户</Button>}
+      {!departmentsOnly && <Button onClick={() => openMembers(row as Project)}>归因详情</Button>}
+      <Popconfirm title={`确认删除此${title}？已有关联数据时将拒绝删除。`} onConfirm={() => remove(row)}>
+        <Button danger>删除</Button>
+      </Popconfirm>
     </Space> }
   ]
 
@@ -117,13 +132,34 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
         <Alert type="info" message="停用后，该部门或项目将不再出现在新建和编辑 Key 的可用项目中。历史用量归因保持不变。" />
       </Form>
     </Modal>
-    <Modal title={`分配用户：${membersProject?.name || ''}`} open={!!membersProject} closable={!membersLoading} maskClosable={!membersLoading} keyboard={!membersLoading} cancelButtonProps={{ disabled: membersLoading }} onCancel={() => setMembersProject(null)} onOk={saveMembers} confirmLoading={saving} okButtonProps={{ disabled: membersLoading || membersError }}>
+    <Modal width={760} title={`项目归因详情：${membersProject?.name || ''}`} open={!!membersProject} closable={!membersLoading} maskClosable={!membersLoading} keyboard={!membersLoading} cancelButtonProps={{ disabled: membersLoading }} onCancel={() => setMembersProject(null)} onOk={saveMembers} confirmLoading={saving} okButtonProps={{ disabled: membersLoading || membersError }} okText="保存用户分配">
+      {membersProject && <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
+        <Descriptions.Item label="所属部门">{membersProject.department_name}</Descriptions.Item>
+        <Descriptions.Item label="负责人">{membersProject.owner_user_id || '未设置'}</Descriptions.Item>
+        <Descriptions.Item label="状态"><Tag color={membersProject.status === 'active' ? 'green' : 'default'}>{membersProject.status === 'active' ? '启用' : '停用'}</Tag></Descriptions.Item>
+        <Descriptions.Item label="关联 Key">{keysLoading ? '加载中' : `${projectKeys.length} 个`}</Descriptions.Item>
+      </Descriptions>}
       {(membersError || memberUsersError) && <Alert type="error" message="用户加载失败" action={membersError && membersProject ? <Button onClick={() => openMembers(membersProject)}>重试</Button> : undefined} style={{ marginBottom: 16 }} />}
+      <div style={{ marginBottom: 8 }}>关联用户</div>
       <Select mode="multiple" showSearch filterOption={false} loading={membersLoading} disabled={membersLoading || membersError} value={members} onChange={values => {
         setMembers(values)
         setMemberOptions(allMemberOptions.filter(option => values.includes(option.value)))
       }} onSearch={setMemberSearch} options={allMemberOptions} style={{ width: '100%' }} placeholder="搜索并选择可使用该项目的用户" />
       <p>所选用户可在创建或编辑 API Key 时选择该项目。清空后保存会撤销全部用户的项目分配；已有 Key 保留归属。</p>
+      {keysError && <Alert type="error" message="关联 Key 加载失败" style={{ marginBottom: 16 }} />}
+      <Table<ApiKey>
+        size="small"
+        rowKey="key_id"
+        loading={keysLoading}
+        dataSource={projectKeys}
+        locale={{ emptyText: '暂无关联 Key' }}
+        pagination={false}
+        columns={[
+          { title: 'Key 名称', dataIndex: 'name' },
+          { title: '所属用户', dataIndex: 'user_id' },
+          { title: '状态', dataIndex: 'status', render: value => <Tag>{value}</Tag> },
+        ]}
+      />
     </Modal>
   </div>
 }

@@ -1,4 +1,4 @@
-import { get, post, put } from './request'
+import { del, get, post, put } from './request'
 
 export interface Department {
   dept_id: string
@@ -30,3 +30,9 @@ export const getProjectUsers = (projectId: string) =>
 
 export const setProjectUsers = (projectId: string, userIds: string[]) =>
   put(`/projects/admin/${projectId}/users`, { user_ids: userIds })
+
+export const deleteDepartment = (deptId: string) => del(`/projects/admin/departments/${deptId}`)
+
+export const deleteProject = (projectId: string) => del(`/projects/admin/${projectId}`)
+
+export const getAdminProjects = () => get<{ items: Project[] }>('/projects/admin')

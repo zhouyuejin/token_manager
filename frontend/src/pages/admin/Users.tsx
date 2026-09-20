@@ -8,6 +8,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from '../../api/users'
 import { getModelGroups, ModelGroup } from '../../api/modelGroups'
+import { getAdminProjects, getProjectUsers, Project, setProjectUsers } from '../../api/projects'
 import dayjs from 'dayjs'
 
 type QuotaMode = 'increase' | 'set_unlimited' | 'cancel_unlimited'
@@ -21,6 +22,12 @@ const UsersPage = () => {
   const [quotaUser, setQuotaUser] = useState<User | null>(null)
   const [quotaMode, setQuotaMode] = useState<QuotaMode>('increase')
   const [groups, setGroups] = useState<ModelGroup[]>([])
+  const [projectUser, setProjectUser] = useState<User | null>(null)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectMembers, setProjectMembers] = useState<Record<string, string[]>>({})
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [projectsError, setProjectsError] = useState(false)
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
   // GC-8: 监听 role 字段；admin 时隐藏 quota / model_group_ids 表单项
@@ -147,6 +154,45 @@ const UsersPage = () => {
     setQuotaMode(user.unlimited ? 'cancel_unlimited' : 'set_unlimited')
     quotaForm.setFieldsValue({ amount: 0, reason: '' })
     setQuotaModalVisible(true)
+  }
+
+  const openProjectModal = async (user: User) => {
+    setProjectUser(user)
+    setProjectsLoading(true)
+    setProjectsError(false)
+    try {
+      const projectData = await getAdminProjects()
+      const memberships = await Promise.all(projectData.items.map(async project => [
+        project.project_id,
+        (await getProjectUsers(project.project_id)).user_ids,
+      ] as const))
+      const memberMap = Object.fromEntries(memberships)
+      setProjects(projectData.items)
+      setProjectMembers(memberMap)
+      setSelectedProjectIds(projectData.items.filter(project => memberMap[project.project_id].includes(user.user_id)).map(project => project.project_id))
+    } catch {
+      setProjectsError(true)
+    } finally {
+      setProjectsLoading(false)
+    }
+  }
+
+  const saveUserProjects = async () => {
+    if (!projectUser) return
+    setProjectsLoading(true)
+    try {
+      await Promise.all(projects.map(project => {
+        const current = projectMembers[project.project_id] || []
+        const selected = selectedProjectIds.includes(project.project_id)
+        const members = selected ? [...new Set([...current, projectUser.user_id])] : current.filter(id => id !== projectUser.user_id)
+        return members.length === current.length && members.every(id => current.includes(id))
+          ? Promise.resolve()
+          : setProjectUsers(project.project_id, members)
+      }))
+      message.success('可用项目保存成功')
+      setProjectUser(null)
+    } catch { /* 请求拦截器显示错误 */ }
+    finally { setProjectsLoading(false) }
   }
 
   const columns = [
@@ -284,6 +330,7 @@ const UsersPage = () => {
           >
             编辑
           </Button>
+          <Button type="text" icon={<TeamOutlined />} onClick={() => openProjectModal(record)}>分配项目</Button>
           <Popconfirm
             title={record.role === 'admin' ? "不能删除管理员用户" : "确认删除此用户？"}
             onConfirm={() => handleDelete(record.user_id)}
@@ -344,6 +391,34 @@ const UsersPage = () => {
           overflow: 'hidden',
         }}
       />
+
+      <Modal
+        title={`分配可用项目 - ${projectUser?.username || ''}`}
+        open={!!projectUser}
+        onCancel={() => setProjectUser(null)}
+        onOk={saveUserProjects}
+        confirmLoading={projectsLoading}
+        okButtonProps={{ disabled: projectsLoading || projectsError }}
+      >
+        {projectsError && <Alert type="error" showIcon message="项目或成员加载失败" action={projectUser ? <Button onClick={() => openProjectModal(projectUser)}>重试</Button> : undefined} style={{ marginBottom: 16 }} />}
+        <Select
+          mode="multiple"
+          showSearch
+          optionFilterProp="label"
+          loading={projectsLoading}
+          disabled={projectsLoading || projectsError}
+          value={selectedProjectIds}
+          onChange={setSelectedProjectIds}
+          options={projects.map(project => ({
+            value: project.project_id,
+            label: `${project.department_name} / ${project.name}${project.status === 'disabled' ? '（已停用）' : ''}`,
+            disabled: project.status === 'disabled' && !selectedProjectIds.includes(project.project_id),
+          }))}
+          placeholder="选择该用户可用的项目"
+          style={{ width: '100%' }}
+        />
+        <p>停用项目仅保留已有分配用于识别历史关系，不能新增分配。</p>
+      </Modal>
 
       {/* 创建用户弹窗 */}
       <Modal
