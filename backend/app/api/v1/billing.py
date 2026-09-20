@@ -1,5 +1,7 @@
 """管理员月预算配置与账本汇总。"""
 import secrets
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Literal, List
 
@@ -10,13 +12,32 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.budget import Budget
+from app.models.billing_reconcile import BillingReconcileItem, BillingReconcileReport
 from app.models.quota_reservation import QuotaReservation
 from app.models.user import User
 from app.services.budget_service import BudgetService, current_month, month_bounds
+from app.services.billing_reconcile_service import (
+    BillingReconcileService, RECONCILE_COVERAGE_STARTED_AT, RECONCILE_GRACE_MINUTES,
+)
 from app.services.operation_log_service import record_operation
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
+
+
+def reconcile_meta():
+    return {
+        'coverage_started_at': RECONCILE_COVERAGE_STARTED_AT.isoformat(),
+        'timezone': 'Asia/Shanghai',
+        'grace_minutes': RECONCILE_GRACE_MINUTES,
+        'history_rule': '覆盖起点前的用量不因缺少预扣或费用而误报',
+    }
+
+
+def report_response(row):
+    return {field: getattr(row, field) for field in (
+        'report_id', 'business_date', 'status', 'reservation_count', 'usage_count',
+        'quota_record_count', 'anomaly_count', 'started_at', 'finished_at', 'error_message')}
 
 
 class BudgetSave(BaseModel):
@@ -79,6 +100,43 @@ async def list_reservations(month: str = Query(default=None), status: str = Quer
         'reservation_id', 'user_id', 'key_id', 'project_id', 'department_id', 'model',
         'estimated_tokens', 'actual_tokens', 'estimated_cost_usd', 'actual_cost_usd',
         'status', 'created_at', 'updated_at', 'expires_at')} for row in rows]}
+
+
+@router.get('/reconcile/reports')
+async def list_reconcile_reports(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                                 admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    query = db.query(BillingReconcileReport)
+    total = query.count()
+    rows = query.order_by(BillingReconcileReport.business_date.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return {'total': total, 'items': [report_response(row) for row in rows], **reconcile_meta()}
+
+
+@router.get('/reconcile/reports/{report_id}/items')
+async def list_reconcile_items(report_id: str, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                               anomaly_type: str = Query(default=None), admin: User = Depends(require_admin),
+                               db: Session = Depends(get_db)):
+    if db.get(BillingReconcileReport, report_id) is None:
+        raise HTTPException(404, '对账报告不存在')
+    query = db.query(BillingReconcileItem).filter_by(report_id=report_id)
+    if anomaly_type:
+        query = query.filter(BillingReconcileItem.anomaly_type == anomaly_type)
+    total = query.count()
+    rows = query.order_by(BillingReconcileItem.created_at, BillingReconcileItem.item_id).offset((page - 1) * page_size).limit(page_size).all()
+    fields = ('item_id', 'anomaly_type', 'reservation_id', 'usage_log_id', 'quota_record_id', 'user_id',
+              'expected_value', 'actual_value', 'detail', 'created_at')
+    return {'total': total, 'items': [{field: getattr(row, field) for field in fields} for row in rows]}
+
+
+@router.post('/reconcile/run/{business_date}')
+async def run_reconcile(business_date: date, request: Request, admin: User = Depends(require_admin),
+                        db: Session = Depends(get_db)):
+    if business_date >= datetime.now(ZoneInfo('Asia/Shanghai')).date():
+        raise HTTPException(422, '只能对账已结束的业务日')
+    report = BillingReconcileService(db).run(business_date)
+    record_operation(db=db, operator=admin, action='reconcile', target_type='billing_reconcile',
+                     target_id=report.report_id, detail={'business_date': business_date.isoformat()},
+                     ip_address=extract_client_ip(request))
+    return report_response(report)
 
 
 @router.put('/budgets/{scope_type}/{scope_id}/{month}')

@@ -2,7 +2,7 @@
 定时任务服务
 """
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -263,6 +263,14 @@ def setup_scheduler():
     scheduler.add_job(check_budget_alerts, trigger=IntervalTrigger(seconds=60),
                       id='check_budget_alerts', name='检查预算阈值告警', replace_existing=True)
     scheduler.add_job(
+        run_daily_billing_reconcile,
+        trigger=CronTrigger(hour=2, minute=15, timezone="Asia/Shanghai"),
+        id="daily_billing_reconcile",
+        name="每日账务对账",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
         expire_quota_reservations,
         trigger=IntervalTrigger(seconds=60),
         id='expire_quota_reservations',
@@ -294,6 +302,14 @@ def setup_scheduler():
     )
     
     logger.info("定时任务已设置")
+
+
+def run_daily_billing_reconcile():
+    from zoneinfo import ZoneInfo
+    from app.services.billing_reconcile_service import BillingReconcileService
+    business_date = datetime.now(ZoneInfo("Asia/Shanghai")).date() - timedelta(days=1)
+    with SessionLocal() as db:
+        BillingReconcileService(db).run(business_date)
 
 
 def expire_quota_reservations():
