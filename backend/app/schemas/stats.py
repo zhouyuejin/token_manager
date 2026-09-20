@@ -30,6 +30,7 @@ class DailyUsage(BaseModel):
 
 class UsageStatsResponse(UsageStats):
     """完整用量统计响应"""
+    total_cost: float = 0.0
     by_model: List[ModelUsage] = []
     by_day: List[DailyUsage] = []
 

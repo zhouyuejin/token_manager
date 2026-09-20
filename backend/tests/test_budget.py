@@ -77,6 +77,43 @@ def reserve(db, attribution, uid='owner', output=100):
         {'messages': [], 'max_tokens': output}, attribution)
 
 
+def test_frontend_billing_views_only_expose_user_reservations(db, scope):
+    from app.api.v1.billing import list_reservations
+    from app.api.v1.stats import get_my_billing
+
+    add_budget(db)
+    rid = reserve(db, scope)
+    mine = run_async(get_my_billing(current_user=db.query(User).filter_by(user_id='owner').one(), db=db))
+    assert mine['budgets'][0]['scope_name'] == '项目'
+    assert mine['budgets'][0]['reserved_usd'] > 0
+    assert [row['reservation_id'] for row in mine['reservations']] == [rid]
+
+    admin_rows = run_async(list_reservations(month=None, status='reserved', admin=db.query(User).filter_by(user_id='admin').one(), db=db))
+    assert admin_rows['items'][0]['reservation_id'] == rid
+    assert admin_rows['items'][0]['key_id'] == 'owner'
+
+
+def test_user_cost_dashboard_filters_own_key(db, scope):
+    from app.api.v1.stats import get_usage_stats
+
+    owner = db.query(User).filter_by(user_id='owner').one()
+    db.add_all([
+        UsageLog(log_id='a', user_id='owner', key_id='key-a', project_id='p', department_id='d',
+                 channel_id='channel-a', model='priced', prompt_tokens=10, completion_tokens=10,
+                 total_tokens=20, cost_usd=Decimal('0.02'), latency_ms=10, status_code=200),
+        UsageLog(log_id='b', user_id='owner', key_id='key-b', project_id='p', department_id='d',
+                 channel_id='channel-b', model='priced', prompt_tokens=20, completion_tokens=20,
+                 total_tokens=40, cost_usd=Decimal('0.04'), latency_ms=20, status_code=200),
+    ])
+    db.commit()
+    result = run_async(get_usage_stats(
+        start_date='2000-01-01', end_date='2100-01-01', department_id=None, project_id=None,
+        key_id='key-a', model=None, channel_id=None, current_user=owner, db=db))
+    assert result.total_tokens == 20
+    assert result.total_cost == 0.02
+    assert result.avg_latency_ms == 10
+
+
 def test_pending_reservations_block_and_release_restores_budget(db, scope):
     add_budget(db)
     rid = reserve(db, scope)

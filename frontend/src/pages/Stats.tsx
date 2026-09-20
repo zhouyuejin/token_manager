@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Card, Row, Col, Statistic, DatePicker, Table, Button, Space, Tag } from 'antd'
+import { Alert, Card, Row, Col, Statistic, DatePicker, Table, Button, Space, Tag, Select } from 'antd'
 import { DownloadOutlined, ApiOutlined, ThunderboltOutlined, ClockCircleOutlined, CheckCircleOutlined, TeamOutlined } from '@ant-design/icons'
 import { getUsageStats, getAdminStats } from '../api/stats'
 import { getApiKeys } from '../api/apiKeys'
 import { useSwrData } from '../hooks/useSwr'
 import { useAuthStore } from '../store/auth'
+import { MyBilling } from '../api/billing'
 import dayjs from 'dayjs'
 import ReactECharts from 'echarts-for-react'
 
@@ -22,6 +23,11 @@ const StatsPage = () => {
     dayjs().subtract(7, 'day'),
     dayjs()
   ])
+  const [departmentId, setDepartmentId] = useState<string>()
+  const [projectId, setProjectId] = useState<string>()
+  const [keyId, setKeyId] = useState<string>()
+  const [model, setModel] = useState<string>()
+  const [channelId, setChannelId] = useState<string>()
   // 额度数据（来自当前登录用户）
   const quotaTotal: number = user?.quota ?? 0
   const quotaUsed: number = Math.min(user?.quota_used ?? 0, quotaTotal)
@@ -95,10 +101,14 @@ const StatsPage = () => {
 
   useEffect(() => {
     fetchData()
-  }, [dateRange])
+  }, [dateRange, departmentId, projectId, keyId, model, channelId])
 
   // 使用 SWR 获取 API Keys（独立于 dateRange）
   const { data: keysData, mutate: mutateKeys } = useSwrData<{total: number; items: any[]}>('/api-keys')
+  const { data: billing, error: billingError } = useSwrData<MyBilling>('/stats/billing', { refreshInterval: 30000 })
+  const { data: options } = useSwrData<any>('/stats/options')
+
+  useEffect(() => { setKeys(keysData?.items || []) }, [keysData])
 
   const fetchData = async () => {
     setLoading(true)
@@ -106,6 +116,11 @@ const StatsPage = () => {
       const statsParams = {
         start_date: dateRange[0].format('YYYY-MM-DD'),
         end_date: dateRange[1].format('YYYY-MM-DD'),
+        ...(departmentId ? { department_id: departmentId } : {}),
+        ...(projectId ? { project_id: projectId } : {}),
+        ...(keyId ? { key_id: keyId } : {}),
+        ...(model ? { model } : {}),
+        ...(channelId ? { channel_id: channelId } : {}),
       }
       const statsData = await getUsageStats(statsParams)
       setStats(statsData)
@@ -264,7 +279,12 @@ const StatsPage = () => {
         }}>
           仪表盘
         </h2>
-        <Space>
+        <Space wrap>
+          <Select allowClear placeholder="部门" style={{ width: 140 }} value={departmentId} onChange={value => { setDepartmentId(value); setProjectId(undefined); setKeyId(undefined) }} options={(options?.departments || []).map((row: any) => ({ value: row.department_id, label: row.name }))} />
+          <Select allowClear placeholder="项目" style={{ width: 140 }} value={projectId} onChange={value => { setProjectId(value); setKeyId(undefined) }} options={(options?.projects || []).filter((row: any) => !departmentId || row.department_id === departmentId).map((row: any) => ({ value: row.project_id, label: row.name }))} />
+          <Select allowClear placeholder="API Key" style={{ width: 140 }} value={keyId} onChange={setKeyId} options={(options?.keys || []).filter((row: any) => !projectId || row.project_id === projectId).map((row: any) => ({ value: row.key_id, label: row.name || row.key_id }))} />
+          <Select allowClear placeholder="模型" style={{ width: 140 }} value={model} onChange={setModel} options={(options?.models || []).map((value: string) => ({ value, label: value }))} />
+          <Select allowClear placeholder="渠道" style={{ width: 140 }} value={channelId} onChange={setChannelId} options={(options?.channels || []).map((row: any) => ({ value: row.channel_id, label: row.name }))} />
           <RangePicker 
             value={dateRange}
             onChange={(dates: any) => {
@@ -382,6 +402,20 @@ const StatsPage = () => {
           </Card>
         </Col>
       </Row>
+
+      {billingError && <Alert type="error" showIcon message="预算与预扣信息加载失败" style={{ marginBottom: 20 }} />}
+      <Card title={`${billing?.month || ''} 预算与预扣`} style={{ marginBottom: 24 }}>
+        <Table rowKey="budget_id" size="small" pagination={false} dataSource={billing?.budgets || []} locale={{ emptyText: '当前 Key 归属项目未配置预算' }} columns={[
+          { title: '维度', dataIndex: 'scope_type', render: value => value === 'project' ? '项目' : '部门' },
+          { title: '名称', dataIndex: 'scope_name' },
+          { title: '实际消费', dataIndex: 'used_usd', render: value => `$${Number(value).toFixed(8)}` },
+          { title: '预扣中', dataIndex: 'reserved_usd', render: value => `$${Number(value).toFixed(8)}` },
+          { title: '剩余预算', dataIndex: 'remaining_usd', render: value => `$${Number(value).toFixed(8)}` },
+          { title: '使用率', dataIndex: 'usage_percent', render: value => value == null ? '—' : `${Number(value).toFixed(2)}%` },
+          { title: '策略', dataIndex: 'policy', render: value => value === 'block' ? '超额阻断' : '仅告警' },
+        ]} />
+        {(billing?.reservations?.length || 0) > 0 && <Alert type="info" showIcon style={{ marginTop: 12 }} message={`当前有 ${billing!.reservations.length} 笔请求预扣中，合计 $${billing!.reservations.reduce((sum, row) => sum + Number(row.estimated_cost_usd), 0).toFixed(8)}`} description="请求完成后按实际用量结算；失败、断开或超时会释放预扣。" />}
+      </Card>
 
       {/* 主要内容区：额度使用 + API Keys */}
       <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>

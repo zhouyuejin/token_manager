@@ -49,7 +49,7 @@ router = APIRouter()
 
 
 def _usage_filter(start_date, end_date, department_id=None, project_id=None,
-                  user_id=None, model=None, channel_id=None):
+                  user_id=None, model=None, channel_id=None, key_id=None):
     filters = [
         func.date(UsageLog.created_at) >= start_date,
         func.date(UsageLog.created_at) <= end_date,
@@ -58,6 +58,7 @@ def _usage_filter(start_date, end_date, department_id=None, project_id=None,
         (UsageLog.department_id, department_id), (UsageLog.project_id, project_id),
         (UsageLog.user_id, user_id), (UsageLog.model, model),
         (UsageLog.channel_id, channel_id),
+        (UsageLog.key_id, key_id),
     ):
         if value:
             filters.append(column == value)
@@ -216,6 +217,7 @@ async def get_admin_usage_stats(
     user_id: Optional[str] = Query(None, description="用户ID"),
     model: Optional[str] = Query(None, description="模型"),
     channel_id: Optional[str] = Query(None, description="渠道ID"),
+    key_id: Optional[str] = Query(None, description="API Key ID"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
@@ -228,7 +230,7 @@ async def get_admin_usage_stats(
         start_date = (datetime.now() - td(days=7)).strftime("%Y-%m-%d")
     
     base_filter = _usage_filter(
-        start_date, end_date, department_id, project_id, user_id, model, channel_id
+        start_date, end_date, department_id, project_id, user_id, model, channel_id, key_id
     )
 
     total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(base_filter).scalar() or 0
@@ -333,6 +335,7 @@ async def export_admin_usage(
     user_id: Optional[str] = Query(None, description="用户ID"),
     model: Optional[str] = Query(None, description="模型"),
     channel_id: Optional[str] = Query(None, description="渠道ID"),
+    key_id: Optional[str] = Query(None, description="API Key ID"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -340,7 +343,7 @@ async def export_admin_usage(
     end_date = end_date or datetime.now().strftime("%Y-%m-%d")
     start_date = start_date or (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     base_filter = _usage_filter(
-        start_date, end_date, department_id, project_id, user_id, model, channel_id
+        start_date, end_date, department_id, project_id, user_id, model, channel_id, key_id
     )
 
     users = {row.user_id: row.username for row in db.query(User.user_id, User.username).all()}

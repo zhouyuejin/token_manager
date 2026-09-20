@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Alert, Button, Card, DatePicker, Form, InputNumber, Modal, Select, Space, Switch, Table, Tag } from 'antd'
 import dayjs from 'dayjs'
-import { Budget, BudgetSave, saveBudget } from '../../api/billing'
+import { Budget, BudgetSave, Reservation, saveBudget } from '../../api/billing'
 import { Department, Project } from '../../api/projects'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
@@ -11,6 +11,9 @@ const Billing = () => {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit'
   }).format(new Date()))
   const { data, error, isLoading, mutate } = useSwrDataWithParams<{ items: Budget[] }>('/admin/billing/budgets', { month })
+  const [reservationStatus, setReservationStatus] = useState<string>()
+  const { data: reservationData, error: reservationError, isLoading: reservationsLoading, mutate: mutateReservations } =
+    useSwrDataWithParams<{ items: Reservation[] }>('/admin/billing/reservations', { month, ...(reservationStatus ? { status: reservationStatus } : {}) })
   const { data: projects, error: projectsError } = useSwrData<{ items: Project[] }>('/projects/admin')
   const { data: departments, error: departmentsError } = useSwrData<{ items: Department[] }>('/projects/admin/departments')
   const [visible, setVisible] = useState(false)
@@ -59,6 +62,18 @@ const Billing = () => {
     { title: '状态', dataIndex: 'enabled', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', width: 120, fixed: 'right' as const, render: (_: unknown, row: Budget) => <Button onClick={() => open(row)}>配置</Button> }
   ]
+  const reservationColumns = [
+    { title: '状态', dataIndex: 'status', width: 90, render: (value: Reservation['status']) => <Tag color={value === 'reserved' ? 'blue' : value === 'committed' ? 'green' : 'default'}>{{ reserved: '预扣中', committed: '已结算', released: '已释放', expired: '已过期' }[value]}</Tag> },
+    { title: '用户', dataIndex: 'user_id', width: 150 },
+    { title: 'API Key', dataIndex: 'key_id', width: 150 },
+    { title: '项目', dataIndex: 'project_id', width: 150, render: (value: string | null) => value || '未归因' },
+    { title: '模型', dataIndex: 'model', width: 150 },
+    { title: '预估 Token', dataIndex: 'estimated_tokens', width: 120, render: (value: number) => value.toLocaleString() },
+    { title: '实际 Token', dataIndex: 'actual_tokens', width: 120, render: (value: number | null) => value == null ? '—' : value.toLocaleString() },
+    { title: '预扣金额', dataIndex: 'estimated_cost_usd', width: 120, render: money },
+    { title: '实际金额', dataIndex: 'actual_cost_usd', width: 120, render: (value: number | null) => value == null ? '—' : money(value) },
+    { title: '创建时间', dataIndex: 'created_at', width: 180, render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm:ss') }
+  ]
   const options = kind === 'project'
     ? (projects?.items || []).map(row => ({ value: row.project_id, label: row.name }))
     : (departments?.items || []).map(row => ({ value: row.dept_id, label: row.name }))
@@ -71,12 +86,19 @@ const Billing = () => {
       <DatePicker picker="month" allowClear={false} value={dayjs(`${month}-01`)} onChange={value => {
         if (value) setMonth(value.format('YYYY-MM'))
       }} />
-      <Button onClick={() => mutate()}>刷新</Button>
+      <Button onClick={() => { mutate(); mutateReservations() }}>刷新</Button>
       <Button type="primary" onClick={() => open(null)}>配置月预算</Button>
     </Space>}>
       <Alert type="info" showIcon style={{ marginBottom: 16 }} message="按北京时间自然月配置，金额单位为 USD。项目与部门预算同时生效，可用预算已扣除预扣中金额。未配置或停用时不限制，下月需单独配置。告警每 60 秒检查一次。" />
       {error && <Alert type="error" message="预算加载失败" action={<Button onClick={() => mutate()}>重试</Button>} />}
       <Table rowKey="budget_id" loading={isLoading} dataSource={data?.items || []} columns={columns} scroll={{ x: 1500 }} />
+    </Card>
+    <Card title="预扣记录" style={{ marginTop: 16 }} extra={<Select allowClear placeholder="全部状态" style={{ width: 140 }} value={reservationStatus} onChange={setReservationStatus} options={[
+      { value: 'reserved', label: '预扣中' }, { value: 'committed', label: '已结算' },
+      { value: 'released', label: '已释放' }, { value: 'expired', label: '已过期' }
+    ]} />}>
+      {reservationError && <Alert type="error" message="预扣记录加载失败" action={<Button onClick={() => mutateReservations()}>重试</Button>} />}
+      <Table rowKey="reservation_id" loading={reservationsLoading} dataSource={reservationData?.items || []} columns={reservationColumns} scroll={{ x: 1450 }} pagination={{ pageSize: 20 }} />
     </Card>
     <Modal title={`${month} 月预算配置`} open={visible} onCancel={() => setVisible(false)} onOk={() => form.submit()} confirmLoading={saving}>
       <Form form={form} layout="vertical" onFinish={save}>

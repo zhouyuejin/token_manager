@@ -741,6 +741,13 @@ def check_proxy_rate_limit(
 - 管理员能回答“哪个部门/项目/Key 花了多少钱”。
 - 用户能看到自己 Key/项目的预算剩余和阻断原因。
 
+**执行记录（2026-09-20）：代码实现及针对性验证完成，未发布。**
+
+- 预算管理页保留实际消费、预扣中、剩余预算和使用率，新增当月预扣记录及 `reserved/committed/released/expired` 状态筛选，可追踪到用户、Key、项目、模型及预估/实际成本。
+- 管理员成本看板新增 API Key 筛选，并与已有的部门、项目、用户、模型、渠道筛选和 CSV 导出共用同一查询口径。
+- 用户仪表盘新增仅基于本人 Key 和历史用量生成的部门/项目/Key/模型/渠道成本筛选，展示当月可见预算、实际消费、预扣金额、剩余额度和未结预扣数量。HTTP 和流式错误继续展示后端的预算不足、预扣失败或结算释放原因。
+- 验证：`backend/tests/test_budget.py` 与 `backend/tests/test_quota_reservation.py` 合计 69 项通过（包含新增的用户隔离、预扣列表和 Key 成本筛选 2 项回归测试）；`pnpm --dir frontend run build` 通过，仅保留既有大分包提示。`test_admin_stats_cost.py` 仍因旧 `app.models.provider` 导入在收集阶段失败，不声称后端全量通过。尚未进行浏览器真实接口联调或发布。
+
 #### Frontend 2.3: 对账和报表导出
 
 **实现：**
