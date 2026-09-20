@@ -640,17 +640,47 @@ def check_proxy_rate_limit(
 
 #### Task 2.4: 对账任务
 
-**实现：**
-- 新增 `billing_reconcile_service.py`。
-- 每日扫描前一天 `usage_logs`、`quota_records`、`quota_reservations`。
-- 发现 committed 但无 usage log、usage log 无 cost、reserved 过期未释放等异常。
-- 第一版只生成对账报告，不自动修账。
+**账务口径：**
+- `quota_reservations` 是请求预扣和最终结算的权威账本；`usage_logs` 是请求/渠道尝试明细，同一 `reservation_id` 可关联多条日志，不能按日志条数重复计费。
+- 成功请求以 `committed.actual_tokens`、`committed.actual_cost_usd` 为最终消费；`released` / `expired` 必须为零消费，仍处于有效租约内的 `reserved` 不算异常。
+- `quota_records` 只记录管理员额度调整及其余额链，不作为请求消费账本，也不与 `usage_logs` 按总额强行相等。当前调额接口未写该表，实施 2.4 时先在同一事务补齐调额流水；历史缺口不伪造回填，只标明对账覆盖起点。
+- 每个业务日按北京时间 `[00:00, 次日 00:00)` 划分，以 reservation 的 `created_at` 归属日期；任务次日延迟执行，为跨日流式请求留出结算窗口。晚到结算通过重跑同一业务日更新原报告，不新建重复报告。
+
+**数据模型与迁移：**
+- 新增 `billing_reconcile_reports`：`report_id`, `business_date`, `status`（`running` / `normal` / `abnormal` / `failed`）, `reservation_count`, `usage_count`, `quota_record_count`, `anomaly_count`, `started_at`, `finished_at`, `error_message`；`business_date` 唯一，保证定时任务和手动重跑幂等。
+- 新增 `billing_reconcile_items`：`item_id`, `report_id`, `anomaly_type`, `reservation_id`, `usage_log_id`, `quota_record_id`, `user_id`, `expected_value`, `actual_value`, `detail`, `created_at`。引用字段允许为空并建立查询索引，明细保留本次扫描快照，不依赖源记录之后仍存在。
+- 为 `quota_records` 补充实际需要的关联/索引，并让管理员调额与流水写入同一数据库事务；不把每次模型请求再写一份 `quota_records`，避免和 reservation 形成双账本。
+- 新增对应 Alembic migration；记录上线时间为 `reconcile_coverage_started_at`，上线前历史数据只做可验证项检查，不因缺少 reservation 或 quota 流水误报。
+
+**异常规则：**
+- `committed_missing_usage`：已结算 reservation 找不到同 `reservation_id` 的成功 usage；失败渠道尝试可以存在，但不能替代成功明细。
+- `committed_usage_mismatch`：同 reservation 的最终成功 usage 与结算记录在 user/key/project/department/model、token 或 USD 成本上不一致；多条失败尝试不参与金额汇总。
+- `usage_missing_reservation`：覆盖起点后的成功、计费用量没有 reservation，或引用的 reservation 不存在；失败且零费用的尝试不误报。
+- `usage_missing_cost`：覆盖起点后的成功用量 `cost_usd IS NULL`；历史日志沿用现有兼容口径，不按当前模型价格补算。
+- `expired_lease_still_reserved`：`expires_at` 已超过扫描时刻及宽限期仍为 `reserved`。只报告，不在对账事务中调用释放或修改额度。
+- `terminal_reservation_invalid`：`committed` 缺少实际 token/费用，或 `released` / `expired` 的实际 token/费用不为零。
+- `quota_record_chain_broken`：同一用户按时间和主键排序后，后一条 `balance_before` 不等于前一条 `balance_after`，或单条记录的 type/amount 与前后余额不符；只检查覆盖起点后的连续链。
+- 一条源记录同一异常类型只生成一条明细；所有金额使用 `Decimal` 和数据库的 8 位 USD 精度比较，不经过 `float`。
+
+**任务与接口：**
+- 新增 `billing_reconcile_service.py`，查询、判定和报告写入集中在该服务；按批次读取，避免把整日数据一次性加载到内存。
+- 在现有 scheduler 注册每日任务，并提供管理员手动重跑指定业务日的接口。多实例并发执行依靠唯一日期约束和数据库锁/任务占用状态互斥，不依赖单机内存锁。
+- 定时执行失败必须将报告置为 `failed`、保存错误摘要并写错误日志；不得以空报告或 `normal` 吞掉异常。下一次重试可安全覆盖该业务日的明细和汇总。
+- 管理员接口包括：报告分页列表、报告汇总、异常明细分页（按 `anomaly_type` 筛选）、手动重跑。列表返回稳定的源记录类型和 ID，供前端跳转；不提供自动修账接口。
+- `Billing.tsx` 增加“对账报告”区域：展示业务日、状态、扫描数量、异常数量和失败原因；异常抽屉支持按类型筛选并跳转到 usage/reservation/quota 流水详情。`running` 显示“待处理”，重跑按钮需防重复提交并反馈结果。
+
+**验证：**
+- 服务测试覆盖上述每种异常、完全正常账目、同 reservation 多次渠道尝试、历史数据豁免、跨日结算、8 位小数、同日重复运行和两个任务并发抢占。
+- API 测试覆盖管理员权限、分页/筛选、手动重跑参数、失败报告可见及源记录跳转所需 ID。
+- scheduler 测试固定北京时间和业务日边界，证明只扫描目标日且任务异常不会被静默吞掉。
+- 前端通过构建，并用正常、异常、待处理、失败四类报告验证列表、筛选、抽屉、重跑和跳转。
 
 **验收：**
-- 能输出对账结果：正常、异常数量、异常明细。
-- 管理员可在后台查看最近对账结果。
-- 异常不会静默吞掉。
-- 对账异常可在后台按类型筛选，并能跳转到相关 usage/quota/reservation 记录。
+- 正常账目报告为 `normal` 且异常数为 0；任一规则命中后报告为 `abnormal`，汇总数与分页明细一致。
+- 每日任务和手动重跑同一业务日只保留一份最新报告，不重复明细，也不修改 `usage_logs`、`quota_reservations`、用户额度或预算。
+- 管理员可查看最近报告，按异常类型筛选，并从异常明细定位到相关 usage/quota/reservation 记录。
+- 任务失败可在后台看到 `failed` 状态和错误摘要，同时服务日志保留完整堆栈；异常不会静默吞掉。
+- 对账覆盖起点、时区、宽限期和历史数据豁免规则在接口响应及页面帮助文案中可见。
 
 #### Task 2.5: 报表导出
 
