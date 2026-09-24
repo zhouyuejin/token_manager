@@ -127,6 +127,7 @@ async def chat_completions(
         raise HTTPException(status_code=401, detail="无效的API Key")
     
     proxy_service = create_proxy_service(db)
+    request_id = request.state.request_id
     
     # 1. 检查模型分组访问权限 (GC-1)
     group_check = proxy_service.check_model_group_access(api_key, user, chat_request.model)
@@ -163,7 +164,7 @@ async def chat_completions(
         _key_id = api_key.key_id
         _model = chat_request.model
         try:
-            stream_gen = proxy_service.forward_stream(chat_request.model, user, api_key, request_data)
+            stream_gen = proxy_service.forward_stream(chat_request.model, user, api_key, request_data, request_id=request_id)
         except BaseException:
             proxy_service.release_reservation()
             release_proxy_concurrency(rate_limit_redis, concurrency_key)
@@ -246,7 +247,7 @@ async def chat_completions(
     else:
         # 普通响应
         try:
-            result = proxy_service.forward_with_failover(chat_request.model, user, api_key, request_data)
+            result = proxy_service.forward_with_failover(chat_request.model, user, api_key, request_data, request_id=request_id)
             
             # 5. 记录用量并扣减
             tokens = proxy_service.calculate_tokens(

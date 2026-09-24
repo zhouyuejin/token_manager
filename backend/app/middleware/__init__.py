@@ -2,6 +2,7 @@
 中间件
 """
 from fastapi import Request
+import secrets
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -25,6 +26,9 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
     ]
     
     async def dispatch(self, request: Request, call_next):
+        is_proxy_request = request.url.path.startswith(("/api/v1/proxy/", "/api/v1/chats/"))
+        if is_proxy_request:
+            request.state.request_id = request.headers.get("X-Request-ID") or f"req_{secrets.token_hex(16)}"
         # 检查是否需要认证
         if any(request.url.path.startswith(path) for path in self.EXCLUDE_PATHS):
             return await call_next(request)
@@ -36,10 +40,12 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
         # 获取API Key
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=401,
                 content={"detail": "缺少Authorization请求头"}
             )
+            response.headers["X-Request-ID"] = request.state.request_id
+            return response
         
         api_key = auth_header.replace("Bearer ", "")
         
@@ -53,25 +59,31 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
             if auth_error or not key_obj:
                 if key_obj:
                     record_api_key_error(db, key_obj, "auth")
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=401,
                     content={"detail": auth_error or "无效的API Key"}
                 )
+                response.headers["X-Request-ID"] = request.state.request_id
+                return response
             
             # 获取用户
             user = proxy_service.get_user_from_key(key_obj)
             if not user:
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=403,
                     content={"detail": "用户已被禁用"}
                 )
+                response.headers["X-Request-ID"] = request.state.request_id
+                return response
 
             if not proxy_service.check_api_key_ip(key_obj, extract_client_ip(request)):
                 record_api_key_error(db, key_obj, "ip_mismatch")
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=403,
                     content={"detail": "IP不在API Key白名单内"}
                 )
+                response.headers["X-Request-ID"] = request.state.request_id
+                return response
             
             # 将用户和Key信息存入请求状态
             request.state.user = user
@@ -80,4 +92,7 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
         finally:
             db.close()
         
-        return await call_next(request)
+        response = await call_next(request)
+        if request.url.path.startswith("/api/v1/proxy/"):
+            response.headers["X-Request-ID"] = request.state.request_id
+        return response

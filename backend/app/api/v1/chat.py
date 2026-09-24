@@ -354,11 +354,11 @@ async def send_message(
     
     if data.stream:
         return QuotaStreamingResponse(
-            _stream_generator(proxy_service, request_data, conversation_id, user_msg.message_id, current_user, api_key, db),
+            _stream_generator(proxy_service, request_data, conversation_id, user_msg.message_id, current_user, api_key, db, request.state.request_id),
             db.get_bind(), proxy_service.reservation_id)
     else:
         try:
-            result = proxy_service.forward_with_failover(model, current_user, api_key, request_data)
+            result = proxy_service.forward_with_failover(model, current_user, api_key, request_data, request_id=request.state.request_id)
             if not result.get("success"):
                 raise HTTPException(status_code=result.get("status_code", 500), detail=result.get("error"))
             content = ""
@@ -378,13 +378,13 @@ async def send_message(
             proxy_service.release_reservation()
 
 
-async def _stream_generator(proxy_service, request_data, conversation_id, user_msg_id, current_user, api_key, db):
+async def _stream_generator(proxy_service, request_data, conversation_id, user_msg_id, current_user, api_key, db, request_id=None):
     """流式响应生成器"""
     content = ""
     model_id = request_data["model"]
     stream_gen = None
     try:
-        stream_gen = proxy_service.forward_stream(request_data["model"], current_user, api_key, request_data)
+        stream_gen = proxy_service.forward_stream(request_data["model"], current_user, api_key, request_data, request_id=request_id)
         for chunk in stream_gen:
             if chunk.startswith("data: "):
                 data_str = chunk[6:]
