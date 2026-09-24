@@ -314,39 +314,48 @@ class ProxyService:
 
         Returns: (Channel, upstream_model, key_used) or None
         """
-        now = datetime.now()
-        
-        # 查询候选：Model → ModelChannel → Channel
-        candidates = (
-            self.db.query(ModelChannel, Channel)
-            .join(Channel, Channel.channel_id == ModelChannel.channel_id)
-            .filter(
-                ModelChannel.model_id == model_id,
-                ModelChannel.enabled == True,
-                Channel.status == ChannelStatus.active,
-                (Channel.health_status == None) | (Channel.health_status != ChannelHealthStatus.unhealthy),
-                # 过滤 cooldown
-                (Channel.cooldown_until == None) | (Channel.cooldown_until < now)
-            )
-            .order_by(
-                # 按 max(channel.priority, mc.priority) 降序
-                func.greatest(Channel.priority, ModelChannel.priority).desc(),
-                ModelChannel.weight.desc(),
-                Channel.channel_id.asc()
-            )
-            .all()
-        )
-
+        candidates = self.select_candidates(model_id, user, api_key)
         if not candidates:
             return None
-
-        # 选择第一个（最高优先级）
-        mc, ch = candidates[0]
-        
-        # 选择 key
-        key = self.pick_key(ch)
-        
+        ch, mc, key = candidates[0]
         return (ch, mc.upstream_model, key)
+
+    def _route_strategy(self, model_id: str) -> str:
+        strategy = self.db.query(Model.route_strategy).filter(Model.model_id == model_id).scalar()
+        return strategy if strategy in {"priority", "weight", "lowest_cost", "lowest_latency"} else "priority"
+
+    def _route_metrics(self, model_id: str) -> Dict[str, Dict[str, float]]:
+        since = datetime.now() - timedelta(hours=24)
+        rows = self.db.query(
+            UsageLog.channel_id,
+            func.avg(UsageLog.cost_usd),
+            func.avg(UsageLog.latency_ms),
+        ).filter(
+            UsageLog.model == model_id,
+            UsageLog.status_code == 200,
+            UsageLog.created_at >= since,
+        ).group_by(UsageLog.channel_id).all()
+        return {
+            channel_id: {"cost": float(cost) if cost is not None else None, "latency": float(latency) if latency is not None else None}
+            for channel_id, cost, latency in rows
+        }
+
+    def _order_candidates(self, model_id: str, candidates):
+        strategy = self._route_strategy(model_id)
+        if strategy == "priority":
+            return candidates
+        if strategy == "weight":
+            return sorted(candidates, key=lambda item: random.random() ** (1 / max(item[0].weight or 1, 1)), reverse=True)
+
+        metrics = self._route_metrics(model_id)
+        metric_name = "cost" if strategy == "lowest_cost" else "latency"
+        def metric_key(item):
+            value = metrics.get(item[1].channel_id, {}).get(metric_name)
+            return value is None, value if value is not None else float("inf"), item[1].channel_id
+        return sorted(
+            candidates,
+            key=metric_key,
+        )
 
     def select_candidates(
         self,
@@ -376,6 +385,8 @@ class ProxyService:
             )
             .all()
         )
+
+        candidates = self._order_candidates(model_id, candidates)
 
         result = []
         for mc, ch in candidates:

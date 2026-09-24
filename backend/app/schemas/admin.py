@@ -248,6 +248,15 @@ class ModelCreate(BaseModel):
     price_per_1k_output: float = 0
     price_per_request: float = 0
     status: str = "active"
+    route_strategy: str = "priority"
+
+    @field_validator("route_strategy")
+    @classmethod
+    def validate_route_strategy(cls, value: str) -> str:
+        allowed = {"priority", "weight", "lowest_cost", "lowest_latency"}
+        if value not in allowed:
+            raise ValueError(f"route_strategy 必须是 {sorted(allowed)} 之一")
+        return value
 
 
 class ModelUpdate(BaseModel):
@@ -260,6 +269,14 @@ class ModelUpdate(BaseModel):
     price_per_1k_output: Optional[float] = None
     price_per_request: Optional[float] = None
     status: Optional[str] = None
+    route_strategy: Optional[str] = None
+
+    @field_validator("route_strategy")
+    @classmethod
+    def validate_route_strategy(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in {"priority", "weight", "lowest_cost", "lowest_latency"}:
+            raise ValueError("route_strategy 无效")
+        return value
 
 
 class ModelResponse(BaseModel):
@@ -273,6 +290,7 @@ class ModelResponse(BaseModel):
     price_per_1k_output: float = 0
     price_per_request: float = 0
     status: str
+    route_strategy: str = "priority"
     created_at: Optional[UtcDateTime] = None
     # 绑定渠道数量（列表页聚合）
     bound_channels_count: Optional[int] = None

@@ -11,6 +11,7 @@ export interface Model {
   price_per_1k_output: number
   price_per_request: number
   status: string
+  route_strategy?: 'priority' | 'weight' | 'lowest_cost' | 'lowest_latency'
   created_at?: string
   bound_channels_count?: number
   bound_channel_ids?: string[]
