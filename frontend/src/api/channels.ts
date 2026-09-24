@@ -109,6 +109,36 @@ export const testChannelConnection = (data: {
   url?: string | null
 }>('/admin/channels/test-connection', data)
 
+export interface ChannelHealthWindow {
+  requests: number
+  successes: number
+  errors: number
+  success_rate: number
+  error_rate: number
+  p50_latency_ms: number | null
+  p95_latency_ms: number | null
+}
+
+export interface ChannelHealth {
+  channel_id: string
+  name: string
+  status: string
+  health_status: string
+  last_check_at?: string
+  cooldown: {
+    channel_until?: string | null
+    keys: Array<{ key: string; cooldown_until: string }>
+  }
+  recent_error?: string | null
+  windows: Record<'5m' | '1h' | '24h', ChannelHealthWindow>
+}
+
+export const getChannelHealth = () =>
+  get<{ items: ChannelHealth[] }>('/admin/health/channels')
+
+export const recoverChannelHealth = (channelId: string) =>
+  post<{ message: string }>(`/admin/health/channels/${channelId}/recover`)
+
 // ========== 渠道-模型绑定管理 (以渠道为中心) ==========
 
 export interface ChannelModelBinding {

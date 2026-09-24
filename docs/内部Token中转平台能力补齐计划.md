@@ -829,6 +829,14 @@ def check_proxy_rate_limit(
 - 日志不包含完整 API Key、上游 Key、prompt 正文。
 - 成功和失败请求都有可追踪记录。
 
+**执行记录（2026-09-24）：** Task 3.1 已实现并完成 Docker 环境迁移。
+
+- 新增 `route_decision_logs` 模型及 Alembic 迁移，记录候选渠道、跳过原因、最终渠道、失败重试路径、状态和错误摘要。
+- 普通代理、流式代理及对话代理均传递 `request_id`；代理响应返回 `X-Request-ID`。日志只保存结构化路由元数据，不保存 prompt 或完整密钥。
+- 已在 `token-backend` 容器中执行 `alembic upgrade head`，业务库当前版本为 `20260924_1000_route_decision_logs`，迁移后的表结构已核验。
+- `tests/test_route_decision_log.py`：2 项通过；`tests/test_proxy_rate_limit.py`：6 项通过；语法检查和 diff 检查通过。
+- 组合回归测试仍受既有 `test_proxy_service_model_group.py` 导入不存在的 `app.models.provider` 阻断；本次未发布。
+
 #### Task 3.2: 渠道健康看板
 
 **实现：**
@@ -840,6 +848,14 @@ def check_proxy_rate_limit(
 - 一个渠道上游 5xx 增多时，看板能体现错误率上升。
 - cooldown 状态可见，恢复时间可见。
 - 手动恢复操作写入操作日志。
+
+**执行记录（2026-09-24）：** Task 3.2 已实现，代码及针对性验证完成，未发布。
+
+- 新增 `RouteHealthService`，基于 `usage_logs` 聚合最近 5 分钟、1 小时、24 小时的请求数、成功率、错误率、P50/P95 延迟和最近错误。
+- 新增管理员接口 `GET /api/v1/admin/health/channels` 和 `POST /api/v1/admin/health/channels/{channel_id}/recover`；看板展示渠道状态、渠道 cooldown、Key cooldown 及恢复时间，Key 仅展示脱敏指纹。
+- 手动恢复同时清除渠道和 Key cooldown，并写入 `recover_cooldown` 操作日志。
+- 新增 `HealthDashboard.tsx`，并在渠道管理页增加 cooldown 状态及确认恢复入口；新增管理后台“渠道健康”导航。
+- Docker 后端针对性测试 11 项通过，前端 `npm run build` 通过；仅保留既有大分包提示，未进行浏览器点击验收。
 
 #### Task 3.3: 路由策略配置
 

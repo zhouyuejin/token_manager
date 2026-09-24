@@ -23,6 +23,7 @@ import ModelGroupForm from './pages/admin/ModelGroupForm'
 import AdminLayout from './pages/admin/AdminLayout'
 import OperationLogs from './pages/admin/OperationLogs'
 import LoginLogs from './pages/admin/LoginLogs'
+import HealthDashboard from './pages/admin/HealthDashboard'
 import { MessageProvider } from './components/MessageProvider'
 import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 import { useSwrData } from './hooks/useSwr'
@@ -114,6 +115,7 @@ function App() {
               <Route path="billing" element={<Billing />} />
               <Route path="departments" element={<ProjectsPage departmentsOnly />} />
               <Route path="channels" element={<AdminChannels />} />
+              <Route path="health" element={<HealthDashboard />} />
               <Route path="channels/new" element={<ChannelForm />} />
               <Route path="channels/:channelId/edit" element={<ChannelForm />} />
               <Route path="channels/:channelId/bindings" element={<ChannelBindings />} />

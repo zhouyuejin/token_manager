@@ -56,6 +56,7 @@ const getPageTitle = (pathname: string): string => {
     "/admin/billing": "预算管理",
     "/admin/departments": "部门管理",
     "/admin/channels": "渠道管理",
+    "/admin/health": "渠道健康看板",
     "/admin/models": "模型管理",
     "/admin/model-groups": "模型分组",
     "/admin/logs/operations": "操作日志",
@@ -180,6 +181,11 @@ const MainLayout = () => {
                 key: "/admin/channels",
                 icon: <CloudOutlined />,
                 label: "渠道管理",
+              },
+              {
+                key: "/admin/health",
+                icon: <BarChartOutlined />,
+                label: "渠道健康",
               },
               {
                 key: "/admin/models",
