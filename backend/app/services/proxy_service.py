@@ -26,6 +26,7 @@ from app.models.model import Model, ModelStatus
 from app.models.model_channel import ModelChannel
 from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_model_mappings
 from app.models.usage_log import UsageLog
+from app.models.route_decision_log import RouteDecisionLog
 from app.models.project import Project
 from app.services.project_service import DEFAULT_PROJECT_ID, DEFAULT_DEPARTMENT_ID
 
@@ -46,6 +47,35 @@ class ProxyService:
         self.usage_attribution = {}
         self.stream_metadata = {}
         self.reservation_id = None
+
+    def record_route_decision(
+        self, request_id, user_id, key_id, model, candidates, skipped_reasons,
+        selected_channel, retry_path, status_code, success, error_message=None,
+        **_sensitive_values,
+    ) -> None:
+        """保存路由元数据；调用方不得把请求正文或上游密钥写入日志。"""
+        self.db.add(RouteDecisionLog(
+            request_id=request_id,
+            user_id=user_id,
+            key_id=key_id,
+            model=model,
+            candidate_channels=json.dumps(candidates, ensure_ascii=False),
+            skipped_reasons=json.dumps(skipped_reasons, ensure_ascii=False),
+            selected_channel=selected_channel,
+            retry_path=json.dumps(retry_path, ensure_ascii=False),
+            status_code=status_code,
+            success=success,
+            error_message=error_message,
+        ))
+        self.db.commit()
+
+    @staticmethod
+    def _route_skip_reasons(retry_path):
+        return {
+            item["channel_id"]: f"upstream_{item['status_code']}"
+            for item in retry_path
+            if item.get("channel_id")
+        }
 
     def reserve_quota(self, user, api_key, model, request_data):
         from app.services.quota_reservation_service import QuotaReservationService
@@ -442,7 +472,8 @@ class ProxyService:
         model_id: str,
         user: User,
         api_key: ApiKey,
-        request_data: Dict[str, Any]
+        request_data: Dict[str, Any],
+        request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         带 failover 的转发。
@@ -452,8 +483,13 @@ class ProxyService:
         """
         self.capture_usage_attribution(api_key.key_id)
         candidates = self.select_candidates(model_id, user, api_key)
+        candidate_ids = [ch.channel_id for ch, _, _ in candidates]
+        retry_path = []
         
         if not candidates:
+            if request_id:
+                self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                                           [], {}, None, [], 502, False, "无可用渠道")
             self._record_usage_failure(
                 user_id=user.user_id,
                 key_id=api_key.key_id,
@@ -478,6 +514,10 @@ class ProxyService:
                 result = self._forward_one(ch, mc.upstream_model, key, request_data)
                 
                 if result["success"]:
+                    if request_id:
+                        self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                                                   candidate_ids, self._route_skip_reasons(retry_path), ch.channel_id, retry_path,
+                                                   result.get("status_code", 200), True)
                     record_api_key_success(api_key)
                     # 如果不是第一个候选，说明走了降级
                     if ch.channel_id != candidates[0][0].channel_id:
@@ -485,6 +525,7 @@ class ProxyService:
                     return result
                 
                 status_code = result.get("status_code", 500)
+                retry_path.append({"channel_id": ch.channel_id, "status_code": status_code})
                 if 400 <= status_code < 500:
                     record_api_key_error(self.db, api_key, "upstream_4xx")
                 
@@ -502,11 +543,16 @@ class ProxyService:
                 # 其它 4xx 同样需要留存失败归因。
                 self._record_usage_failure(user.user_id, api_key.key_id, ch.channel_id, model_id, status_code, result.get("error"))
                 result["usage_recorded"] = True
+                if request_id:
+                    self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                                               candidate_ids, self._route_skip_reasons(retry_path), ch.channel_id, retry_path,
+                                               status_code, False, result.get("error"))
                 return result
                 
             except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as e:
                 self.bump_key_failure(ch, key)
                 last_err = {"success": False, "status_code": 504, "error": str(e)}
+                retry_path.append({"channel_id": ch.channel_id, "status_code": 504})
                 continue
 
         # 全部失败
@@ -518,6 +564,13 @@ class ProxyService:
             status_code=last_err.get("status_code", 502) if last_err else 502,
             error=f"已尝试 {len(attempted_channels)} 个渠道，全部失败：{last_err.get('error') if last_err else '未知错误'}"
         )
+        if request_id:
+            self.record_route_decision(
+                request_id, user.user_id, api_key.key_id, model_id, candidate_ids, self._route_skip_reasons(retry_path),
+                attempted_channels[-1] if attempted_channels else None, retry_path,
+                last_err.get("status_code", 502) if last_err else 502, False,
+                "已尝试多个渠道，全部失败",
+            )
         
         return {
             "success": False,
@@ -617,7 +670,8 @@ class ProxyService:
         model_id: str,
         user: User,
         api_key: ApiKey,
-        request_data: Dict[str, Any]
+        request_data: Dict[str, Any],
+        request_id: Optional[str] = None,
     ):
         """
         流式转发（不做 failover）。
@@ -628,6 +682,9 @@ class ProxyService:
 
         self.stream_metadata = {"channel_id": None, "status_code": 502, "error": "无可用渠道", "recorded": False}
         if not result:
+            if request_id:
+                self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                                           [], {}, None, [], 502, False, "无可用渠道")
             self._record_usage_failure(
                 user_id=user.user_id,
                 key_id=api_key.key_id,
@@ -726,6 +783,13 @@ class ProxyService:
 
             finally:
                 self.stream_metadata["latency_ms"] = int((time.time() - start_time) * 1000)
+                if request_id:
+                    self.record_route_decision(
+                        request_id, user.user_id, api_key.key_id, model_id, [ch.channel_id], {},
+                        ch.channel_id, [], self.stream_metadata.get("status_code", 502),
+                        self.stream_metadata.get("status_code") == 200 and self.stream_metadata.get("completed"),
+                        self.stream_metadata.get("error"),
+                    )
 
         return generate()
 
