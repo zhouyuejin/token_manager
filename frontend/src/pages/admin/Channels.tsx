@@ -11,7 +11,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, SettingOutlin
 import { 
   getChannels, deleteChannel,
   syncChannelQuota, updateChannelQuota, Channel, 
-  syncChannelModels
+  syncChannelModels, recoverChannelHealth, ChannelHealth
 } from '../../api/channels'
 import { Model, bindChannelToModel, unbindChannel } from '../../api/models'
 
@@ -71,9 +71,11 @@ const ChannelsPage = () => {
   const { data: channelsData, mutate: mutateChannels } = useSwrData<{total: number; items: Channel[]}>('/admin/channels')
   const { data: quotasData, mutate: mutateQuotas } = useSwrData<{total: number; items: any[]}>('/admin/channels/quotas')
   const { data: modelsData, mutate: mutateModels } = useSwrData<{total: number; items: Model[]}>('/admin/models')
+  const { data: healthData, mutate: mutateHealth } = useSwrData<{items: ChannelHealth[]}>('/admin/health/channels')
 
   const channelsList = channelsData?.items || []
   const modelsList = modelsData?.items || []
+  const healthMap = Object.fromEntries((healthData?.items || []).map(item => [item.channel_id, item]))
 
   // 将 quotas 转换为 map
   const quotasMap: Record<string, any> = {}
@@ -85,6 +87,18 @@ const ChannelsPage = () => {
     mutateChannels()
     mutateQuotas()
     mutateModels()
+    mutateHealth()
+  }
+
+  const handleRecover = async (channelId: string) => {
+    try {
+      await recoverChannelHealth(channelId)
+      message.success('cooldown 已恢复')
+      mutateHealth()
+      mutateChannels()
+    } catch {
+      message.error('恢复 cooldown 失败')
+    }
   }
 
   const handleSync = async (channelId: string) => {
@@ -186,6 +200,22 @@ const ChannelsPage = () => {
       render: (h: string) => {
         const colors = { healthy: 'green', degraded: 'orange', unhealthy: 'red' }
         return <Tag color={colors[h as keyof typeof colors] || 'default'}>{h}</Tag>
+      }
+    },
+    {
+      title: 'Cooldown', key: 'cooldown', width: 180,
+      render: (_: unknown, record: Channel) => {
+        const health = healthMap[record.channel_id]
+        const channelUntil = health?.cooldown.channel_until
+        const keyCount = health?.cooldown.keys.length || 0
+        if (!channelUntil && !keyCount) return <Tag color="green">正常</Tag>
+        return <Space direction="vertical" size={0}>
+          {channelUntil && <Tag color="orange">渠道至 {new Date(channelUntil).toLocaleTimeString()}</Tag>}
+          {keyCount > 0 && <span style={{ fontSize: 12, color: '#d97706' }}>{keyCount} 个 Key 冷却中</span>}
+          <Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => handleRecover(record.channel_id)}>
+            <Button type="link" size="small" style={{ padding: 0 }}>手动恢复</Button>
+          </Popconfirm>
+        </Space>
       }
     },
     { title: '密钥', key: 'keys', width: 130, render: (_: unknown, record: Channel) => `主 Key ${record.api_key ? '已配置' : '未配置'} · 额外 ${record.extra_keys?.length || 0} 个` },
