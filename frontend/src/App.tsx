@@ -27,6 +27,7 @@ import { MessageProvider } from './components/MessageProvider'
 import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 import { useSwrData } from './hooks/useSwr'
 import { UserInfo } from './api/auth'
+import { isAuthSessionCurrent } from './utils/authSession.mjs'
 
 function App() {
   const { token, checkAuth, user, setAuth } = useAuthStore()
@@ -41,11 +42,11 @@ function App() {
 
   // 同步 SWR 数据到 store
   useEffect(() => {
-    if (userData) {
-      setAuth(token!, useAuthStore.getState().refreshToken || '')
+    if (userData && token && isAuthSessionCurrent(token, useAuthStore.getState().token)) {
+      setAuth(token, useAuthStore.getState().refreshToken || '')
       useAuthStore.setState({ user: userData })
     }
-  }, [userData])
+  }, [token, userData, setAuth])
 
   // 处理认证状态 - 只有 user 加载完成或 token 缺失时才标记完成
   useEffect(() => {

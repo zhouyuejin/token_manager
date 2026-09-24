@@ -9,6 +9,7 @@ import {
   UserInfo,
 } from '../api/auth'
 import { clearModelConfigStorage } from '../utils/chatStorage'
+import { mutate } from 'swr'
 
 interface AuthState {
   token: string | null
@@ -52,6 +53,7 @@ export const useAuthStore = create<AuthState>()(
         const rt = get().refreshToken
         // 先清本地 store，避免撤销请求本身 401 时也被踢
         set({ token: null, refreshToken: null, user: null })
+        await mutate(() => true, undefined, { revalidate: false })
         // 清掉该用户的 chat 模型偏好，避免本地残留他人/本人上次的模型选择。
         // 自动登出（401）和手动登出都会走这里，统一处理不会漏。
         clearModelConfigStorage(userId)
