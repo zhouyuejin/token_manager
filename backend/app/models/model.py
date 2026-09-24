@@ -40,6 +40,7 @@ class Model(Base):
     price_per_request = Column(Numeric(10, 6), default=0, nullable=False, comment="每次请求价格(单位:$)")
 
     status = Column(Enum(ModelStatus), default=ModelStatus.active, nullable=False)
+    route_strategy = Column(String(20), default="priority", nullable=False, comment="路由策略: priority/weight/lowest_cost/lowest_latency")
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 

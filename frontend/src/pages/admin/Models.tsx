@@ -11,6 +11,13 @@ import { getModels, createModel, updateModel, deleteModel, syncModelPricing, Mod
 import { useSwrData } from '../../hooks/useSwr'
 import { getChannels, Channel, syncChannelModels, batchBindModelsToChannel } from '../../api/channels'
 
+const routeStrategyLabels: Record<string, string> = {
+  priority: '优先级',
+  weight: '权重',
+  lowest_cost: '最低成本',
+  lowest_latency: '最低延迟',
+}
+
 // 上游模型类型
 interface UpstreamModel {
   model_id: string
@@ -578,6 +585,12 @@ const ModelsPage = () => {
                 </div>
               )
             },
+            {
+              title: '路由策略',
+              key: 'route_strategy',
+              width: 110,
+              render: (_: any, record: ModelMapping) => <Tag color="blue">{routeStrategyLabels[record.route_strategy || 'priority'] || '优先级'}</Tag>,
+            },
             { 
               title: '状态', 
               dataIndex: 'status', 
@@ -657,7 +670,8 @@ const ModelsPage = () => {
             price_type: 'token',
             price_per_1k_input: 0,
             price_per_1k_output: 0,
-            price_per_request: 0
+            price_per_request: 0,
+            route_strategy: 'priority'
           }}
         >
           <Tabs 
@@ -685,6 +699,15 @@ const ModelsPage = () => {
                         <Radio value="active">启用</Radio>
                         <Radio value="disabled">禁用</Radio>
                       </Radio.Group>
+                    </Form.Item>
+
+                    <Form.Item name="route_strategy" label={<span style={{ color: token.colorTextSecondary }}>路由策略</span>}>
+                      <Select options={[
+                        { value: 'priority', label: '优先级（保持当前顺序）' },
+                        { value: 'weight', label: '权重（按绑定权重随机）' },
+                        { value: 'lowest_cost', label: '最低成本（近24小时历史成本）' },
+                        { value: 'lowest_latency', label: '最低延迟（近24小时平均延迟）' },
+                      ]} />
                     </Form.Item>
                   </>
                 )
@@ -1008,6 +1031,7 @@ const ModelsPage = () => {
               <LinkOutlined />
               <span>{bindingsTarget.display_name || bindingsTarget.model_id} · 渠道绑定</span>
               <Tag color="blue">{bindings.length} 个</Tag>
+              <Tag color="purple">策略：{routeStrategyLabels[bindingsTarget.route_strategy || 'priority'] || '优先级'}</Tag>
             </Space>
           )
         }

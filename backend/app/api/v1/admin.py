@@ -866,6 +866,7 @@ async def list_models(
             price_per_1k_output=float(m.price_per_1k_output) if m.price_per_1k_output else 0,
             price_per_request=float(m.price_per_request) if m.price_per_request else 0,
             status=m.status.value if hasattr(m.status, 'value') else str(m.status),
+            route_strategy=m.route_strategy or "priority",
             created_at=m.created_at, bound_channels_count=len(bound_channel_ids),
             bound_channel_ids=bound_channel_ids,
             model_groups=group_names
@@ -896,7 +897,8 @@ async def create_model(data: ModelCreate, request: Request, db: Session = Depend
         description=data.description, aliases=json.dumps(data.aliases) if data.aliases else None,
         price_type=PriceType(data.price_type),
         price_per_1k_input=data.price_per_1k_input, price_per_1k_output=data.price_per_1k_output,
-        price_per_request=data.price_per_request, status=ModelStatus(data.status)
+        price_per_request=data.price_per_request, status=ModelStatus(data.status),
+        route_strategy=data.route_strategy,
     )
     db.add(model)
     
@@ -914,6 +916,7 @@ async def create_model(data: ModelCreate, request: Request, db: Session = Depend
         aliases=data.aliases, price_type=data.price_type,
         price_per_1k_input=data.price_per_1k_input, price_per_1k_output=data.price_per_1k_output,
         price_per_request=data.price_per_request, status=data.status, created_at=model.created_at,
+        route_strategy=model.route_strategy or "priority",
         bound_channels_count=0, model_groups=[g.name for g in model.model_groups]
     )
 
@@ -951,6 +954,7 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
         price_per_1k_output=float(model.price_per_1k_output) if model.price_per_1k_output else 0,
         price_per_request=float(model.price_per_request) if model.price_per_request else 0,
         status=model.status.value if hasattr(model.status, 'value') else str(model.status),
+        route_strategy=model.route_strategy or "priority",
         created_at=model.created_at, bound_channels_count=len(mc_list),
         model_groups=[g.name for g in model.model_groups],
         bound_channels=bound_channels
@@ -1151,6 +1155,7 @@ async def get_channel_models(channel_id: str, db: Session = Depends(get_db), adm
                 price_per_1k_output=float(model.price_per_1k_output) if model.price_per_1k_output else 0,
                 price_per_request=float(model.price_per_request) if model.price_per_request else 0,
                 status=model.status.value if hasattr(model.status, 'value') else str(model.status),
+                route_strategy=model.route_strategy or "priority",
                 created_at=model.created_at
             ) if model else None
         ))
