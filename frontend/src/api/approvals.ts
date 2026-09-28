@@ -1,7 +1,7 @@
 import { get, post } from './request'
 
 export type ApprovalType = 'api_key' | 'quota' | 'model_group' | 'project_access'
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+export type ApprovalStatus = 'pending' | 'needs_info' | 'approved' | 'rejected' | 'cancelled'
 
 export interface ApprovalRequest {
   request_id: string
@@ -13,6 +13,7 @@ export interface ApprovalRequest {
   status: ApprovalStatus
   reason: string
   decision_comment?: string | null
+  supplement?: string | null
   created_at: string
   decided_at?: string | null
   result?: { key_id: string; api_key: string }
@@ -71,5 +72,8 @@ export const createProjectAccessApplication = (data: { project_id: string; reaso
 export const cancelApproval = (requestId: string) =>
   post<ApprovalRequest>(`/approvals/${requestId}/cancel`)
 
-export const decideApproval = (requestId: string, decision: 'approved' | 'rejected', comment: string) =>
+export const supplementApproval = (requestId: string, content: string) =>
+  post<ApprovalRequest>(`/approvals/${requestId}/supplement`, { content })
+
+export const decideApproval = (requestId: string, decision: 'approved' | 'rejected' | 'needs_info', comment: string) =>
   post<ApprovalRequest>(`/approvals/${requestId}/decision`, { decision, comment })

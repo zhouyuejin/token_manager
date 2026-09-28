@@ -18,6 +18,7 @@ class NotificationType(enum.Enum):
     system = "system"
     user_registered = "user_registered"   # 新用户注册通知
     approval_result = "approval_result"
+    approval_update = "approval_update"
 
 
 class Notification(Base):

@@ -4,11 +4,12 @@ from fastapi import HTTPException
 from app.api.v1 import approvals
 from app.models.approval import ApprovalRequest
 from app.models.notification import Notification, NotificationType
+from app.models.operation_log import OperationLog
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.organization import Department
 from app.models.project import Project, UserProject
 from app.models.user import User, UserRole
-from app.schemas.approval import ApprovalDecision, ProjectAccessApplicationCreate
+from app.schemas.approval import ApprovalDecision, ApprovalSupplement, ProjectAccessApplicationCreate
 
 
 def add_user(db, user_id, role=UserRole.user):
@@ -149,10 +150,80 @@ def test_reviewer_scope_filters_and_requester_can_cancel(db):
 
     cancelled = approvals.cancel_my_application(first.request_id, db, requester)
     assert cancelled.status == 'cancelled'
+    assert db.query(Notification).filter_by(user_id=owner.user_id, type=NotificationType.approval_update).count() == 3
+    assert db.query(OperationLog).filter_by(target_id=first.request_id, action='approval_cancelled').count() == 1
     with pytest.raises(HTTPException) as error:
         approvals.cancel_my_application(second.request_id, db, other)
     assert error.value.status_code == 403
     assert second.status == 'pending'
+
+
+def test_supplement_round_trip_and_permissions(db):
+    requester = add_user(db, 'requester')
+    owner = add_user(db, 'owner')
+    other = add_user(db, 'other')
+    add_project(db, 'project_one', owner.user_id)
+    request = approvals.create_project_access_application(
+        ProjectAccessApplicationCreate(project_id='project_one', reason='需要项目权限'), db, requester,
+    )
+
+    with pytest.raises(HTTPException) as blank_comment:
+        approvals._service(db).decide(owner, request.request_id, 'approved', '   ')
+    assert blank_comment.value.status_code == 422
+    assert request.status == 'pending'
+
+    approvals.decide_application(
+        request.request_id, ApprovalDecision(decision='needs_info', comment='说明用途'), db, owner,
+    )
+    assert request.status == 'needs_info'
+    assert db.query(UserProject).filter_by(user_id=requester.user_id, project_id='project_one').count() == 0
+    assert db.query(Notification).filter_by(user_id=requester.user_id, type=NotificationType.approval_update).count() == 1
+
+    with pytest.raises(HTTPException) as unauthorized:
+        approvals.supplement_my_application(request.request_id, ApprovalSupplement(content='接口联调'), db, other)
+    assert unauthorized.value.status_code == 403
+    with pytest.raises(HTTPException) as duplicate_decision:
+        approvals.decide_application(
+            request.request_id, ApprovalDecision(decision='approved', comment='同意'), db, owner,
+        )
+    assert duplicate_decision.value.status_code == 409
+
+    approvals.supplement_my_application(
+        request.request_id, ApprovalSupplement(content='用于接口联调'), db, requester,
+    )
+    assert request.status == 'pending'
+    assert request.supplement == '用于接口联调'
+    assert len(approvals.list_review_applications(db, owner, status='pending')) == 1
+    assert db.query(Notification).filter_by(user_id=owner.user_id, type=NotificationType.approval_update).count() == 2
+    assert db.query(OperationLog).filter_by(target_id=request.request_id).count() == 3
+
+    approvals.decide_application(
+        request.request_id, ApprovalDecision(decision='approved', comment='同意'), db, owner,
+    )
+    assert request.status == 'approved'
+    assert db.query(UserProject).filter_by(user_id=requester.user_id, project_id='project_one').count() == 1
+
+
+def test_needs_info_application_can_be_cancelled(db):
+    requester = add_user(db, 'requester')
+    owner = add_user(db, 'owner')
+    add_project(db, 'project_one', owner.user_id)
+    request = approvals.create_project_access_application(
+        ProjectAccessApplicationCreate(project_id='project_one', reason='需要项目权限'), db, requester,
+    )
+    approvals.decide_application(
+        request.request_id, ApprovalDecision(decision='needs_info', comment='请补充'), db, owner,
+    )
+    approvals.cancel_my_application(request.request_id, db, requester)
+    assert request.status == 'cancelled'
+    assert db.query(Notification).filter_by(user_id=owner.user_id, type=NotificationType.approval_update).count() == 2
+
+
+def test_approval_comments_and_supplements_require_text():
+    with pytest.raises(Exception):
+        ApprovalDecision(decision='approved', comment='   ')
+    with pytest.raises(Exception):
+        ApprovalSupplement(content='   ')
 
 
 def test_reviewer_history_never_returns_api_key_plaintext(db):

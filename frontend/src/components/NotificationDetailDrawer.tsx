@@ -23,6 +23,8 @@ export const NOTIFICATION_TYPE_CONFIG: Record<string, NotificationTypeConfig> = 
   quota_decrease: { icon: '🔵', color: '#3B82F6', label: '额度降低' },
   daily_report: { icon: '🟡', color: '#EAB308', label: '每日报告' },
   system: { icon: '⚪', color: '#94A3B8', label: '系统通知' },
+  approval_result: { icon: '✅', color: '#22C55E', label: '审批结果' },
+  approval_update: { icon: '📋', color: '#3B82F6', label: '审批进展' },
 }
 
 const getTypeConfig = (type: string): NotificationTypeConfig =>
@@ -231,6 +233,7 @@ export default function NotificationDetailDrawer({
           {isFreezeNotification && <Alert type="warning" showIcon message={freezeMetadata.reason || 'API Key 已自动冻结'}
             description={<><div>{isAdmin ? '请核查调用来源、凭证和 IP 白名单，修正异常后在全部 Key 视图解除冻结。' : '请检查客户端凭证和 IP 白名单，联系管理员核查并解除冻结。'}</div><Link to="/api-keys" onClick={onClose}>前往 API Key 管理</Link></>}
             style={{ marginBottom: 16 }} />}
+          {notification.type.startsWith('approval_') && <p><Link to="/approvals" onClick={onClose}>查看申请与审批</Link></p>}
           {/* 内容 */}
           <div
             style={{

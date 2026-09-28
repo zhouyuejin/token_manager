@@ -17,5 +17,6 @@ class ApprovalRequest(Base):
     status = Column(String(16), nullable=False, default='pending', index=True)
     reason = Column(Text, nullable=False)
     decision_comment = Column(Text, nullable=True)
+    supplement = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     decided_at = Column(DateTime, nullable=True)

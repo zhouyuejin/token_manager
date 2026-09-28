@@ -123,6 +123,13 @@ class ApiKeyCreatedResponse(BaseModel):
     model_config = {'populate_by_name': True}
 
 
+class ApiKeyApplicationSubmitted(BaseModel):
+    """用户创建 API Key 后提交审批的响应。"""
+    request_id: str
+    status: str
+    message: str
+
+
 class ApiKeyRevokeRequest(BaseModel):
     """吊销 API Key 请求"""
     reason: Optional[str] = None

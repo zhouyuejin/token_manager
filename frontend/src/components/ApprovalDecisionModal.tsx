@@ -4,7 +4,7 @@ import { ApprovalRequest } from '../api/approvals'
 
 interface Props {
   request: ApprovalRequest | null
-  decision: 'approved' | 'rejected'
+  decision: 'approved' | 'rejected' | 'needs_info'
   onCancel: () => void
   onSubmit: (request: ApprovalRequest, comment: string) => Promise<void>
 }
@@ -19,8 +19,8 @@ const ApprovalDecisionModal = ({ request, decision, onCancel, onSubmit }: Props)
   return (
     <Modal
       open={!!request}
-      title={decision === 'approved' ? '确认通过申请' : '确认拒绝申请'}
-      okText={decision === 'approved' ? '确认通过' : '确认拒绝'}
+      title={decision === 'approved' ? '确认通过申请' : decision === 'rejected' ? '确认拒绝申请' : '要求补充说明'}
+      okText={decision === 'approved' ? '确认通过' : decision === 'rejected' ? '确认拒绝' : '确认退回'}
       okButtonProps={{ danger: decision === 'rejected' }}
       cancelText="取消"
       onCancel={onCancel}
@@ -32,7 +32,7 @@ const ApprovalDecisionModal = ({ request, decision, onCancel, onSubmit }: Props)
       destroyOnClose
     >
       <Typography.Paragraph>
-        {decision === 'approved' ? '通过后将按申请内容立即生效。' : '拒绝后申请不会生效。'}
+        {decision === 'approved' ? '通过后将按申请内容立即生效。' : decision === 'rejected' ? '拒绝后申请不会生效。' : '申请将退回给申请人，补充后重新进入待审批。'}
       </Typography.Paragraph>
       <Form form={form} layout="vertical">
         <Form.Item

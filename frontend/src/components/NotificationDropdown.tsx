@@ -23,6 +23,8 @@ const typeConfig: Record<string, { icon: string; color: string }> = {
   quota_decrease: { icon: "🔵", color: "#3B82F6" },
   daily_report: { icon: "🟡", color: "#EAB308" },
   system: { icon: "⚪", color: "#94A3B8" },
+  approval_result: { icon: "✅", color: "#22C55E" },
+  approval_update: { icon: "📋", color: "#3B82F6" },
 };
 
 const getTypeConfig = (type: string) => {
