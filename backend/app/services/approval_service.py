@@ -7,7 +7,9 @@ from fastapi import HTTPException
 
 from app.models.approval import ApprovalRequest
 from app.models.operation_log import OperationLog
-from app.models.user import UserRole
+from app.models.notification import Notification, NotificationType
+from app.models.user import User, UserRole
+from loguru import logger
 
 
 REQUEST_TYPES = {'api_key', 'quota', 'model_group', 'project_access'}
@@ -79,7 +81,31 @@ class ApprovalService:
             ))
             self.db.commit()
             self.db.refresh(request)
+            self._notify_requester(request)
             return request
         except BaseException:
             self.db.rollback()
             raise
+
+    def _notify_requester(self, request):
+        if request.request_type != 'quota':
+            return
+        try:
+            user = self.db.query(User).filter_by(user_id=request.requester_user_id).first()
+            if user is None:
+                return
+            result = '通过' if request.status == 'approved' else '拒绝'
+            amount = request.payload.get('amount', 0)
+            notice = Notification(
+                notif_id=f'notif_{secrets.token_hex(8)}', user_id=user.user_id,
+                type=NotificationType.approval_result, title=f'额度申请已{result}',
+                content=f'您的 {amount} tokens 额度申请已{result}。申请单：{request.request_id}'
+                       + (f'；审批意见：{request.decision_comment}' if request.decision_comment else ''),
+                extra_data=json.dumps({'request_id': request.request_id, 'status': request.status}),
+                is_read=0,
+            )
+            self.db.add(notice)
+            self.db.commit()
+        except Exception:
+            logger.exception('额度申请结果通知保存失败: {}', request.request_id)
+            self.db.rollback()

@@ -2,8 +2,12 @@ import pytest
 from fastapi import HTTPException
 
 from app.models.operation_log import OperationLog
+from app.models.notification import Notification, NotificationType
+from app.models.quota_record import QuotaRecord, QuotaRecordType
 from app.models.user import User, UserRole
 from app.services.approval_service import ApprovalService
+from app.services.quota_approval_service import apply_quota_approval
+from app.schemas.approval import QuotaApplicationCreate
 
 
 def add_user(db, user_id, role=UserRole.user):
@@ -101,3 +105,71 @@ def test_approval_without_domain_action_is_rejected_without_changing_status(db):
     assert error.value.status_code == 501
     assert '生效动作尚未配置' in error.value.detail
     assert request.status == 'pending'
+
+
+def test_quota_approval_increases_balance_and_links_ledger_to_request(db):
+    requester = add_user(db, 'quota_requester')
+    requester.quota = 100
+    approver = add_user(db, 'quota_approver', UserRole.admin)
+    request = ApprovalService(db).create_request(
+        requester, 'quota', {'amount': 50}, reason='项目测试',
+    )
+
+    ApprovalService(db, actions={'quota': apply_quota_approval}).decide(
+        approver, request.request_id, 'approved', '同意',
+    )
+
+    assert db.query(User).filter_by(user_id=requester.user_id).one().quota == 150
+    record = db.query(QuotaRecord).one()
+    assert record.type == QuotaRecordType.increase
+    assert record.amount == 50
+    assert record.source == 'approval'
+    assert request.request_id in record.reason
+
+
+def test_rejected_quota_application_notifies_requester_without_changing_quota(db):
+    requester = add_user(db, 'quota_rejected')
+    requester.quota = 100
+    approver = add_user(db, 'quota_rejector', UserRole.admin)
+    request = ApprovalService(db).create_request(
+        requester, 'quota', {'amount': 50}, reason='项目测试',
+    )
+
+    ApprovalService(db, actions={'quota': apply_quota_approval}).decide(
+        approver, request.request_id, 'rejected', '理由不足',
+    )
+
+    assert db.query(User).filter_by(user_id=requester.user_id).one().quota == 100
+    assert db.query(QuotaRecord).count() == 0
+    notice = db.query(Notification).filter_by(user_id=requester.user_id).one()
+    assert notice.type == NotificationType.approval_result
+    assert request.request_id in notice.content
+
+
+def test_quota_approval_notifies_requester(db):
+    requester = add_user(db, 'quota_approved')
+    requester.quota = 100
+    approver = add_user(db, 'quota_approver_admin', UserRole.admin)
+    request = ApprovalService(db).create_request(
+        requester, 'quota', {'amount': 25}, reason='项目测试',
+    )
+
+    ApprovalService(db, actions={'quota': apply_quota_approval}).decide(
+        approver, request.request_id, 'approved', '同意',
+    )
+
+    notice = db.query(Notification).filter_by(user_id=requester.user_id).one()
+    assert notice.type == NotificationType.approval_result
+    assert '通过' in notice.content
+    assert request.request_id in notice.content
+
+
+@pytest.mark.parametrize('amount', [0, -1, True])
+def test_quota_application_rejects_non_positive_or_boolean_amount(amount):
+    with pytest.raises(Exception):
+        QuotaApplicationCreate(amount=amount, reason='需要额度')
+
+
+def test_quota_application_rejects_blank_reason():
+    with pytest.raises(Exception):
+        QuotaApplicationCreate(amount=1, reason='   ')
