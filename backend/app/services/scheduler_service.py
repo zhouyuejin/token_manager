@@ -262,6 +262,8 @@ def setup_scheduler():
     """设置定时任务"""
     scheduler.add_job(check_budget_alerts, trigger=IntervalTrigger(seconds=60),
                       id='check_budget_alerts', name='检查预算阈值告警', replace_existing=True)
+    scheduler.add_job(check_operational_alerts, trigger=IntervalTrigger(seconds=60),
+                      id='check_operational_alerts', name='检查渠道配额和项目异常告警', replace_existing=True)
     scheduler.add_job(
         run_daily_billing_reconcile,
         trigger=CronTrigger(hour=2, minute=15, timezone="Asia/Shanghai"),
@@ -322,6 +324,12 @@ async def check_budget_alerts():
     from app.services.budget_service import BudgetService
     with SessionLocal() as db:
         await BudgetService(db).check_alerts()
+
+
+async def check_operational_alerts():
+    from app.services.alert_service import AlertService
+    with SessionLocal() as db:
+        await AlertService(db).check()
 
 
 def start_scheduler():
