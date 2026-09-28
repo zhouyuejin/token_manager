@@ -51,6 +51,8 @@ const getPageTitle = (pathname: string): string => {
     "/chat": "AI 对话",
     "/stats": "仪表盘",
     "/notifications": "消息通知",
+    "/approvals": "自助申请与审批",
+    "/admin/approvals": "审批管理",
     "/admin/users": "用户管理",
     "/admin/projects": "项目管理",
     "/admin/billing": "预算管理",
@@ -161,6 +163,7 @@ const MainLayout = () => {
         }
       : { key: "/stats", icon: <DashboardOutlined />, label: "仪表盘" },
     { key: "/notifications", icon: <BellOutlined />, label: "消息通知" },
+    { key: "/approvals", icon: <FileSearchOutlined />, label: "申请与审批" },
     { key: "/api-keys", icon: <KeyOutlined />, label: "API Key" },
     { key: "/chat", icon: <MessageOutlined />, label: "AI 对话" },
     ...(isAdmin
@@ -170,6 +173,7 @@ const MainLayout = () => {
             icon: <AppstoreOutlined />,
             label: "管理后台",
             children: [
+              { key: "/admin/approvals", icon: <FileSearchOutlined />, label: "审批管理" },
               { key: "/admin/departments", icon: <TeamOutlined />, label: "部门管理" },
               { key: "/admin/projects", icon: <AppstoreOutlined />, label: "项目管理" },
               { key: "/admin/billing", icon: <DollarOutlined />, label: "预算管理" },

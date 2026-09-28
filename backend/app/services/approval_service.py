@@ -40,11 +40,45 @@ class ApprovalService:
             requester_user_id=requester.user_id,
         ).order_by(ApprovalRequest.created_at.desc()).all()
 
-    def list_pending(self, approver):
-        query = self.db.query(ApprovalRequest).filter_by(status='pending')
+    def list_review(self, approver, request_type=None, status=None, requester_user_id=None, project_id=None):
+        query = self.db.query(ApprovalRequest)
         if approver.role != UserRole.admin:
             query = query.filter_by(approver_user_id=approver.user_id)
+        if request_type:
+            query = query.filter_by(request_type=request_type)
+        if status:
+            query = query.filter_by(status=status)
+        if requester_user_id:
+            query = query.filter_by(requester_user_id=requester_user_id)
+        if project_id:
+            query = query.filter(
+                ApprovalRequest.request_type.in_({'api_key', 'project_access'}),
+                ApprovalRequest.target_id == project_id,
+            )
         return query.order_by(ApprovalRequest.created_at.asc()).all()
+
+    def list_pending(self, approver):
+        return self.list_review(approver, status='pending')
+
+    def cancel(self, requester, request_id):
+        request = self.db.query(ApprovalRequest).filter_by(request_id=request_id).with_for_update().first()
+        if request is None:
+            raise HTTPException(404, '审批申请不存在')
+        if request.requester_user_id != requester.user_id:
+            raise HTTPException(403, '只能撤回自己的申请')
+        if request.status != 'pending':
+            raise HTTPException(409, '只有待审批申请可以撤回')
+        request.status = 'cancelled'
+        request.decided_at = datetime.utcnow()
+        self.db.add(OperationLog(
+            log_id=f'log_{secrets.token_hex(12)}', operator_id=requester.user_id,
+            operator_name=requester.username, action='approval_cancelled',
+            target_type='approval_request', target_id=request.request_id,
+            detail=json.dumps({'request_type': request.request_type, 'status': 'cancelled'}, ensure_ascii=False),
+        ))
+        self.db.commit()
+        self.db.refresh(request)
+        return request
 
     def decide(self, approver, request_id, decision, comment=None):
         if decision not in {'approved', 'rejected'}:
@@ -88,17 +122,19 @@ class ApprovalService:
             raise
 
     def _notify_requester(self, request):
-        if request.request_type not in {'quota', 'api_key'}:
-            return
         try:
             user = self.db.query(User).filter_by(user_id=request.requester_user_id).first()
             if user is None:
                 return
             result = '通过' if request.status == 'approved' else '拒绝'
             amount = request.payload.get('amount', 0)
-            title = '额度申请' if request.request_type == 'quota' else 'API Key 申请'
+            titles = {
+                'quota': '额度申请', 'api_key': 'API Key 申请',
+                'model_group': '模型分组申请', 'project_access': '项目权限申请',
+            }
+            title = titles[request.request_type]
             detail = (f'您的 {amount} tokens 额度申请已{result}。' if request.request_type == 'quota'
-                      else f'您的 API Key 申请已{result}。')
+                      else f'您的 {title}已{result}。')
             notice = Notification(
                 notif_id=f'notif_{secrets.token_hex(8)}', user_id=user.user_id,
                 type=NotificationType.approval_result, title=f'{title}已{result}',
