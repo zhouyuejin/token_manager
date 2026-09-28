@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Card, Col, Empty, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
+import { Button, Card, Col, Empty, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { useSwrData } from '../../hooks/useSwr'
 import { useThemeToken } from '../../theme/useThemeToken'
@@ -15,12 +15,13 @@ const windowOptions = [
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : '—'
 
 const metricColor = (value: number) => value >= 99 ? '#16a34a' : value >= 95 ? '#d97706' : '#dc2626'
+const healthLabels: Record<string, string> = { healthy: '健康', degraded: '降级', unhealthy: '不健康' }
 
 const WindowMetrics = ({ window }: { window: ChannelHealthWindow }) => (
   <Space direction="vertical" size={0} style={{ width: '100%' }}>
     <Progress percent={window.success_rate} size="small" strokeColor={metricColor(window.success_rate)} format={(value) => `${value}% 成功`} />
     <span style={{ color: '#64748b', fontSize: 12 }}>
-      {window.requests} 请求 · P50 {window.p50_latency_ms ?? '—'}ms · P95 {window.p95_latency_ms ?? '—'}ms
+      {window.requests} 请求 · 错误率 {window.error_rate}% · P50 {window.p50_latency_ms ?? '—'}ms · P95 {window.p95_latency_ms ?? '—'}ms
     </span>
   </Space>
 )
@@ -51,11 +52,11 @@ const HealthDashboard = () => {
 
   const columns = [
     { title: '渠道', dataIndex: 'name', key: 'name', render: (name: string, row: ChannelHealth) => <Space direction="vertical" size={0}><span>{name}</span><span style={{ color: '#64748b', fontSize: 12 }}>{row.channel_id}</span></Space> },
-    { title: '健康状态', dataIndex: 'health_status', key: 'health_status', render: (value: string) => <Tag color={value === 'healthy' ? 'green' : value === 'degraded' ? 'orange' : 'red'}>{value}</Tag> },
+    { title: '健康状态', dataIndex: 'health_status', key: 'health_status', render: (value: string) => <Tag color={value === 'healthy' ? 'green' : value === 'degraded' ? 'orange' : 'red'}>{healthLabels[value] || value || '未知'}</Tag> },
     { title: windowOptions.find(item => item.value === windowName)?.label, key: 'metrics', width: 300, render: (_: unknown, row: ChannelHealth) => <WindowMetrics window={row.windows[windowName]} /> },
     { title: 'Cooldown', key: 'cooldown', render: (_: unknown, row: ChannelHealth) => <Space direction="vertical" size={0}>{row.cooldown.channel_until ? <Tag color="orange">渠道至 {formatDate(row.cooldown.channel_until)}</Tag> : <Tag color="green">渠道正常</Tag>}{row.cooldown.keys.length > 0 && <span style={{ color: '#d97706', fontSize: 12 }}>{row.cooldown.keys.length} 个 Key 冷却中</span>}</Space> },
     { title: '最近错误', dataIndex: 'recent_error', key: 'recent_error', ellipsis: true, render: (value: string | null) => value ? <Tooltip title={value}>{value}</Tooltip> : '—' },
-    { title: '操作', key: 'action', render: (_: unknown, row: ChannelHealth) => <Button size="small" disabled={!row.cooldown.channel_until && row.cooldown.keys.length === 0} onClick={() => recover(row)}>恢复 cooldown</Button> },
+    { title: '操作', key: 'action', render: (_: unknown, row: ChannelHealth) => <Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => recover(row)}><Button size="small" disabled={!row.cooldown.channel_until && row.cooldown.keys.length === 0}>恢复 cooldown</Button></Popconfirm> },
   ]
 
   return <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100%' }}>

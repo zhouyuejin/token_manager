@@ -8,7 +8,7 @@ import { useSwrData } from '../hooks/useSwr'
 import { useAuthStore } from '../store/auth'
 import { MyBilling } from '../api/billing'
 import dayjs from 'dayjs'
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from '../components/AsyncECharts'
 
 const { RangePicker } = DatePicker
 

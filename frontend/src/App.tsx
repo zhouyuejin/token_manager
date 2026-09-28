@@ -1,35 +1,36 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom'
 import { App as AntApp, Spin } from 'antd'
 import { useAuthStore } from './store/auth'
 import MainLayout from './components/Layout/MainLayout'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import ApiKeys from './pages/ApiKeys'
-import Stats from './pages/Stats'
-import AdminDashboard from './pages/AdminDashboard'
-import Notifications from './pages/Notifications'
-import Settings from './pages/Settings'
-import Chat from './pages/Chat'
-import AdminUsers from './pages/admin/Users'
-import ProjectsPage from './pages/admin/Projects'
-import Billing from './pages/admin/Billing'
-import AdminChannels from './pages/admin/Channels'
-import ChannelForm from './pages/admin/ChannelForm'
-import ChannelBindings from './pages/admin/ChannelBindings'
-import AdminModels from './pages/admin/Models'
-import AdminModelGroups from './pages/admin/ModelGroups'
-import ModelGroupForm from './pages/admin/ModelGroupForm'
 import AdminLayout from './pages/admin/AdminLayout'
-import OperationLogs from './pages/admin/OperationLogs'
-import LoginLogs from './pages/admin/LoginLogs'
-import HealthDashboard from './pages/admin/HealthDashboard'
-import RouteMonitor from './pages/admin/RouteMonitor'
 import { MessageProvider } from './components/MessageProvider'
 import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 import { useSwrData } from './hooks/useSwr'
 import { UserInfo } from './api/auth'
 import { isAuthSessionCurrent } from './utils/authSession.mjs'
+
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const Stats = lazy(() => import('./pages/Stats'))
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Chat = lazy(() => import('./pages/Chat'))
+const AdminUsers = lazy(() => import('./pages/admin/Users'))
+const ProjectsPage = lazy(() => import('./pages/admin/Projects'))
+const Billing = lazy(() => import('./pages/admin/Billing'))
+const AdminChannels = lazy(() => import('./pages/admin/Channels'))
+const ChannelForm = lazy(() => import('./pages/admin/ChannelForm'))
+const ChannelBindings = lazy(() => import('./pages/admin/ChannelBindings'))
+const AdminModels = lazy(() => import('./pages/admin/Models'))
+const AdminModelGroups = lazy(() => import('./pages/admin/ModelGroups'))
+const ModelGroupForm = lazy(() => import('./pages/admin/ModelGroupForm'))
+const OperationLogs = lazy(() => import('./pages/admin/OperationLogs'))
+const LoginLogs = lazy(() => import('./pages/admin/LoginLogs'))
+const HealthDashboard = lazy(() => import('./pages/admin/HealthDashboard'))
+const RouteMonitor = lazy(() => import('./pages/admin/RouteMonitor'))
 
 function App() {
   const { token, checkAuth, user, setAuth } = useAuthStore()
@@ -84,6 +85,7 @@ function App() {
     <AntApp>
       <MessageProvider>
         {token && <NotificationWebSocketBridge />}
+        <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin size="large" /></div>}>
         <Routes>
           <Route path="/login" element={!token ? <Login /> : <Navigate to={isAdmin ? "/admin/dashboard" : "/stats"} />} />
           <Route path="/register" element={!token ? <Register /> : <Navigate to="/stats" />} />
@@ -131,6 +133,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
+        </Suspense>
       </MessageProvider>
     </AntApp>
   )

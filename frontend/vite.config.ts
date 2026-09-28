@@ -13,6 +13,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ['dayjs'],
   },
+  build: {
+    chunkSizeWarningLimit: 800,
+  },
   server: {
     port: 3002,
     open: true,
