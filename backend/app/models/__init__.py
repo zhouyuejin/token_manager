@@ -24,3 +24,5 @@ from app.models.budget import Budget, BudgetAlert
 from app.models.billing_reconcile import BillingReconcileReport, BillingReconcileItem
 from app.models.route_decision_log import RouteDecisionLog
 from app.models.alert import AlertState
+
+from app.models.approval import ApprovalRequest
