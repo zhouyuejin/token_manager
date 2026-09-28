@@ -1,5 +1,23 @@
 """Approval API schemas."""
 from pydantic import BaseModel, Field, StrictInt, field_validator
+from datetime import datetime
+from typing import Optional
+
+
+class ApiKeyApplicationCreate(BaseModel):
+    project_id: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=100)
+    ip_whitelist: list[str] = Field(default_factory=list)
+    expires_at: Optional[datetime] = None
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @field_validator('project_id', 'name', 'reason')
+    @classmethod
+    def values_must_contain_text(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError('申请内容不能为空')
+        return value
 
 
 class QuotaApplicationCreate(BaseModel):

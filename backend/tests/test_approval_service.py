@@ -7,12 +7,18 @@ from app.models.notification import Notification, NotificationType
 from app.models.quota_record import QuotaRecord, QuotaRecordType
 from app.models.user import User, UserRole
 from app.models.model_group import ModelGroup, ModelGroupStatus
-from app.api.v1.approvals import create_model_group_application, decide_application
+from app.models.api_key import ApiKey
+from app.models.approval import ApprovalRequest
+from app.models.organization import Department
+from app.models.project import Project, UserProject
+from app.api.v1.approvals import (create_api_key_application, create_model_group_application,
+                                  decide_application, list_my_applications)
 from app.services.approval_service import ApprovalService
 from app.services.proxy_service import ProxyService
 from app.services.quota_approval_service import apply_quota_approval
 from app.services.model_group_approval_service import apply_model_group_approval
-from app.schemas.approval import ApprovalDecision, ModelGroupApplicationCreate, QuotaApplicationCreate
+from app.schemas.approval import (ApiKeyApplicationCreate, ApprovalDecision,
+                                  ModelGroupApplicationCreate, QuotaApplicationCreate)
 
 
 def add_user(db, user_id, role=UserRole.user):
@@ -225,6 +231,54 @@ def test_disabled_model_group_cannot_be_granted(db):
     assert error.value.status_code == 409
     assert request.status == 'pending'
     assert db.query(User).filter_by(user_id=requester.user_id).one().model_group_ids == '[]'
+
+
+def test_api_key_application_creates_key_only_after_approval_and_reveals_secret_once(db):
+    requester = add_user(db, 'key_requester')
+    approver = add_user(db, 'key_project_owner')
+    db.add(Department(dept_id='key_dept', name='研发'))
+    db.commit()
+    db.add(Project(project_id='key_project', dept_id='key_dept', name='项目', owner_user_id=approver.user_id))
+    db.commit()
+    db.add(UserProject(user_id=requester.user_id, project_id='key_project'))
+    db.commit()
+
+    request = create_api_key_application(
+        ApiKeyApplicationCreate(project_id='key_project', name='测试用途',
+                                ip_whitelist=['203.0.113.10'], reason='接口联调'), db, requester,
+    )
+    assert request.status == 'pending'
+    assert request.approver_user_id == approver.user_id
+    assert db.query(ApiKey).count() == 0
+
+    decide_application(request.request_id, ApprovalDecision(decision='approved'), db, approver)
+    key = db.query(ApiKey).one()
+    assert key.user_id == requester.user_id
+    assert key.project_id == 'key_project'
+    assert key.ip_whitelist == '["203.0.113.10"]'
+
+    first = list_my_applications(db, requester)[0]
+    assert first['result']['key_id'] == key.key_id
+    assert first['result']['api_key'] == key.api_key
+    second = list_my_applications(db, requester)[0]
+    assert 'result' not in second
+    assert 'api_key' not in second['payload'].get('result', {})
+
+
+def test_api_key_application_requires_project_membership(db):
+    requester = add_user(db, 'key_unauthorized')
+    db.add(Department(dept_id='unauth_dept', name='部门'))
+    db.commit()
+    db.add(Project(project_id='unauth_project', dept_id='unauth_dept', name='项目'))
+    db.commit()
+
+    with pytest.raises(HTTPException) as error:
+        create_api_key_application(
+            ApiKeyApplicationCreate(project_id='unauth_project', name='用途', reason='理由'),
+            db, requester,
+        )
+    assert error.value.status_code == 403
+    assert db.query(ApprovalRequest).count() == 0
 
 
 @pytest.mark.parametrize('amount', [0, -1, True])

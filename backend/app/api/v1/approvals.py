@@ -5,8 +5,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.approval import ApprovalRequest
+from app.models.project import Project
 from app.models.user import User
-from app.schemas.approval import ApprovalDecision, ModelGroupApplicationCreate, QuotaApplicationCreate
+from app.schemas.approval import (ApiKeyApplicationCreate, ApprovalDecision,
+                                  ModelGroupApplicationCreate, QuotaApplicationCreate)
+from app.services.api_key_approval_service import apply_api_key_approval
 from app.services.approval_service import ApprovalService
 from app.services.model_group_approval_service import apply_model_group_approval
 from app.services.quota_approval_service import apply_quota_approval
@@ -16,6 +19,7 @@ router = APIRouter()
 
 def _service(db):
     return ApprovalService(db, actions={
+        'api_key': apply_api_key_approval,
         'quota': apply_quota_approval,
         'model_group': apply_model_group_approval,
     })
@@ -50,9 +54,53 @@ def create_model_group_application(
     )
 
 
+@router.post('/api-key')
+def create_api_key_application(
+    data: ApiKeyApplicationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from fastapi import HTTPException
+
+    try:
+        project = db.query(Project).filter_by(project_id=data.project_id).first()
+        if project is None:
+            raise HTTPException(404, '项目不存在')
+        from app.services.project_service import require_user_project
+        require_user_project(db, user.user_id, data.project_id)
+        approver_user_id = project.owner_user_id
+        payload = data.model_dump(exclude={'reason'})
+        payload['expires_at'] = data.expires_at
+        return _service(db).create_request(
+            user, 'api_key', payload, data.reason, target_id=data.project_id,
+            approver_user_id=approver_user_id,
+        )
+    except BaseException:
+        db.rollback()
+        raise
+
+
 @router.get('/mine')
 def list_my_applications(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return _service(db).list_my_requests(user)
+    requests = _service(db).list_my_requests(user)
+    result = []
+    consumed_secret = False
+    for request in requests:
+        item = {column.name: getattr(request, column.name) for column in request.__table__.columns}
+        payload = dict(item['payload'])
+        if request.request_type == 'api_key':
+            secret_result = payload.pop('result', None)
+            if secret_result and not payload.get('secret_consumed'):
+                item['result'] = secret_result
+                payload['secret_consumed'] = True
+                consumed_secret = True
+            item['payload'] = payload
+            if secret_result and not request.payload.get('secret_consumed'):
+                request.payload = payload
+        result.append(item)
+    if consumed_secret:
+        db.commit()
+    return result
 
 
 @router.get('/pending')

@@ -1054,6 +1054,14 @@ def check_proxy_rate_limit(
 
 #### Task 4.4: API Key 申请
 
+**执行记录（2026-09-28）：**
+
+- 新增 `POST /api/v1/approvals/api-key`；校验申请人已获项目授权，使用用途、IP 白名单、过期时间和理由创建待审批单，并指派项目负责人审批；无负责人时由管理员处理。
+- 普通用户 `POST /api/v1/api-keys` 改为提交申请，不再直接创建 Key。审批通过时校验项目当前仍有效并创建归属申请人及申请项目的 Key，拒绝不创建。
+- 审批结果通知申请人；`GET /api/v1/approvals/mine` 首次返回完整 Key 明文并保存已消费标记，后续查询不再返回明文。
+- 验证：`docker compose exec -T backend pytest -q tests/test_approval_service.py`（18 passed）；`git diff --check` 通过。
+- **范围：** 审批页面和用户申请页面仍由 Phase 4 前端补齐任务实现。
+
 **实现：**
 - 用户申请创建 Key，填写项目、用途、IP 白名单、过期时间。
 - 负责人或管理员审批后创建 Key。
