@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, DatePicker, Descriptions, Empty, Form, Input, InputNumber, Modal, Select, Space, Spin, Table, Tabs, Tag, Typography } from 'antd'
 import dayjs, { Dayjs } from 'dayjs'
-import { ApprovalRequest, ApprovalStatus, ApprovalType, ModelGroupApplicationOption, ProjectAccessOption, cancelApproval, createApiKeyApplication, createModelGroupApplication, createProjectAccessApplication, createQuotaApplication, decideApproval } from '../api/approvals'
+import { ApprovalRequest, ApprovalStatus, ApprovalType, ModelGroupApplicationOption, ProjectAccessOption, cancelApproval, createApiKeyApplication, createModelGroupApplication, createProjectAccessApplication, createQuotaApplication, decideApproval, supplementApproval } from '../api/approvals'
 import { Project } from '../api/projects'
 import { useAuthStore } from '../store/auth'
 import { useSwrData } from '../hooks/useSwr'
@@ -24,10 +24,10 @@ const typeLabels: Record<ApprovalType, string> = {
   api_key: 'API Key', quota: '额度', model_group: '模型分组', project_access: '项目权限',
 }
 const statusLabels: Record<ApprovalStatus, string> = {
-  pending: '待审批', approved: '已通过并生效', rejected: '已拒绝', cancelled: '已撤回',
+  pending: '待审批', needs_info: '待补充说明', approved: '已通过并生效', rejected: '已拒绝', cancelled: '已撤回',
 }
 const statusColors: Record<ApprovalStatus, string> = {
-  pending: 'processing', approved: 'success', rejected: 'error', cancelled: 'default',
+  pending: 'processing', needs_info: 'warning', approved: 'success', rejected: 'error', cancelled: 'default',
 }
 
 const summary = (request: ApprovalRequest) => {
@@ -36,6 +36,19 @@ const summary = (request: ApprovalRequest) => {
   if (request.request_type === 'api_key') return `用途：${payload.name || '—'}；项目：${payload.project_id || request.target_id || '—'}`
   if (request.request_type === 'model_group') return `申请模型分组：${payload.group_id || request.target_id || '—'}`
   return `申请加入项目：${payload.project_id || request.target_id || '—'}`
+}
+
+const effectSummary = (request: ApprovalRequest) => {
+  if (request.status === 'pending') return '待审批，通过后才会生效'
+  if (request.status === 'needs_info') return '待补充说明，尚未生效'
+  if (request.status === 'rejected') return '未生效：申请已拒绝'
+  if (request.status === 'cancelled') return '未生效：申请已撤回'
+  if (request.request_type === 'quota') return `已增加 ${request.payload.amount} tokens`
+  if (request.request_type === 'api_key') return request.result?.key_id
+    ? `已创建 Key（${request.result.key_id}）`
+    : '已创建 Key；完整 Key 明文仅展示一次'
+  if (request.request_type === 'model_group') return '已授予申请的模型分组权限'
+  return '已加入申请的项目'
 }
 
 const Approvals = () => {
@@ -49,7 +62,10 @@ const Approvals = () => {
   const { data: accessOptions, error: accessOptionsError } = useSwrData<ProjectAccessOption[]>('/approvals/project-access/options')
   const { data: groupOptions, error: groupOptionsError } = useSwrData<ModelGroupApplicationOption[]>('/approvals/model-group/options')
   const [submitting, setSubmitting] = useState(false)
-  const [decisionTarget, setDecisionTarget] = useState<{ request: ApprovalRequest; decision: 'approved' | 'rejected' } | null>(null)
+  const [decisionTarget, setDecisionTarget] = useState<{ request: ApprovalRequest; decision: 'approved' | 'rejected' | 'needs_info' } | null>(null)
+  const [supplementTarget, setSupplementTarget] = useState<ApprovalRequest | null>(null)
+  const [supplementText, setSupplementText] = useState('')
+  const [supplementing, setSupplementing] = useState(false)
   const [secret, setSecret] = useState<string | null>(null)
 
   useEffect(() => {
@@ -98,9 +114,26 @@ const Approvals = () => {
     })
   }
 
-  const submitDecision = async (request: ApprovalRequest, decision: 'approved' | 'rejected', comment: string) => {
+  const submitSupplement = async () => {
+    if (!supplementTarget || !supplementText.trim()) {
+      message.error('请填写补充说明')
+      return
+    }
+    setSupplementing(true)
+    try {
+      await supplementApproval(supplementTarget.request_id, supplementText.trim())
+      message.success('补充说明已提交，申请重新进入待审批')
+      setSupplementTarget(null)
+      setSupplementText('')
+      await mutateMine()
+    } finally {
+      setSupplementing(false)
+    }
+  }
+
+  const submitDecision = async (request: ApprovalRequest, decision: 'approved' | 'rejected' | 'needs_info', comment: string) => {
     await decideApproval(request.request_id, decision, comment)
-    message.success(decision === 'approved' ? '申请已通过并生效' : '申请已拒绝')
+    message.success(decision === 'approved' ? '申请已通过并生效' : decision === 'rejected' ? '申请已拒绝' : '已通知申请人补充说明')
     setDecisionTarget(null)
     await Promise.all([mutateMine(), mutateAssigned()])
   }
@@ -109,19 +142,26 @@ const Approvals = () => {
     { title: '申请类型', dataIndex: 'request_type', render: (value: ApprovalType) => typeLabels[value] },
     { title: '申请内容', render: (_: unknown, record: ApprovalRequest) => summary(record) },
     { title: '状态', dataIndex: 'status', render: (value: ApprovalStatus) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag> },
+    { title: '审批意见', dataIndex: 'decision_comment', render: (value: string | null) => value || '—', ellipsis: true },
+    { title: '生效结果', render: (_: unknown, record: ApprovalRequest) => effectSummary(record) },
     { title: '提交时间', dataIndex: 'created_at', render: (value: string) => new Date(value).toLocaleString() },
-    { title: '操作', render: (_: unknown, record: ApprovalRequest) => record.status === 'pending'
-      ? <Button danger type="link" onClick={() => cancelRequest(record)}>撤回</Button> : '—' },
+    { title: '操作', render: (_: unknown, record: ApprovalRequest) => record.status === 'pending' || record.status === 'needs_info'
+      ? <Space>
+          {record.status === 'needs_info' && <Button type="link" onClick={() => { setSupplementTarget(record); setSupplementText('') }}>补充说明</Button>}
+          <Button danger type="link" onClick={() => cancelRequest(record)}>撤回</Button>
+        </Space> : '—' },
   ]
   const reviewColumns = [
     { title: '申请人', dataIndex: 'requester_user_id' },
     { title: '申请类型', dataIndex: 'request_type', render: (value: ApprovalType) => typeLabels[value] },
     { title: '业务影响', render: (_: unknown, record: ApprovalRequest) => summary(record) },
     { title: '理由', dataIndex: 'reason', ellipsis: true },
+    { title: '补充说明', dataIndex: 'supplement', render: (value: string | null) => value || '—', ellipsis: true },
     { title: '提交时间', dataIndex: 'created_at', render: (value: string) => new Date(value).toLocaleString() },
     { title: '操作', render: (_: unknown, record: ApprovalRequest) => <Space>
       <Button type="primary" onClick={() => setDecisionTarget({ request: record, decision: 'approved' })}>通过</Button>
       <Button danger onClick={() => setDecisionTarget({ request: record, decision: 'rejected' })}>拒绝</Button>
+      <Button onClick={() => setDecisionTarget({ request: record, decision: 'needs_info' })}>要求补充</Button>
     </Space> },
   ]
 
@@ -179,7 +219,8 @@ const Approvals = () => {
               expandable={{ expandedRowRender: record => <Descriptions column={1} size="small" items={[
                 { key: 'reason', label: '申请理由', children: record.reason },
                 { key: 'comment', label: '审批意见', children: record.decision_comment || '暂无' },
-                { key: 'effect', label: '生效结果', children: record.status === 'approved' ? '已按申请内容生效' : '待审批通过后生效' },
+                { key: 'supplement', label: '补充说明', children: record.supplement || '暂无' },
+                { key: 'effect', label: '生效结果', children: effectSummary(record) },
               ]} /> }} /> },
         { key: 'review', label: `待我审批${assigned?.length ? ` (${assigned.length})` : ''}`, children: assignedError
           ? <Alert type="error" showIcon message="待审批列表加载失败，请稍后重试。" />
@@ -193,6 +234,13 @@ const Approvals = () => {
         onCancel={() => setDecisionTarget(null)}
         onSubmit={(request, comment) => submitDecision(request, decisionTarget?.decision || 'approved', comment)}
       />
+      <Modal
+        open={!!supplementTarget} title="补充申请说明" okText="提交补充" okButtonProps={{ loading: supplementing }}
+        onCancel={() => setSupplementTarget(null)} onOk={submitSupplement}
+      >
+        <Typography.Paragraph>审批人要求：{supplementTarget?.decision_comment || '请补充申请说明'}</Typography.Paragraph>
+        <Input.TextArea value={supplementText} onChange={event => setSupplementText(event.target.value)} rows={4} maxLength={1000} showCount />
+      </Modal>
       <Modal open={!!secret} title="新 API Key（仅展示一次）" onCancel={() => setSecret(null)} footer={[
         <Button key="copy" type="primary" onClick={async () => {
           if (secret) await navigator.clipboard.writeText(secret)

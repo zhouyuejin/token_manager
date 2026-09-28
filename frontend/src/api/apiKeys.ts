@@ -42,7 +42,7 @@ export const getApiKeys = () => get<{ items: ApiKey[] }>('/api-keys')
 export const getAllApiKeys = () => get<{ items: ApiKey[] }>('/api-keys/admin')
 
 export const createApiKey = (data: CreateApiKeyParams) => 
-  post<{ api_key: string; name: string; key_id: string }>('/api-keys', data)
+  post<{ request_id: string; status: string; message: string }>('/api-keys', data)
 
 export const updateApiKey = (keyId: string, data: Partial<CreateApiKeyParams>) =>
   put(`/api-keys/${keyId}`, data)

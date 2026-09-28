@@ -59,4 +59,22 @@ class ProjectAccessApplicationCreate(BaseModel):
 
 class ApprovalDecision(BaseModel):
     decision: str
-    comment: str | None = Field(default=None, max_length=1000)
+    comment: str = Field(min_length=1, max_length=1000)
+
+    @field_validator('comment')
+    @classmethod
+    def comment_must_contain_text(cls, value):
+        if not value.strip():
+            raise ValueError('审批意见不能为空')
+        return value.strip()
+
+
+class ApprovalSupplement(BaseModel):
+    content: str = Field(min_length=1, max_length=1000)
+
+    @field_validator('content')
+    @classmethod
+    def content_must_contain_text(cls, value):
+        if not value.strip():
+            raise ValueError('补充说明不能为空')
+        return value.strip()

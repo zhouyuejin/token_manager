@@ -64,10 +64,9 @@ const ApiKeysPage = () => {
         tpm_limit: values.tpm_limit ?? 0,
         concurrency_limit: values.concurrency_limit ?? 0,
       })
-      setNewKeyTitle('创建 API Key')
-      setNewKey(result.api_key)
-      message.success('创建成功')
-      fetchKeys()
+      message.success(result.message || '申请已提交，审批通过后创建 API Key')
+      setModalVisible(false)
+      form.resetFields()
     } catch (error) {
       console.error(error)
     }

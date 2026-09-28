@@ -11,18 +11,22 @@ const typeLabels: Record<ApprovalType, string> = {
   api_key: 'API Key', quota: '额度', model_group: '模型分组', project_access: '项目权限',
 }
 const statusLabels: Record<ApprovalStatus, string> = {
-  pending: '待审批', approved: '已通过并生效', rejected: '已拒绝', cancelled: '已撤回',
+  pending: '待审批', needs_info: '待补充说明', approved: '已通过并生效', rejected: '已拒绝', cancelled: '已撤回',
 }
 const statusColors: Record<ApprovalStatus, string> = {
-  pending: 'processing', approved: 'success', rejected: 'error', cancelled: 'default',
+  pending: 'processing', needs_info: 'warning', approved: 'success', rejected: 'error', cancelled: 'default',
 }
+
+const formatExpiry = (value: unknown) => value
+  ? new Date(String(value)).toLocaleString()
+  : '永不过期'
 
 const Approvals = () => {
   const [requestType, setRequestType] = useState<ApprovalType>()
   const [status, setStatus] = useState<ApprovalStatus | undefined>('pending')
   const [requesterId, setRequesterId] = useState<string>()
   const [projectId, setProjectId] = useState<string>()
-  const [decisionTarget, setDecisionTarget] = useState<{ request: ApprovalRequest; decision: 'approved' | 'rejected' } | null>(null)
+  const [decisionTarget, setDecisionTarget] = useState<{ request: ApprovalRequest; decision: 'approved' | 'rejected' | 'needs_info' } | null>(null)
   const message = useMessage()
   const params = {
     ...(requestType ? { request_type: requestType } : {}),
@@ -45,9 +49,9 @@ const Approvals = () => {
     return `加入项目：${projectName(payload.project_id || record.target_id)}`
   }
 
-  const submitDecision = async (request: ApprovalRequest, decision: 'approved' | 'rejected', comment: string) => {
+  const submitDecision = async (request: ApprovalRequest, decision: 'approved' | 'rejected' | 'needs_info', comment: string) => {
     await decideApproval(request.request_id, decision, comment)
-    message.success(decision === 'approved' ? '申请已通过并生效' : '申请已拒绝')
+    message.success(decision === 'approved' ? '申请已通过并生效' : decision === 'rejected' ? '申请已拒绝' : '已通知申请人补充说明')
     setDecisionTarget(null)
     await mutate()
   }
@@ -62,6 +66,7 @@ const Approvals = () => {
       <Space>
         <a onClick={() => setDecisionTarget({ request: record, decision: 'approved' })}>通过</a>
         <a style={{ color: '#ff4d4f' }} onClick={() => setDecisionTarget({ request: record, decision: 'rejected' })}>拒绝</a>
+        <a onClick={() => setDecisionTarget({ request: record, decision: 'needs_info' })}>要求补充</a>
       </Space>
     ) : '—' },
   ]
@@ -91,7 +96,12 @@ const Approvals = () => {
           rowKey="request_id" loading={isLoading} dataSource={data || []} columns={columns}
           expandable={{ expandedRowRender: record => <Descriptions column={1} size="small" items={[
             { key: 'impact', label: '业务影响', children: requestSummary(record) },
+            ...(record.request_type === 'api_key' ? [
+              { key: 'whitelist', label: 'IP 白名单', children: Array.isArray(record.payload.ip_whitelist) && record.payload.ip_whitelist.length ? record.payload.ip_whitelist.join(', ') : '不限制' },
+              { key: 'expiry', label: 'Key 过期时间', children: formatExpiry(record.payload.expires_at) },
+            ] : []),
             { key: 'reason', label: '申请理由', children: record.reason },
+            { key: 'supplement', label: '补充说明', children: record.supplement || '暂无' },
             { key: 'comment', label: '审批意见', children: record.decision_comment || '暂无' },
             { key: 'time', label: '处理时间', children: record.decided_at ? new Date(record.decided_at).toLocaleString() : '待处理' },
           ]} /> }}

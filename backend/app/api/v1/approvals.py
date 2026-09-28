@@ -12,7 +12,7 @@ from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.models.organization import Department
 from app.models.project import Project, UserProject
 from app.models.user import User
-from app.schemas.approval import (ApiKeyApplicationCreate, ApprovalDecision,
+from app.schemas.approval import (ApiKeyApplicationCreate, ApprovalDecision, ApprovalSupplement,
                                   ModelGroupApplicationCreate, ProjectAccessApplicationCreate,
                                   QuotaApplicationCreate)
 from app.services.api_key_approval_service import apply_api_key_approval
@@ -124,7 +124,7 @@ def create_api_key_application(
             raise HTTPException(404, '项目不存在')
         from app.services.project_service import require_user_project
         require_user_project(db, user.user_id, data.project_id)
-        approver_user_id = project.owner_user_id
+        approver_user_id = project.owner_user_id if project.owner_user_id != user.user_id else None
         payload = data.model_dump(mode='json', exclude={'reason'})
         return _service(db).create_request(
             user, 'api_key', payload, data.reason, target_id=data.project_id,
@@ -176,7 +176,7 @@ def list_review_applications(
 ):
     if request_type and request_type not in {'api_key', 'quota', 'model_group', 'project_access'}:
         raise HTTPException(422, '不支持的审批申请类型')
-    if status and status not in {'pending', 'approved', 'rejected', 'cancelled'}:
+    if status and status not in {'pending', 'needs_info', 'approved', 'rejected', 'cancelled'}:
         raise HTTPException(422, '不支持的审批状态')
     requests = _service(db).list_review(reviewer, request_type, status, requester_user_id, project_id)
     result = []
@@ -217,3 +217,11 @@ def cancel_my_application(
     user: User = Depends(get_current_user),
 ):
     return _service(db).cancel(user, request_id)
+
+
+@router.post('/{request_id}/supplement')
+def supplement_my_application(
+    request_id: str, data: ApprovalSupplement,
+    db: Session = Depends(get_db), user: User = Depends(get_current_user),
+):
+    return _service(db).supplement(user, request_id, data.content)

@@ -42,6 +42,8 @@ def test_create_and_list_approval_requests(db):
     assert request.payload == {'amount': 100}
     assert service.list_my_requests(requester) == [request]
     assert service.list_pending(approver) == [request]
+    assert db.query(OperationLog).filter_by(target_id=request.request_id, action='approval_created').count() == 1
+    assert db.query(Notification).filter_by(user_id=approver.user_id, type=NotificationType.approval_update).count() == 1
 
 
 def test_approval_decision_applies_action_and_writes_operation_log(db):
@@ -56,7 +58,8 @@ def test_approval_decision_applies_action_and_writes_operation_log(db):
     assert decided.status == 'approved'
     assert decided.approver_user_id == approver.user_id
     assert applied == [request.request_id]
-    log = db.query(OperationLog).filter_by(target_type='approval_request', target_id=request.request_id).one()
+    log = db.query(OperationLog).filter_by(target_type='approval_request', target_id=request.request_id,
+                                           action='approval_approved').one()
     assert log.action == 'approval_approved'
     assert log.operator_id == approver.user_id
 
@@ -77,8 +80,8 @@ def test_reject_does_not_apply_action_and_cannot_be_decided_twice(db):
     assert '已处理' in error.value.detail
 
 
-def test_requester_cannot_approve_own_request(db):
-    requester = add_user(db, 'requester', UserRole.admin)
+def test_non_admin_requester_cannot_approve_own_request(db):
+    requester = add_user(db, 'requester')
     service = ApprovalService(db, actions={'quota': lambda db, request: None})
     request = service.create_request(requester, 'quota', {'amount': 100}, reason='额度申请')
 
@@ -88,6 +91,19 @@ def test_requester_cannot_approve_own_request(db):
     assert error.value.status_code == 403
     assert '不能审批自己的申请' in error.value.detail
     assert request.status == 'pending'
+
+
+def test_admin_can_approve_own_request(db):
+    requester = add_user(db, 'admin_requester', UserRole.admin)
+    applied = []
+    service = ApprovalService(db, actions={'quota': lambda db, request: applied.append(request.request_id)})
+    request = service.create_request(requester, 'quota', {'amount': 100}, reason='管理员额度申请')
+
+    decided = service.decide(requester, request.request_id, 'approved', '管理员自助审批')
+
+    assert decided.status == 'approved'
+    assert decided.approver_user_id == requester.user_id
+    assert applied == [request.request_id]
 
 
 def test_non_admin_cannot_decide_request_assigned_to_another_approver(db):
@@ -112,7 +128,7 @@ def test_approval_without_domain_action_is_rejected_without_changing_status(db):
     request = ApprovalService(db).create_request(requester, 'quota', {'amount': 100}, reason='额度申请')
 
     with pytest.raises(HTTPException) as error:
-        ApprovalService(db).decide(approver, request.request_id, 'approved')
+        ApprovalService(db).decide(approver, request.request_id, 'approved', '同意')
 
     assert error.value.status_code == 501
     assert '生效动作尚未配置' in error.value.detail
@@ -165,6 +181,8 @@ def test_quota_approval_notifies_requester(db):
     request = ApprovalService(db).create_request(
         requester, 'quota', {'amount': 25}, reason='项目测试',
     )
+    assert db.query(Notification).filter_by(user_id=approver.user_id,
+                                             type=NotificationType.approval_update).count() == 1
 
     ApprovalService(db, actions={'quota': apply_quota_approval}).decide(
         approver, request.request_id, 'approved', '同意',
@@ -211,7 +229,7 @@ def test_model_group_application_api_creates_pending_request(db):
     assert request.status == 'pending'
     assert json.loads(requester.model_group_ids) == []
 
-    decide_application(request.request_id, ApprovalDecision(decision='approved'), db, approver)
+    decide_application(request.request_id, ApprovalDecision(decision='approved', comment='同意'), db, approver)
     assert 'api_group' in ProxyService(db).get_effective_model_group_ids(requester)
 
 
@@ -226,7 +244,7 @@ def test_disabled_model_group_cannot_be_granted(db):
 
     with pytest.raises(HTTPException) as error:
         ApprovalService(db, actions={'model_group': apply_model_group_approval}).decide(
-            approver, request.request_id, 'approved',
+            approver, request.request_id, 'approved', '同意',
         )
 
     assert error.value.status_code == 409
@@ -253,7 +271,7 @@ def test_api_key_application_creates_key_only_after_approval_and_reveals_secret_
     assert request.approver_user_id == approver.user_id
     assert db.query(ApiKey).count() == 0
 
-    decide_application(request.request_id, ApprovalDecision(decision='approved'), db, approver)
+    decide_application(request.request_id, ApprovalDecision(decision='approved', comment='同意'), db, approver)
     key = db.query(ApiKey).one()
     assert key.user_id == requester.user_id
     assert key.project_id == 'key_project'

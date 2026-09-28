@@ -24,6 +24,7 @@ from app.schemas.api_key import (
     ApiKeyAdminCreate, ApiKeyAdminUpdate,
     ApiKeyAdminResponse, ApiKeyAdminListResponse,
 )
+from app.schemas.api_key import ApiKeyApplicationSubmitted
 from app.services.api_key_freeze_service import reset_api_key_errors
 from app.services.operation_log_service import record_operation
 from app.services.proxy_service import ProxyService, create_proxy_service
@@ -106,7 +107,7 @@ async def list_api_keys(
     return ApiKeyListResponse(total=len(items), items=items)
 
 
-@router.post("", response_model=ApiKeyCreatedResponse)
+@router.post("", response_model=ApiKeyApplicationSubmitted)
 async def create_api_key(
     request: Request,
     api_key_data: ApiKeyCreate,
