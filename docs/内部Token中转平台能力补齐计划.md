@@ -890,6 +890,14 @@ def check_proxy_rate_limit(
 - 告警恢复时可产生恢复通知。
 - 告警规则可在配置中调整阈值。
 
+**执行记录（2026-09-28）：** Task 3.4 已实现，Docker 后端针对性测试通过，业务数据库迁移完成。
+
+- 新增渠道 5 分钟错误率告警、上游配额余量告警、项目每小时用量异常增长告警，均通过站内通知管理员；项目告警同时通知负责人。
+- 新增管理员规则配置 API `GET/PUT /api/v1/admin/alerts/rules`，可调整三类告警阈值；告警状态持久化，同一告警只在触发和恢复状态变化时通知。
+- 告警检查已接入 60 秒定时任务；新增 `alert_states` 表和迁移 `20260928_1200_alert_rules`。
+- Docker 内渠道健康及通知相关针对性测试 8 项通过。全量 pytest 在收集阶段失败：8 个既有测试仍引用已移除的 `app.models.provider` 或缺失的 `migrate_provider_group_bindings_to_models`；与本任务无关。
+- 执行迁移时发现应用启动已通过 `create_all` 建立 `alert_states`，且表内有 3 条记录；核对表结构一致后，将迁移调整为识别现存表并保留数据，Alembic 当前版本已确认升级至 `20260928_1200_alert_rules`。
+
 ### Phase 3 前端补齐任务
 
 #### Frontend 3.1: 路由解释和请求定位
