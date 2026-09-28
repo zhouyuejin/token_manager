@@ -911,6 +911,12 @@ def check_proxy_rate_limit(
 - 管理员能在 UI 中回答“为什么走这个渠道”和“为什么失败”。
 - 页面不展示完整 API Key、上游 Key、prompt 正文。
 
+**执行记录（2026-09-28）：**
+- 新增管理员路由决策分页查询接口，支持按 `request_id`、用户、Key、模型、渠道和状态码筛选；新增 `RouteMonitor.tsx` 页面，展示候选渠道、跳过原因、最终选择、失败重试路径和错误摘要，并可复制 `request_id`。
+- 路由监控页面进入时自动加载默认分页数据，无需先点击查询。
+- 聊天发送接口补齐 FastAPI `Request` 注入，修复读取 `request.state.request_id` 时触发的 500；回归测试验证 FastAPI 能识别请求上下文参数。
+- 路由决策日志针对性测试 3 项、请求上下文回归测试 1 项通过；`cd frontend && npm run build` 通过，`git diff --check` 通过。未做浏览器验收或部署。
+
 #### Frontend 3.2: 渠道健康和熔断操作
 
 **实现：**

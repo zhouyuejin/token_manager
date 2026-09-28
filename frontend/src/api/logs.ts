@@ -53,8 +53,43 @@ export interface LoginLogParams {
   end_date?: string
 }
 
+export interface RouteDecisionLog {
+  id: number
+  request_id: string
+  user_id: string | null
+  key_id: string | null
+  model: string
+  candidate_channels: string[]
+  skipped_reasons: Record<string, string>
+  selected_channel: string | null
+  retry_path: { channel_id: string; status_code: number }[]
+  status_code: number
+  success: boolean
+  error_message: string | null
+  created_at: string
+}
+
+export interface RouteDecisionLogParams {
+  page: number
+  page_size: number
+  request_id?: string
+  user_id?: string
+  key_id?: string
+  model?: string
+  channel_id?: string
+  status_code?: number
+}
+
+export interface RouteDecisionLogListResponse {
+  total: number
+  items: RouteDecisionLog[]
+}
+
 export const getOperationLogs = (params: OperationLogParams) =>
   get<OperationLogListResponse>('/admin/logs/operations', { params })
 
 export const getLoginLogs = (params: LoginLogParams) =>
   get<LoginLogListResponse>('/admin/logs/logins', { params })
+
+export const getRouteDecisionLogs = (params: RouteDecisionLogParams) =>
+  get<RouteDecisionLogListResponse>('/admin/logs/routes', { params })

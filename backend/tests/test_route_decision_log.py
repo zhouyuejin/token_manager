@@ -1,4 +1,7 @@
 import json
+from datetime import datetime, timedelta
+
+from fastapi.testclient import TestClient
 
 from app.models.route_decision_log import RouteDecisionLog
 from app.services.proxy_service import ProxyService
@@ -57,3 +60,42 @@ def test_route_decision_log_records_failed_request(db):
     assert row.success is False
     assert row.status_code == 502
     assert row.error_message == "无可用渠道"
+
+
+def test_route_decision_search_filters_by_request_and_routing_fields(db, monkeypatch):
+    from app.core.database import get_db
+    from app.dependencies import require_admin
+    from app.main import app
+
+    now = datetime.utcnow()
+    rows = [
+        RouteDecisionLog(
+            request_id="req_match", user_id="user_1", key_id="key_1", model="gpt-test",
+            candidate_channels='["channel-a"]', skipped_reasons='{}', selected_channel="channel-a",
+            retry_path='[]', status_code=200, success=True, created_at=now,
+        ),
+        RouteDecisionLog(
+            request_id="req_other", user_id="user_2", key_id="key_2", model="other-model",
+            candidate_channels='["channel-b"]', skipped_reasons='{}', selected_channel="channel-b",
+            retry_path='[]', status_code=502, success=False, created_at=now - timedelta(seconds=1),
+        ),
+    ]
+    db.add_all(rows)
+    db.commit()
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[require_admin] = lambda: object()
+    try:
+        response = TestClient(app).get("/api/v1/admin/logs/routes", params={
+            "request_id": "req_match", "user_id": "user_1", "key_id": "key_1",
+            "model": "gpt-test", "channel_id": "channel-a", "status_code": 200,
+        })
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(require_admin, None)
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    item = response.json()["items"][0]
+    assert item["request_id"] == "req_match"
+    assert item["candidate_channels"] == ["channel-a"]
+    assert item["retry_path"] == []

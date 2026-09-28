@@ -272,7 +272,8 @@ async def get_messages(conversation_id: str, current_user: User = Depends(get_cu
 
 @router.post("/{conversation_id}/messages")
 async def send_message(
-    conversation_id: str, data: ChatSendMessageRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    conversation_id: str, data: ChatSendMessageRequest, request: Request,
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """发送消息"""
     conv = db.query(ChatConversation).filter(
