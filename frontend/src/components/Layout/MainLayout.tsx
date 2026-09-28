@@ -61,6 +61,7 @@ const getPageTitle = (pathname: string): string => {
     "/admin/model-groups": "模型分组",
     "/admin/logs/operations": "操作日志",
     "/admin/logs/logins": "登录日志",
+    "/admin/logs/routes": "路由监控",
     "/settings": "个人设置",
   };
   return map[pathname] ?? "Token Manager";
@@ -229,6 +230,11 @@ const MainLayout = () => {
                 key: "/admin/logs/logins",
                 icon: <LoginOutlined />,
                 label: "登录日志",
+              },
+              {
+                key: "/admin/logs/routes",
+                icon: <FileSearchOutlined />,
+                label: "路由监控",
               },
             ],
           },

@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.operation_log import OperationLog
 from app.models.login_log import LoginLog
+from app.models.route_decision_log import RouteDecisionLog
 from app.dependencies import get_current_user, require_admin
 from app.schemas.log import (
     OperationLogResponse,
@@ -22,6 +23,60 @@ from app.schemas.log import (
 )
 
 router = APIRouter()
+
+
+@router.get("/routes")
+async def list_route_decision_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    request_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    key_id: Optional[str] = None,
+    model: Optional[str] = None,
+    channel_id: Optional[str] = None,
+    status_code: Optional[int] = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    query = db.query(RouteDecisionLog)
+    for column, value in (
+        (RouteDecisionLog.request_id, request_id),
+        (RouteDecisionLog.user_id, user_id),
+        (RouteDecisionLog.key_id, key_id),
+        (RouteDecisionLog.model, model),
+        (RouteDecisionLog.status_code, status_code),
+    ):
+        if value is not None and value != "":
+            query = query.filter(column == value)
+    if channel_id:
+        query = query.filter(
+            (RouteDecisionLog.candidate_channels.like(f'%"{channel_id}"%')) |
+            (RouteDecisionLog.selected_channel == channel_id) |
+            (RouteDecisionLog.retry_path.like(f'%"channel_id": "{channel_id}"%'))
+        )
+
+    total = query.count()
+    rows = query.order_by(RouteDecisionLog.created_at.desc(), RouteDecisionLog.id.desc()).offset(
+        (page - 1) * page_size
+    ).limit(page_size).all()
+    return {
+        "total": total,
+        "items": [{
+            "id": row.id,
+            "request_id": row.request_id,
+            "user_id": row.user_id,
+            "key_id": row.key_id,
+            "model": row.model,
+            "candidate_channels": json.loads(row.candidate_channels),
+            "skipped_reasons": json.loads(row.skipped_reasons),
+            "selected_channel": row.selected_channel,
+            "retry_path": json.loads(row.retry_path),
+            "status_code": row.status_code,
+            "success": row.success,
+            "error_message": row.error_message,
+            "created_at": row.created_at,
+        } for row in rows],
+    }
 
 @router.get("/operations", response_model=OperationLogListResponse)
 async def list_operation_logs(
