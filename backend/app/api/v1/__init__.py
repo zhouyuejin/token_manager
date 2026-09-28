@@ -5,6 +5,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import auth, users, api_keys, proxy, stats, admin, logs, model_groups, chat, notifications, projects, health
 from app.api.v1 import billing, alerts
+from app.api.v1 import approvals
 
 api_router = APIRouter()
 
@@ -42,3 +43,4 @@ api_router.include_router(projects.router, prefix="/projects", tags=["部门与�
 api_router.include_router(billing.router, prefix="/admin/billing", tags=["预算"])
 api_router.include_router(health.router, prefix="/admin/health", tags=["渠道健康"])
 api_router.include_router(alerts.router, prefix="/admin/alerts", tags=["告警规则"])
+api_router.include_router(approvals.router, prefix="/approvals", tags=["审批"])

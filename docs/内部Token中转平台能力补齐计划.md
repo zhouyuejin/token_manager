@@ -1018,6 +1018,13 @@ def check_proxy_rate_limit(
 
 #### Task 4.2: 额度申请
 
+**执行记录（2026-09-28）：**
+
+- **已完成：** 新增额度申请、我的申请、管理员待审批与决策 API；申请金额为正整数、理由必填，管理员批准后事务内增加用户额度并写入可追溯额度流水，拒绝不改额度。
+- **已完成：** 审批结果写入用户通知；新增 `approval_result` 通知类型迁移。
+- **验证：** `docker compose exec -T backend pytest -q tests/test_approval_service.py tests/test_billing_reconcile_api.py tests/test_user_unlimited_quota.py`（22 passed）。
+- **范围：** 本任务只交付后端能力；用户申请页与管理员审批台在 Phase 4 前端补齐任务中实现。
+
 **实现：**
 - 普通用户提交额度申请，填写金额和理由。
 - 管理员审批通过后调用现有额度调整逻辑。

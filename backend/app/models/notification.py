@@ -17,6 +17,7 @@ class NotificationType(enum.Enum):
     daily_report = "daily_report"
     system = "system"
     user_registered = "user_registered"   # 新用户注册通知
+    approval_result = "approval_result"
 
 
 class Notification(Base):
