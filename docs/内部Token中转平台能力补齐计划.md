@@ -1037,6 +1037,12 @@ def check_proxy_rate_limit(
 
 #### Task 4.3: 模型权限申请
 
+**执行记录（2026-09-28）：**
+
+- 新增 `POST /api/v1/approvals/model-group`，用户可提交模型分组权限申请。
+- 管理员审批通过时校验分组存在且启用，再将分组 ID 合并写入用户 `model_group_ids`；停用分组审批失败，申请保持待审批。
+- 验证：`docker compose exec -T backend pytest -q tests/test_approval_service.py`（16 passed）；`git diff --check` 通过。
+
 **实现：**
 - 用户申请某模型分组。
 - 管理员审批后更新用户 `model_group_ids`。
