@@ -118,53 +118,18 @@ async def create_api_key(
     
     权限由用户所属模型分组决定，不在 API Key 层独立配置。
     """
-    require_user_project(db, current_user.user_id, api_key_data.project_id)
-    key_id = generate_key_id()
-    api_key = generate_api_key()
+    from app.api.v1.approvals import create_api_key_application
+    from app.schemas.approval import ApiKeyApplicationCreate
 
-    new_api_key = ApiKey(
-        key_id=key_id,
-        user_id=current_user.user_id,
-        api_key=api_key,
-        key_name=api_key_data.name,
-        project_id=api_key_data.project_id,
-        ip_whitelist=json.dumps(api_key_data.ip_whitelist or []),
-        expires_at=api_key_data.expires_at,
-        qps_limit=api_key_data.qps_limit or 0,
-        rpm_limit=api_key_data.rpm_limit or 0,
-        tpm_limit=api_key_data.tpm_limit or 0,
-        concurrency_limit=api_key_data.concurrency_limit or 0,
-        status=ApiKeyStatus.active
+    application = create_api_key_application(
+        ApiKeyApplicationCreate(
+            project_id=api_key_data.project_id, name=api_key_data.name,
+            ip_whitelist=api_key_data.ip_whitelist or [], expires_at=api_key_data.expires_at,
+            reason=f'申请创建 API Key：{api_key_data.name}',
+        ), db, current_user,
     )
-
-    db.add(new_api_key)
-    db.commit()
-    db.refresh(new_api_key)
-
-    record_operation(
-        db=db,
-        operator=current_user,
-        action="create",
-        target_type="api_key",
-        target_id=key_id,
-        detail={
-            "name": new_api_key.key_name,
-            "project_id": new_api_key.project_id,
-        },
-        ip_address=extract_client_ip(request),
-    )
-
-    return ApiKeyCreatedResponse(
-        **_project_fields(new_api_key),
-        key_id=new_api_key.key_id,
-        api_key=new_api_key.api_key,
-        name=new_api_key.key_name,
-        expires_at=new_api_key.expires_at,
-        qps_limit=new_api_key.qps_limit,
-        rpm_limit=new_api_key.rpm_limit,
-        tpm_limit=new_api_key.tpm_limit,
-        concurrency_limit=new_api_key.concurrency_limit,
-    )
+    return {"request_id": application.request_id, "status": application.status,
+            "message": "申请已提交，审批通过后创建 API Key"}
 
 
 @router.put("/{key_id}")

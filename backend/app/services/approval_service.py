@@ -88,7 +88,7 @@ class ApprovalService:
             raise
 
     def _notify_requester(self, request):
-        if request.request_type != 'quota':
+        if request.request_type not in {'quota', 'api_key'}:
             return
         try:
             user = self.db.query(User).filter_by(user_id=request.requester_user_id).first()
@@ -96,10 +96,13 @@ class ApprovalService:
                 return
             result = '通过' if request.status == 'approved' else '拒绝'
             amount = request.payload.get('amount', 0)
+            title = '额度申请' if request.request_type == 'quota' else 'API Key 申请'
+            detail = (f'您的 {amount} tokens 额度申请已{result}。' if request.request_type == 'quota'
+                      else f'您的 API Key 申请已{result}。')
             notice = Notification(
                 notif_id=f'notif_{secrets.token_hex(8)}', user_id=user.user_id,
-                type=NotificationType.approval_result, title=f'额度申请已{result}',
-                content=f'您的 {amount} tokens 额度申请已{result}。申请单：{request.request_id}'
+                type=NotificationType.approval_result, title=f'{title}已{result}',
+                content=f'{detail}申请单：{request.request_id}'
                        + (f'；审批意见：{request.decision_comment}' if request.decision_comment else ''),
                 extra_data=json.dumps({'request_id': request.request_id, 'status': request.status}),
                 is_read=0,
