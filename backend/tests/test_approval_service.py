@@ -1,3 +1,4 @@
+import json
 import pytest
 from fastapi import HTTPException
 
@@ -5,9 +6,13 @@ from app.models.operation_log import OperationLog
 from app.models.notification import Notification, NotificationType
 from app.models.quota_record import QuotaRecord, QuotaRecordType
 from app.models.user import User, UserRole
+from app.models.model_group import ModelGroup, ModelGroupStatus
+from app.api.v1.approvals import create_model_group_application, decide_application
 from app.services.approval_service import ApprovalService
+from app.services.proxy_service import ProxyService
 from app.services.quota_approval_service import apply_quota_approval
-from app.schemas.approval import QuotaApplicationCreate
+from app.services.model_group_approval_service import apply_model_group_approval
+from app.schemas.approval import ApprovalDecision, ModelGroupApplicationCreate, QuotaApplicationCreate
 
 
 def add_user(db, user_id, role=UserRole.user):
@@ -162,6 +167,64 @@ def test_quota_approval_notifies_requester(db):
     assert notice.type == NotificationType.approval_result
     assert '通过' in notice.content
     assert request.request_id in notice.content
+
+
+def test_model_group_approval_grants_access_without_duplicate_ids(db):
+    requester = add_user(db, 'model_group_requester')
+    requester.model_group_ids = '["existing_group"]'
+    approver = add_user(db, 'model_group_approver', UserRole.admin)
+    db.add(ModelGroup(group_id='new_group', name='新分组', status=ModelGroupStatus.active))
+    db.commit()
+    request = ApprovalService(db).create_request(
+        requester, 'model_group', {'group_id': 'new_group'}, reason='需要该模型组',
+    )
+
+    ApprovalService(db, actions={'model_group': apply_model_group_approval}).decide(
+        approver, request.request_id, 'approved', '同意',
+    )
+
+    updated = db.query(User).filter_by(user_id=requester.user_id).one()
+    assert json.loads(updated.model_group_ids) == ['existing_group', 'new_group']
+    assert 'new_group' in ProxyService(db).get_effective_model_group_ids(updated)
+
+
+def test_model_group_application_api_creates_pending_request(db):
+    requester = add_user(db, 'model_group_api_requester')
+    approver = add_user(db, 'model_group_api_approver', UserRole.admin)
+    db.add(ModelGroup(group_id='api_group', name='API 分组', status=ModelGroupStatus.active))
+    db.commit()
+
+    request = create_model_group_application(
+        ModelGroupApplicationCreate(group_id='api_group', reason='需要模型权限'), db, requester,
+    )
+
+    assert request.request_type == 'model_group'
+    assert request.target_id == 'api_group'
+    assert request.payload == {'group_id': 'api_group'}
+    assert request.status == 'pending'
+    assert json.loads(requester.model_group_ids) == []
+
+    decide_application(request.request_id, ApprovalDecision(decision='approved'), db, approver)
+    assert 'api_group' in ProxyService(db).get_effective_model_group_ids(requester)
+
+
+def test_disabled_model_group_cannot_be_granted(db):
+    requester = add_user(db, 'disabled_group_requester')
+    approver = add_user(db, 'disabled_group_approver', UserRole.admin)
+    db.add(ModelGroup(group_id='disabled_group', name='停用分组', status=ModelGroupStatus.disabled))
+    db.commit()
+    request = ApprovalService(db).create_request(
+        requester, 'model_group', {'group_id': 'disabled_group'}, reason='申请停用组',
+    )
+
+    with pytest.raises(HTTPException) as error:
+        ApprovalService(db, actions={'model_group': apply_model_group_approval}).decide(
+            approver, request.request_id, 'approved',
+        )
+
+    assert error.value.status_code == 409
+    assert request.status == 'pending'
+    assert db.query(User).filter_by(user_id=requester.user_id).one().model_group_ids == '[]'
 
 
 @pytest.mark.parametrize('amount', [0, -1, True])

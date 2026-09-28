@@ -6,15 +6,19 @@ from app.core.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.approval import ApprovalRequest
 from app.models.user import User
-from app.schemas.approval import ApprovalDecision, QuotaApplicationCreate
+from app.schemas.approval import ApprovalDecision, ModelGroupApplicationCreate, QuotaApplicationCreate
 from app.services.approval_service import ApprovalService
+from app.services.model_group_approval_service import apply_model_group_approval
 from app.services.quota_approval_service import apply_quota_approval
 
 router = APIRouter()
 
 
 def _service(db):
-    return ApprovalService(db, actions={'quota': apply_quota_approval})
+    return ApprovalService(db, actions={
+        'quota': apply_quota_approval,
+        'model_group': apply_model_group_approval,
+    })
 
 
 @router.post('/quota')
@@ -31,6 +35,18 @@ def create_quota_application(
         raise HTTPException(422, '申请理由不能为空')
     return _service(db).create_request(
         user, 'quota', {'amount': data.amount}, data.reason.strip(),
+    )
+
+
+@router.post('/model-group')
+def create_model_group_application(
+    data: ModelGroupApplicationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return _service(db).create_request(
+        user, 'model_group', {'group_id': data.group_id}, data.reason,
+        target_id=data.group_id,
     )
 
 
