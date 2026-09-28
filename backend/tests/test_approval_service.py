@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import pytest
 from fastapi import HTTPException
 
@@ -245,7 +246,8 @@ def test_api_key_application_creates_key_only_after_approval_and_reveals_secret_
 
     request = create_api_key_application(
         ApiKeyApplicationCreate(project_id='key_project', name='测试用途',
-                                ip_whitelist=['203.0.113.10'], reason='接口联调'), db, requester,
+                                ip_whitelist=['203.0.113.10'], expires_at=datetime(2030, 1, 1),
+                                reason='接口联调'), db, requester,
     )
     assert request.status == 'pending'
     assert request.approver_user_id == approver.user_id
@@ -256,6 +258,7 @@ def test_api_key_application_creates_key_only_after_approval_and_reveals_secret_
     assert key.user_id == requester.user_id
     assert key.project_id == 'key_project'
     assert key.ip_whitelist == '["203.0.113.10"]'
+    assert key.expires_at == datetime(2030, 1, 1)
 
     first = list_my_applications(db, requester)[0]
     assert first['result']['key_id'] == key.key_id

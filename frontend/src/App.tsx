@@ -18,6 +18,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Chat = lazy(() => import('./pages/Chat'))
+const Approvals = lazy(() => import('./pages/Approvals'))
 const AdminUsers = lazy(() => import('./pages/admin/Users'))
 const ProjectsPage = lazy(() => import('./pages/admin/Projects'))
 const Billing = lazy(() => import('./pages/admin/Billing'))
@@ -31,6 +32,7 @@ const OperationLogs = lazy(() => import('./pages/admin/OperationLogs'))
 const LoginLogs = lazy(() => import('./pages/admin/LoginLogs'))
 const HealthDashboard = lazy(() => import('./pages/admin/HealthDashboard'))
 const RouteMonitor = lazy(() => import('./pages/admin/RouteMonitor'))
+const AdminApprovals = lazy(() => import('./pages/admin/Approvals'))
 
 function App() {
   const { token, checkAuth, user, setAuth } = useAuthStore()
@@ -95,6 +97,7 @@ function App() {
             
             <Route path="stats" element={isAdmin ? <Navigate to="/admin/dashboard" /> : <Stats />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="approvals" element={<Approvals />} />
             <Route path="api-keys" element={<ApiKeys />} />
             <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<Settings />} />
@@ -113,6 +116,7 @@ function App() {
                   : <Navigate to="/stats" />
             }>
               <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="approvals" element={<AdminApprovals />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="billing" element={<Billing />} />
