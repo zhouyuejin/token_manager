@@ -915,7 +915,8 @@ def check_proxy_rate_limit(
 - 新增管理员路由决策分页查询接口，支持按 `request_id`、用户、Key、模型、渠道和状态码筛选；新增 `RouteMonitor.tsx` 页面，展示候选渠道、跳过原因、最终选择、失败重试路径和错误摘要，并可复制 `request_id`。
 - 路由监控页面进入时自动加载默认分页数据，无需先点击查询。
 - 聊天发送接口补齐 FastAPI `Request` 注入，修复读取 `request.state.request_id` 时触发的 500；回归测试验证 FastAPI 能识别请求上下文参数。
-- 路由决策日志针对性测试 3 项、请求上下文回归测试 1 项通过；`cd frontend && npm run build` 通过，`git diff --check` 通过。未做浏览器验收或部署。
+- 敏感信息验收：页面仅展示用户/Key ID、模型和路由元数据，不读取 API Key、上游 Key 或 prompt；路由错误摘要若包含 API Key、Bearer/token、prompt、请求体或消息正文特征，由管理员 API 替换为“上游错误包含敏感内容，已隐藏”。针对性回归测试确认完整 Key 和 prompt 不会出现在 API 响应，普通错误摘要仍可展示。
+- 路由决策日志及敏感信息针对性测试 4 项通过；`cd frontend && npm run build` 通过，`git diff --check` 通过。未做浏览器验收或部署。
 
 #### Frontend 3.2: 渠道健康和熔断操作
 
@@ -927,6 +928,11 @@ def check_proxy_rate_limit(
 **验收：**
 - 渠道异常、冷却、恢复状态在列表和看板中一致。
 - 手动恢复后页面能刷新并体现最新状态。
+
+**执行记录（2026-09-28）：**
+- 健康看板按时间窗口展示成功率、错误率、请求量及 P50/P95 延迟；渠道列表显示冷却倒计时。
+- 看板和渠道列表的手动恢复均增加确认，完成后刷新健康数据；健康状态在两处统一映射为“健康 / 降级 / 不健康”，未知状态显示“未知”。
+- `cd frontend && npm run build` 通过，`git diff --check` 通过；未做浏览器验收或部署。
 
 ### 阶段验收
 

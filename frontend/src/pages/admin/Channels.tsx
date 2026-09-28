@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSwrData } from '../../hooks/useSwr'
 import { useNavigate } from 'react-router-dom'
 import { useThemeToken } from '@/theme/useThemeToken'
@@ -54,6 +54,8 @@ const formatQuotaRemain = (remain: number, total: number, percent?: number) => {
   return `剩余 ${remain}/${total}`
 }
 
+const healthLabels: Record<string, string> = { healthy: '健康', degraded: '降级', unhealthy: '不健康' }
+
 const ChannelsPage = () => {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
@@ -66,6 +68,12 @@ const ChannelsPage = () => {
   const { token } = useThemeToken()
   const [allModels, setAllModels] = useState<Model[]>([])
   const [bindLoading, setBindLoading] = useState(false)
+  const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   // 使用 SWR 获取数据
   const { data: channelsData, mutate: mutateChannels } = useSwrData<{total: number; items: Channel[]}>('/admin/channels')
@@ -199,7 +207,7 @@ const ChannelsPage = () => {
       title: '健康', dataIndex: 'health_status', key: 'health_status', width: 100,
       render: (h: string) => {
         const colors = { healthy: 'green', degraded: 'orange', unhealthy: 'red' }
-        return <Tag color={colors[h as keyof typeof colors] || 'default'}>{h}</Tag>
+        return <Tag color={colors[h as keyof typeof colors] || 'default'}>{healthLabels[h] || h || '未知'}</Tag>
       }
     },
     {
@@ -210,7 +218,7 @@ const ChannelsPage = () => {
         const keyCount = health?.cooldown.keys.length || 0
         if (!channelUntil && !keyCount) return <Tag color="green">正常</Tag>
         return <Space direction="vertical" size={0}>
-          {channelUntil && <Tag color="orange">渠道至 {new Date(channelUntil).toLocaleTimeString()}</Tag>}
+          {channelUntil && <Tag title={new Date(channelUntil).toLocaleString()} color="orange">渠道剩余 {formatRemainTime(new Date(channelUntil).getTime() - now)}</Tag>}
           {keyCount > 0 && <span style={{ fontSize: 12, color: '#d97706' }}>{keyCount} 个 Key 冷却中</span>}
           <Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => handleRecover(record.channel_id)}>
             <Button type="link" size="small" style={{ padding: 0 }}>手动恢复</Button>

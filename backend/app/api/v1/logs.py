@@ -2,6 +2,7 @@
 日志查询接口
 """
 import json
+import re
 from typing import Optional
 from datetime import datetime
 
@@ -23,6 +24,14 @@ from app.schemas.log import (
 )
 
 router = APIRouter()
+
+
+def _safe_route_error(value):
+    if not value:
+        return value
+    if re.search(r"(?i)(api[_ -]?key|access[_ -]?token|bearer\s+|sk-[a-z0-9_-]{12,}|prompt|request\s*body|messages\s*[:=])", value):
+        return "上游错误包含敏感内容，已隐藏"
+    return value
 
 
 @router.get("/routes")
@@ -73,7 +82,7 @@ async def list_route_decision_logs(
             "retry_path": json.loads(row.retry_path),
             "status_code": row.status_code,
             "success": row.success,
-            "error_message": row.error_message,
+            "error_message": _safe_route_error(row.error_message),
             "created_at": row.created_at,
         } for row in rows],
     }

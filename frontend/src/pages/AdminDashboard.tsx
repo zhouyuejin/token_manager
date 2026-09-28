@@ -12,7 +12,7 @@ import {
   DollarOutlined,
   DownloadOutlined,
 } from '@ant-design/icons'
-import ReactECharts from 'echarts-for-react'
+import ReactECharts from '../components/AsyncECharts'
 import dayjs from 'dayjs'
 import { exportUsageReport, AdminStats, UsageReportParams } from '../api/admin'
 import { Department, Project } from '../api/projects'
