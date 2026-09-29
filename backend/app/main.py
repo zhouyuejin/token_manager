@@ -9,12 +9,9 @@ from loguru import logger
 from app.api.v1 import api_router
 from app.api.v1.ws import router as ws_router
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine
 from app.middleware import ProxyAuthMiddleware
 from app.services.metrics import render_metrics
-
-# 创建数据库表
-Base.metadata.create_all(bind=engine)
 
 # 初始化日志
 logger.add(

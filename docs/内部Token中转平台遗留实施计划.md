@@ -62,7 +62,7 @@
 | B3 | P1 | 管理员重置密码闭环 | B1 | 代码、前端构建及后端自动化验证完成；用户确认 D1 浏览器验收完成 |
 | C1 | P1 | 告警规则页面及操作审计 | B1 | 代码与自动化验证完成；用户确认 D1 浏览器验收完成 |
 | C2 | P1 | 用户级聚合限流 | A1、A2 | 代码与自动化验证完成；用户确认 D1 浏览器验收完成 |
-| C3 | P1 | 校正迁移、发布及计划状态 | A2 | 代码与运行环境核验完成；迁移和部署收口未完成 |
+| C3 | P1 | 校正迁移、发布及计划状态 | A2 | 本地 Compose 迁移及前端部署完成；运行状态已核验 |
 | D1 | P1 | 关键业务浏览器验收 | B1–B3、C1–C2 | 验证完成；用户确认浏览器验收通过，源账本详情缺口已修复 |
 | D2 | P2 | 真实 OIDC 联调 | B1、可用测试 IdP | 待验收 |
 | D3 | P2 | 内容审计性能验证 | A1 | 待验收 |
@@ -403,3 +403,14 @@ npm run build
 - 迁移：无数据库结构变更，无需迁移。
 - 发布：未发布；迁移及运行环境发布状态仍按 C3 遗留处理。
 - 遗留：D1 已关闭；C3 的数据库迁移流程和前端部署收口仍未完成。
+
+### 2026-09-29：C3 统一迁移流程与前端部署
+
+- 状态：本地 Compose 迁移和部署完成；未部署到远程环境。
+- 迁移流程：移除应用导入时的 `Base.metadata.create_all()`；后端容器启动前统一执行 `alembic upgrade head`。Alembic 按应用的 `MYSQL_*` 配置连接数据库；空库由当前 ORM metadata 建立基线并记录当前 head；完整但无版本表的旧 schema 在校验所有表和列后收编到 head；不完整的无版本旧库明确拒绝自动升级。
+- 隔离验证：空 MySQL 库通过同一 `alembic upgrade head` 建立 29 张业务表及四个用户限流字段；`1300` 既有结构副本升级至 `20260929_1400_user_rate_limits`；完整但无版本表的旧 schema 副本也成功收编到该 head。临时测试库已删除。
+- 目标数据库：`token_db`，连接用户 `token_user@%`；迁移前版本 `20260929_1300_channel_advanced_defaults`，迁移后及代码 head 均为 `20260929_1400_user_rate_limits`。物理 `users` 表含 `qps_limit`、`rpm_limit`、`tpm_limit`、`concurrency_limit`；现有 2 名用户的新字段均为 0。迁移前完整备份：`/private/tmp/token_manager_token_db_before_c3_20260929.sql`（68,443 字节）。
+- 前端部署：Compose Nginx 静态目录指向 `frontend/dist`；生产构建成功，Nginx 返回首页、Billing 静态资源和 `/admin/billing` SPA 路由均为 HTTP 200，`/health` 为 healthy。当前本地入口为 `http://127.0.0.1/`，此记录仅证明本地 HTTP 部署。
+- 版本记录：Git `HEAD` 为 `1824ba63ba93ab97523f9bee128aa3589d4d260`，部署包含未提交工作区改动；后端镜像 `sha256:2f26e112de3f00143b4ac8b5e0a048479b865cdc49cdd47bc3fb172c0f22fb04`；前端 `index.html` SHA-256 为 `3fe89c485b4e44ff7010d63cf0fae4074ac096de35489ade995ee7661d6a9f6f`，Billing bundle SHA-256 为 `ced98d04d2bfbe976e0d1ca08ca0f67798a1dc691a5edc7b8b0b7376e3aa8cb9`。
+- 回滚：本次迁移仅为用户表增加默认 0 的限流列；回退应用代码不要求降级数据库。需要完整恢复时可用上述迁移前 SQL 备份。未执行远程发布。
+- 遗留：无本地 C3 迁移/部署遗留；远程环境发布如需执行，应另行指定目标环境。

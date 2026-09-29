@@ -73,8 +73,8 @@ docker-compose logs -f backend
 # 进入后端容器
 docker-compose exec backend bash
 
-# 初始化数据库（首次）
-python -c "from app.core.database import engine, Base; Base.metadata.create_all(bind=engine)"
+# 初始化或升级数据库
+alembic upgrade head
 ```
 
 ## 管理员注意
