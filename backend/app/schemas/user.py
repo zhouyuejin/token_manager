@@ -59,6 +59,7 @@ class UserInfo(BaseModel):
     quota_used: int
     quota_remain: int
     created_at: str
+    permissions: List[str] = Field(default_factory=list)
 
     @computed_field
     @property

@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { useSwrData } from '../../hooks/useSwr'
 import { useThemeToken } from '../../theme/useThemeToken'
 import { useMessage } from '../../utils/message'
+import { WriteOnly } from '../../components/WriteOnly'
 import { getChannelHealth, recoverChannelHealth, ChannelHealth, ChannelHealthWindow } from '../../api/channels'
 
 const windowOptions = [
@@ -66,7 +67,7 @@ const HealthDashboard = () => {
     { title: windowOptions.find(item => item.value === windowName)?.label, key: 'metrics', width: 300, render: (_: unknown, row: ChannelHealth) => <WindowMetrics window={row.windows[windowName]} /> },
     { title: 'Cooldown', key: 'cooldown', render: (_: unknown, row: ChannelHealth) => <Space direction="vertical" size={0}>{row.cooldown.channel_until ? <Tag color="orange">渠道至 {formatDate(row.cooldown.channel_until)}</Tag> : <Tag color="green">渠道正常</Tag>}{row.cooldown.keys.length > 0 && <span style={{ color: '#d97706', fontSize: 12 }}>{row.cooldown.keys.length} 个 Key 冷却中</span>}</Space> },
     { title: '最近错误', dataIndex: 'recent_error', key: 'recent_error', ellipsis: true, render: (value: string | null) => value ? <Tooltip title={value}>{value}</Tooltip> : '—' },
-    { title: '操作', key: 'action', render: (_: unknown, row: ChannelHealth) => <Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => recover(row)}><Button size="small" disabled={!row.cooldown.channel_until && row.cooldown.keys.length === 0}>恢复 cooldown</Button></Popconfirm> },
+    { title: '操作', key: 'action', render: (_: unknown, row: ChannelHealth) => <WriteOnly><Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => recover(row)}><Button size="small" disabled={!row.cooldown.channel_until && row.cooldown.keys.length === 0}>恢复 cooldown</Button></Popconfirm></WriteOnly> },
   ]
 
   return <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100%' }}>

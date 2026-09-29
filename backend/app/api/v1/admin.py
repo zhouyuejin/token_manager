@@ -26,6 +26,7 @@ from app.models.model_channel import ModelChannel
 from app.models.usage_log import UsageLog
 from app.models.organization import Department
 from app.models.project import Project
+from app.models.role_permission import RolePermission
 from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
     AdminStatsResponse,
@@ -46,6 +47,17 @@ from app.services.secret_crypto import encrypt_secret, mask_secret
 from app.utils.request import extract_client_ip
 
 router = APIRouter()
+
+
+@router.get("/roles/permissions")
+async def list_role_permissions(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    permissions = {}
+    for role, permission in db.query(RolePermission.role, RolePermission.permission).order_by(
+        RolePermission.role, RolePermission.permission
+    ).all():
+        permissions.setdefault(role, []).append(permission)
+    permissions[UserRole.admin.value] = ["admin:read", "admin:write", "department:read", "department:write"]
+    return {"items": [{"role": role.value, "permissions": permissions.get(role.value, [])} for role in UserRole]}
 
 
 def _usage_filter(start_date, end_date, department_id=None, project_id=None,

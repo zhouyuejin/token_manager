@@ -6,6 +6,7 @@ import { Budget, BudgetSave, ReconcileItem, ReconcileReport, ReconcileReportList
 import { Department, Project } from '../../api/projects'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
+import { WriteOnly } from '../../components/WriteOnly'
 
 const Billing = () => {
   const navigate = useNavigate()
@@ -83,7 +84,7 @@ const Billing = () => {
     { title: '告警阈值', dataIndex: 'thresholds', render: (values: number[]) => values.map(t => `${t}%`).join(' / ') },
     { title: '超预算策略', dataIndex: 'policy', render: (value: string) => value === 'block' ? '阻断' : '仅告警' },
     { title: '状态', dataIndex: 'enabled', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '启用' : '停用'}</Tag> },
-    { title: '操作', key: 'actions', width: 120, fixed: 'right' as const, render: (_: unknown, row: Budget) => <Button onClick={() => open(row)}>配置</Button> }
+    { title: '操作', key: 'actions', width: 120, fixed: 'right' as const, render: (_: unknown, row: Budget) => <WriteOnly><Button onClick={() => open(row)}>配置</Button></WriteOnly> }
   ]
   const reservationColumns = [
     { title: '状态', dataIndex: 'status', width: 90, render: (value: Reservation['status']) => <Tag color={value === 'reserved' ? 'blue' : value === 'committed' ? 'green' : 'default'}>{{ reserved: '预扣中', committed: '已结算', released: '已释放', expired: '已过期' }[value]}</Tag> },
@@ -117,7 +118,7 @@ const Billing = () => {
     { title: '失败原因', dataIndex: 'error_message', ellipsis: true, render: (value: string | null) => value || '—' },
     { title: '操作', key: 'actions', width: 190, fixed: 'right' as const, render: (_: unknown, row: ReconcileReport) => <Space>
       <Button disabled={!row.anomaly_count} onClick={() => { setSelectedReport(row); setItemPage(1); setAnomalyType(undefined) }}>查看异常</Button>
-      <Button loading={rerunning === row.report_id} disabled={!!rerunning || row.status === 'running'} onClick={() => rerun(row)}>重跑</Button>
+      <WriteOnly><Button loading={rerunning === row.report_id} disabled={!!rerunning || row.status === 'running'} onClick={() => rerun(row)}>重跑</Button></WriteOnly>
     </Space> },
   ]
   const itemColumns = [
@@ -143,7 +144,7 @@ const Billing = () => {
         if (value) setMonth(value.format('YYYY-MM'))
       }} />
       <Button onClick={() => { mutate(); mutateReservations() }}>刷新</Button>
-      <Button type="primary" onClick={() => open(null)}>配置月预算</Button>
+      <WriteOnly><Button type="primary" onClick={() => open(null)}>配置月预算</Button></WriteOnly>
     </Space>}>
       <Alert type="info" showIcon style={{ marginBottom: 16 }} message="按北京时间自然月配置，金额单位为 USD。项目与部门预算同时生效，可用预算已扣除预扣中金额。未配置或停用时不限制，下月需单独配置。告警每 60 秒检查一次。" />
       {error && <Alert type="error" message="预算加载失败" action={<Button onClick={() => mutate()}>重试</Button>} />}
@@ -168,7 +169,7 @@ const Billing = () => {
         pagination={{ current: reportPage, pageSize: 20, total: reportData?.total || 0, showSizeChanger: false, onChange: setReportPage }} />
       <Typography.Text type="secondary">用量报表导出会沿用管理驾驶舱的日期、部门、项目、用户、Key、模型和渠道筛选，导出期间不阻塞本页操作。</Typography.Text>
     </Card>
-    <Modal title={`${month} 月预算配置`} open={visible} onCancel={() => setVisible(false)} onOk={() => form.submit()} confirmLoading={saving}>
+    <WriteOnly><Modal title={`${month} 月预算配置`} open={visible} onCancel={() => setVisible(false)} onOk={() => form.submit()} confirmLoading={saving}>
       <Form form={form} layout="vertical" onFinish={save}>
         <Form.Item name="scope_type" label="预算维度" rules={[{ required: true }]}>
           <Select disabled={!!editing} onChange={() => form.setFieldValue('scope_id', undefined)} options={[
@@ -191,7 +192,7 @@ const Billing = () => {
         <Form.Item name="enabled" label="启用预算" valuePropName="checked"><Switch /></Form.Item>
         <Alert type="info" message="预算不足以覆盖本次预扣时，阻断策略会提前拒绝请求。告警按实际消费触发，每个预算阈值仅通知一次；通知负责人和管理员。" />
       </Form>
-    </Modal>
+    </Modal></WriteOnly>
     <Drawer title={`${selectedReport?.business_date || ''} 对账异常`} width="min(1100px, 92vw)" open={!!selectedReport} onClose={() => setSelectedReport(null)}
       extra={<Select allowClear placeholder="全部异常类型" style={{ width: 220 }} value={anomalyType} onChange={value => { setAnomalyType(value); setItemPage(1) }}
         options={Object.entries(anomalyLabels).map(([value, label]) => ({ value, label }))} />}>

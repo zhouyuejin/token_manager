@@ -68,3 +68,8 @@ export interface SystemOverview {
 }
 
 export const getSystemOverview = () => get<SystemOverview>('/admin/stats/overview')
+
+export interface RolePermissions {
+  role: string
+  permissions: string[]
+}

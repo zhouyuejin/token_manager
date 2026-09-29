@@ -16,6 +16,7 @@ import { getModels, ModelMapping } from '../../api/models'
 import {
   useDefaultModelGroupWarning,
 } from '../../hooks/useDefaultModelGroupWarning'
+import { WriteOnly } from '../../components/WriteOnly'
 
 const { Text } = Typography
 
@@ -91,13 +92,13 @@ const ModelIdsCell: React.FC<ModelIdsCellProps> = ({ modelIds, models, onManage 
           ))
         )}
       </div>
-      <Button
+      <WriteOnly><Button
         type="link"
         onClick={() => { setPopoverOpen(false); setSearch(''); onManage() }}
         style={{ padding: '4px 0', marginTop: 4 }}
       >
         管理模型 →
-      </Button>
+      </Button></WriteOnly>
     </div>
   )
 
@@ -274,7 +275,7 @@ const ModelGroups: React.FC = () => {
         const useDanger = noActiveDefault && !isDefault && isActive
 
         return (
-          <Space>
+          <WriteOnly><Space>
             {isActive && (
               isDefault ? (
                 <Popconfirm
@@ -311,7 +312,7 @@ const ModelGroups: React.FC = () => {
                 删除
               </Button>
             </Popconfirm>
-          </Space>
+          </Space></WriteOnly>
         )
       }
     }
@@ -328,9 +329,9 @@ const ModelGroups: React.FC = () => {
             <span>
               缺少已启用的默认模型分组，新用户将无法正常使用 API Key。
               {groups.length === 0 ? (
-                <Button type="link" size="small" onClick={() => navigate('/admin/model-groups/new')}>
+                <WriteOnly><Button type="link" size="small" onClick={() => navigate('/admin/model-groups/new')}>
                   立即创建分组
-                </Button>
+                </Button></WriteOnly>
               ) : (
                 <span style={{ marginLeft: 8, color: 'rgba(0,0,0,0.45)' }}>
                   请在下方将一个分组设为默认。
@@ -345,13 +346,13 @@ const ModelGroups: React.FC = () => {
       <Card 
         title="模型分组管理" 
         extra={
-          <Button 
+          <WriteOnly><Button
             type="primary" 
             icon={<PlusOutlined />} 
             onClick={() => navigate('/admin/model-groups/new')}
           >
             新建分组
-          </Button>
+          </Button></WriteOnly>
         }
       >
         <Table

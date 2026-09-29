@@ -65,6 +65,7 @@ export interface UserInfo {
   quota_used: number
   quota_remain: number
   created_at: string
+  permissions: string[]
 }
 
 export const getCurrentUser = () => get<UserInfo>('/users/me')

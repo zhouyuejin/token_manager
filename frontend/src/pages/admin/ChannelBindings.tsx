@@ -25,6 +25,7 @@ import {
   updateChannelModelBinding, replaceChannelModelBindings, ChannelModelBinding, Channel
 } from '../../api/channels'
 import { getModels, Model } from '../../api/models'
+import { WriteOnly } from '../../components/WriteOnly'
 
 // 获取模型显示名称的辅助函数
 const getModelDisplayName = (binding: ChannelModelBinding, allModels: Model[]): string => {
@@ -78,27 +79,27 @@ const SortableRow: React.FC<SortableRowProps> = ({
       <Text type="secondary" style={{ marginRight: 8, width: 40, textAlign: 'center' }}>
         权重: {binding.weight}
       </Text>
-      <Switch
+      <WriteOnly><Switch
         size="small"
         checked={binding.enabled}
         style={{ marginRight: 8 }}
         onChange={(checked) => {
           // 启用/禁用单独处理，不影响选中状态
         }}
-      />
-      <Space size="small">
+      /></WriteOnly>
+      <WriteOnly><Space size="small">
         <Button type="text" size="small" icon={<EditOutlined />} onClick={() => onEdit(binding)} />
         <Popconfirm title="确认解绑？" onConfirm={() => onUnbind(binding)}>
           <Button type="text" size="small" danger icon={<DeleteOutlined />} />
         </Popconfirm>
-      </Space>
-      <div
+      </Space></WriteOnly>
+      <WriteOnly><div
         {...attributes}
         {...listeners}
         style={{ cursor: 'grab', marginLeft: 8, padding: '4px 8px' }}
       >
         <DragOutlined />
-      </div>
+      </div></WriteOnly>
     </div>
   )
 }
@@ -494,11 +495,11 @@ const ChannelBindingsPage: React.FC = () => {
                         borderBottom: '1px solid #f0f0f0'
                       }}
                     >
-                      <Checkbox
+                      <WriteOnly><Checkbox
                         checked={selectedUnboundModels.has(model.model_id)}
                         onChange={(e) => toggleUnboundSelect(model.model_id, e.target.checked)}
                         style={{ marginRight: 12 }}
-                      />
+                      /></WriteOnly>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 500 }}>{model.display_name || model.model_id}</div>
                         <Text type="secondary" style={{ fontSize: 12 }}>{model.model_id}</Text>
@@ -506,24 +507,24 @@ const ChannelBindingsPage: React.FC = () => {
                       <Tag color={model.status === 'active' ? 'green' : 'red'}>
                         {model.status === 'active' ? '启用' : '禁用'}
                       </Tag>
-                      <Button
+                      <WriteOnly><Button
                         type="text"
                         icon={<ArrowRightOutlined />}
                         onClick={() => handleBind(model)}
                         style={{ marginLeft: 8 }}
-                      />
+                      /></WriteOnly>
                     </div>
                   ))}
                 </div>
                 {selectedUnboundModels.size > 0 && (
                   <div style={{ marginTop: 12 }}>
-                    <Button
+                    <WriteOnly><Button
                       type="primary"
                       icon={<PlusOutlined />}
                       onClick={handleBatchBind}
                     >
                       批量绑定 ({selectedUnboundModels.size})
-                    </Button>
+                    </Button></WriteOnly>
                   </div>
                 )}
               </>
@@ -569,14 +570,14 @@ const ChannelBindingsPage: React.FC = () => {
                 </DndContext>
                 {selectedBoundModels.size > 0 && (
                   <div style={{ marginTop: 12 }}>
-                    <Popconfirm
+                    <WriteOnly><Popconfirm
                       title={`确认解绑 ${selectedBoundModels.size} 个模型？`}
                       onConfirm={handleBatchUnbind}
                     >
                       <Button danger icon={<DeleteOutlined />}>
                         批量解绑 ({selectedBoundModels.size})
                       </Button>
-                    </Popconfirm>
+                    </Popconfirm></WriteOnly>
                   </div>
                 )}
               </>
@@ -593,9 +594,9 @@ const ChannelBindingsPage: React.FC = () => {
         open={editDrawerVisible}
         width={400}
         extra={
-          <Button type="primary" onClick={handleEditSave}>
+          <WriteOnly><Button type="primary" onClick={handleEditSave}>
             保存
-          </Button>
+          </Button></WriteOnly>
         }
       >
         <Form form={editForm} layout="vertical">

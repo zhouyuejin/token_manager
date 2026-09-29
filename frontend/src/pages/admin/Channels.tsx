@@ -14,6 +14,7 @@ import {
   syncChannelModels, recoverChannelHealth, ChannelHealth
 } from '../../api/channels'
 import { Model, bindChannelToModel, unbindChannel } from '../../api/models'
+import { WriteOnly } from '../../components/WriteOnly'
 
 const formatRemainTime = (ms: number): string => {
   if (!ms || ms <= 0) return '0秒'
@@ -224,9 +225,9 @@ const ChannelsPage = () => {
         return <Space direction="vertical" size={0}>
           {channelUntil && <Tag title={new Date(channelUntil).toLocaleString()} color="orange">渠道剩余 {formatRemainTime(new Date(channelUntil).getTime() - now)}</Tag>}
           {keyCount > 0 && <span style={{ fontSize: 12, color: '#d97706' }}>{keyCount} 个 Key 冷却中</span>}
-          <Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => handleRecover(record.channel_id)}>
+          <WriteOnly><Popconfirm title="确认恢复该渠道及其 Key 的 cooldown？" onConfirm={() => handleRecover(record.channel_id)}>
             <Button type="link" size="small" style={{ padding: 0 }}>手动恢复</Button>
-          </Popconfirm>
+          </Popconfirm></WriteOnly>
         </Space>
       }
     },
@@ -263,7 +264,7 @@ const ChannelsPage = () => {
     {
       title: '操作', key: 'action', width: 110, fixed: 'right' as const,
       render: (_: any, record: Channel) => (
-        <Space>
+        <WriteOnly><Space>
           <Tooltip title="编辑"><Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/channels/${record.channel_id}/edit`)} /></Tooltip>
           <Tooltip title="同步配额"><Button size="small" icon={<SyncOutlined />} onClick={() => handleSync(record.channel_id)} /></Tooltip>
           <Tooltip title="配置"><Button size="small" icon={<SettingOutlined />} onClick={() => {
@@ -280,7 +281,7 @@ const ChannelsPage = () => {
           <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.channel_id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
-        </Space>
+        </Space></WriteOnly>
       )
     }
   ]
@@ -289,7 +290,7 @@ return (
   <div style={{ padding: 24 }}>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
         <h2>渠道管理</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/channels/new')}>新建渠道</Button>
+        <WriteOnly><Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/admin/channels/new')}>新建渠道</Button></WriteOnly>
       </div>
 
       <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading}
@@ -327,7 +328,7 @@ return (
       <Modal title={`${selectedChannel?.name} - 绑定模型`} open={modelModalVisible} onCancel={() => setModelModalVisible(false)} footer={null} width={800}>
         <div style={{ marginBottom: 16 }}>
           <Space>
-            <Button icon={<SyncOutlined />} onClick={handleSyncModels}>同步模型</Button>
+            <WriteOnly><Button icon={<SyncOutlined />} onClick={handleSyncModels}>同步模型</Button></WriteOnly>
           </Space>
         </div>
         <Table
@@ -344,9 +345,11 @@ return (
             {
               title: '操作', key: 'action', width: 100,
               render: (_: any, record: any) => (
+                <WriteOnly>
                 <Popconfirm title="确认解绑？" onConfirm={() => handleUnbindModel(record.model_id)}>
                   <Button size="small" danger>解绑</Button>
                 </Popconfirm>
+                </WriteOnly>
               )
             }
           ]}

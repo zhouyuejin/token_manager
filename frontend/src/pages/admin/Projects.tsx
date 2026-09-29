@@ -5,8 +5,12 @@ import { User } from '../../api/users'
 import { ApiKey } from '../../api/apiKeys'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
+import { WriteOnly } from '../../components/WriteOnly'
+import { useAuthStore } from '../../store/auth'
+import { hasPermission } from '../../utils/adminPermissions.mjs'
 
 const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }) => {
+  const permissions = useAuthStore((state) => state.user?.permissions || [])
   const title = departmentsOnly ? '部门' : '项目'
   const { data, error, isLoading, mutate } = useSwrData<{ items: (Department | Project)[] }>(
     departmentsOnly ? '/projects/admin/departments' : '/projects/admin'
@@ -17,7 +21,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const { data: users, error: usersError, isLoading: usersLoading } = useSwrDataWithParams<{ items: User[] }>(
-    visible ? '/admin/users' : null, { page: 1, page_size: 100, keyword: search }
+    visible && hasPermission(permissions, 'admin:read') ? '/admin/users' : null, { page: 1, page_size: 100, keyword: search }
   )
   const [form] = Form.useForm()
   const message = useMessage()
@@ -28,9 +32,9 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const [membersError, setMembersError] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
   const { data: memberUsers, error: memberUsersError } = useSwrDataWithParams<{ items: User[] }>(
-    membersProject ? '/admin/users' : null, { page: 1, page_size: 100, keyword: memberSearch }
+    membersProject && hasPermission(permissions, 'admin:read') ? '/admin/users' : null, { page: 1, page_size: 100, keyword: memberSearch }
   )
-  const { data: keysData, error: keysError, isLoading: keysLoading } = useSwrData<{ items: ApiKey[] }>(membersProject ? '/api-keys/admin' : null)
+  const { data: keysData, error: keysError, isLoading: keysLoading } = useSwrData<{ items: ApiKey[] }>(membersProject && hasPermission(permissions, 'admin:read') ? '/api-keys/admin' : null)
   const projectKeys = (keysData?.items || []).filter(key => key.project_id === membersProject?.project_id)
   const userOptions = (users?.items || []).map(user => ({ value: user.user_id, label: `${user.username} (${user.user_id})` }))
   if (editing?.owner_user_id && !userOptions.some(option => option.value === editing.owner_user_id)) {
@@ -54,7 +58,9 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const save = async (values: any) => {
     setSaving(true)
     try {
-      const payload = { ...values, owner_user_id: values.owner_user_id || null }
+      const payload = hasPermission(permissions, 'admin:read')
+        ? { ...values, owner_user_id: values.owner_user_id || null }
+        : { ...values, owner_user_id: editing?.owner_user_id || null }
       if (departmentsOnly) await saveDepartment(payload, editing?.dept_id)
       else await saveProject(payload, (editing as Project | null)?.project_id)
       message.success(`${title}保存成功`)
@@ -105,16 +111,18 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     { title: '负责人', dataIndex: 'owner_user_id', render: (value: string) => value || '未设置' },
     { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, row: Department | Project) => <Space>
-      <Button onClick={() => openForm(row)}>编辑</Button>
-      {!departmentsOnly && <Button onClick={() => openMembers(row as Project)}>归因详情</Button>}
-      <Popconfirm title={`确认删除此${title}？已有关联数据时将拒绝删除。`} onConfirm={() => remove(row)}>
-        <Button danger>删除</Button>
-      </Popconfirm>
+      <WriteOnly permission="department:write">
+        <Button onClick={() => openForm(row)}>编辑</Button>
+        <Popconfirm title={`确认删除此${title}？已有关联数据时将拒绝删除。`} onConfirm={() => remove(row)}>
+          <Button danger>删除</Button>
+        </Popconfirm>
+      </WriteOnly>
+      {!departmentsOnly && <WriteOnly><Button onClick={() => openMembers(row as Project)}>归因详情</Button></WriteOnly>}
     </Space> }
   ]
 
   return <div style={{ padding: 24 }}>
-    <Card title={`${title}管理`} extra={<Button type="primary" onClick={() => openForm(null)}>新增{title}</Button>}>
+    <Card title={`${title}管理`} extra={<WriteOnly permission="department:write"><Button type="primary" onClick={() => openForm(null)}>新增{title}</Button></WriteOnly>}>
       {error && <Alert type="error" showIcon message={`${title}加载失败`} action={<Button onClick={() => mutate()}>重试</Button>} style={{ marginBottom: 16 }} />}
       <Table rowKey={departmentsOnly ? 'dept_id' : 'project_id'} columns={columns} dataSource={data?.items || []} loading={isLoading} />
     </Card>
@@ -125,9 +133,9 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
           <Select showSearch optionFilterProp="label" options={(departments?.items || []).map(dept => ({ value: dept.dept_id, label: `${dept.name}${dept.status === 'disabled' ? '（停用）' : ''}` }))} />
         </Form.Item>}
         {usersError && <Alert type="error" message="用户搜索失败，请重新搜索" />}
-        <Form.Item name="owner_user_id" label="负责人">
+        {hasPermission(permissions, 'admin:read') && <Form.Item name="owner_user_id" label="负责人">
           <Select showSearch allowClear filterOption={false} onSearch={setSearch} loading={usersLoading} options={userOptions} placeholder="搜索用户名或邮箱" />
-        </Form.Item>
+        </Form.Item>}
         <Form.Item name="status" label="状态" rules={[{ required: true }]}><Select options={[{ value: 'active', label: '启用' }, { value: 'disabled', label: '停用' }]} /></Form.Item>
         {!departmentsOnly && <Form.Item name="content_audit_enabled" label="内容审计摘要" valuePropName="checked">
           <Switch checkedChildren="开启" unCheckedChildren="关闭" />

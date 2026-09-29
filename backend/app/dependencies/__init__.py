@@ -66,6 +66,14 @@ async def get_current_active_user(
     return current_user
 
 
+def get_effective_permissions(db: Session, user: User) -> list[str]:
+    if user.role == UserRole.admin:
+        return ["admin:read", "admin:write", "department:read", "department:write"]
+    return [row[0] for row in db.query(RolePermission.permission).filter(
+        RolePermission.role == user.role.value
+    ).order_by(RolePermission.permission).all()]
+
+
 def require_admin(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -81,11 +89,7 @@ def require_admin(
         permission = "department:read" if method == "GET" else "department:write"
     else:
         permission = "admin:read" if method == "GET" else "admin:write"
-    allowed = db.query(RolePermission.permission).filter(
-        RolePermission.role == current_user.role.value,
-        RolePermission.permission == permission,
-    ).first()
-    if not allowed:
+    if permission not in get_effective_permissions(db, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="没有执行此操作的权限"

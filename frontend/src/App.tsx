@@ -9,6 +9,7 @@ import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 import { useSwrData } from './hooks/useSwr'
 import { UserInfo } from './api/auth'
 import { isAuthSessionCurrent } from './utils/authSession.mjs'
+import { defaultAdminPath } from './utils/adminPermissions.mjs'
 
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
@@ -66,15 +67,15 @@ function App() {
   // 修复：只在 user 完全加载后才进行角色判断重定向
   useEffect(() => {
     if (token && user) {
-      if (user.role === 'admin' && window.location.pathname === '/stats') {
-        navigate('/admin/dashboard', { replace: true })
+      const nextPath = defaultAdminPath(user.permissions)
+      if (nextPath !== '/stats' && window.location.pathname === '/stats') {
+        navigate(nextPath, { replace: true })
       }
     }
   }, [token, user, navigate])
 
   // 关键：user 加载中时保持当前路由
-  const isUserLoaded = !!user
-  const isAdmin = isUserLoaded && user?.role === 'admin'
+  const homePath = defaultAdminPath(user?.permissions)
 
   if (token && !authChecked) {
     return (
@@ -90,32 +91,20 @@ function App() {
         {token && <NotificationWebSocketBridge />}
         <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spin size="large" /></div>}>
         <Routes>
-          <Route path="/login" element={!token ? <Login /> : <Navigate to={isAdmin ? "/admin/dashboard" : "/stats"} />} />
+          <Route path="/login" element={!token ? <Login /> : <Navigate to={homePath} />} />
           <Route path="/register" element={!token ? <Register /> : <Navigate to="/stats" />} />
           
           <Route path="/" element={token ? <MainLayout /> : <Navigate to="/login" />}>
-            <Route index element={<Navigate to={isAdmin ? "/admin/dashboard" : "/stats"} />} />
+            <Route index element={<Navigate to={homePath} />} />
             
-            <Route path="stats" element={isAdmin ? <Navigate to="/admin/dashboard" /> : <Stats />} />
+            <Route path="stats" element={homePath !== '/stats' ? <Navigate to={homePath} /> : <Stats />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="approvals" element={<Approvals />} />
             <Route path="api-keys" element={<ApiKeys />} />
             <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<Settings />} />
             
-            {/* 
-              修复：admin 路由判断逻辑
-              - user 未加载: 保持当前路由，不重定向
-              - isAdmin: 允许访问 admin 页面
-              - 其他情况: 重定向到 /stats
-            */}
-            <Route path="admin" element={
-              !isUserLoaded 
-                ? <AdminLayout><Outlet /></AdminLayout>
-                : isAdmin 
-                  ? <AdminLayout><Outlet /></AdminLayout>
-                  : <Navigate to="/stats" />
-            }>
+            <Route path="admin" element={<AdminLayout><Outlet /></AdminLayout>}>
               <Route path="dashboard" element={<AdminDashboard />} />
               <Route path="approvals" element={<AdminApprovals />} />
               <Route path="users" element={<AdminUsers />} />
