@@ -1,11 +1,14 @@
 import json
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.system_config import SystemConfig
+from app.models.user import User
 from app.services.alert_service import DEFAULTS
+from app.services.operation_log_service import record_operation
+from app.utils.request import extract_client_ip
 
 router = APIRouter()
 class AlertRuleConfig(BaseModel):
@@ -21,8 +24,15 @@ def get_alert_rules(db: Session = Depends(get_db), _: object = Depends(require_a
     return {**DEFAULTS, **(json.loads(row.config_value) if row and row.config_value else {})}
 
 @router.put("/rules")
-def update_alert_rules(data: AlertRuleConfig, db: Session = Depends(get_db), _: object = Depends(require_admin)):
+def update_alert_rules(data: AlertRuleConfig, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     row = db.query(SystemConfig).filter_by(config_key="alert_rules").first()
+    before = {**DEFAULTS, **(json.loads(row.config_value) if row and row.config_value else {})}
     if not row: row = SystemConfig(config_key="alert_rules", description="Task 3.4 告警规则阈值"); db.add(row)
-    row.config_value = json.dumps(data.model_dump()); db.commit()
-    return data.model_dump()
+    after = data.model_dump()
+    row.config_value = json.dumps(after)
+    db.commit()
+    record_operation(
+        db=db, operator=admin, action="update", target_type="alert_rules", target_id="alert_rules",
+        detail={"before": before, "after": after}, ip_address=extract_client_ip(request),
+    )
+    return after
