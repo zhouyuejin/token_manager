@@ -19,7 +19,7 @@ async function loadUsersApi() {
       target: ts.ScriptTarget.ES2020,
     },
   }).outputText
-  return import(`data:text/javascript,${encodeURIComponent(output)}`)
+  return import(`data:text/javascript,${encodeURIComponent(output)}#${Math.random()}`)
 }
 
 test('changePassword sends hashes to the personal password endpoint', async () => {
@@ -38,5 +38,24 @@ test('changePassword sends hashes to the personal password endpoint', async () =
   assert.deepEqual(requests, [[
     '/users/me/password',
     { old_password: 'hashed:old-pass', new_password: 'hashed:new-pass' },
+  ]])
+})
+
+test('resetPassword sends a hashed password to the admin reset endpoint', async () => {
+  const requests = []
+  globalThis.__testRequest = {
+    get: () => {},
+    post: (...args) => requests.push(args),
+    put: () => {},
+    del: () => {},
+  }
+  globalThis.__testHashPassword = async (password) => `hashed:${password}`
+
+  const { resetPassword } = await loadUsersApi()
+  await resetPassword('usr_123', 'new-pass')
+
+  assert.deepEqual(requests, [[
+    '/admin/users/usr_123/reset-password',
+    { new_password: 'hashed:new-pass' },
   ]])
 })

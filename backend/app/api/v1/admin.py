@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user import User, UserRole, UserStatus
+from app.models.refresh_token import RefreshToken
 from app.models.channel import Channel, ChannelType, ChannelStatus, ChannelHealthStatus
 from app.models.channel_quota import ChannelQuota, QuotaType, SyncStatus
 from app.models.model import Model, ModelStatus, PriceType
@@ -30,7 +31,7 @@ from app.models.role_permission import RolePermission
 from app.dependencies import get_current_user, require_admin
 from app.schemas.admin import (
     AdminStatsResponse,
-    AdminUserCreate, AdminUserUpdate, AdminUserResponse,
+    AdminUserCreate, AdminUserUpdate, AdminUserResponse, AdminPasswordReset,
     UserListResponse, QuotaAdjustRequest,
     ChannelCreate, ChannelUpdate, ChannelResponse, ChannelListResponse,
     ChannelWithModelsResponse,
@@ -513,6 +514,27 @@ async def update_user(user_id: str, data: AdminUserUpdate, request: Request, db:
     
     record_operation(db=db, operator=admin, action="update", target_type="user", target_id=user_id, detail=changed, ip_address=extract_client_ip(request))
     return {"message": "更新成功"}
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: str, data: AdminPasswordReset, request: Request,
+    db: Session = Depends(get_db), admin: User = Depends(require_admin),
+):
+    """重置用户密码并撤销其 refresh token；已签发的 access token 到期前仍有效。"""
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user.password = data.new_password
+    db.query(RefreshToken).filter(RefreshToken.user_id == user_id).delete(synchronize_session=False)
+    db.commit()
+
+    record_operation(
+        db=db, operator=admin, action="reset_password", target_type="user", target_id=user_id,
+        detail={"username": user.username}, ip_address=extract_client_ip(request),
+    )
+    return {"message": "密码已重置；旧 access token 在到期前仍有效"}
 
 
 @router.delete("/users/{user_id}")
