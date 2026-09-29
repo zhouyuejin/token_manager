@@ -52,10 +52,12 @@ def content_summary(payload, limit: int = 2000):
                     break
         elif isinstance(value, dict):
             for key, item in value.items():
-                if key in _CONTENT_KEYS:
+                if key in _CONTENT_KEYS and depth < 6:
                     collect(item, depth + 1)
-                    if remaining <= 0 or visited >= 200:
-                        break
+                else:
+                    visited += 1
+                if remaining <= 0 or visited >= 200:
+                    break
 
     collect(payload)
     summary = "\n".join(parts).strip()

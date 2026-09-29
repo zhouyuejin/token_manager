@@ -36,6 +36,13 @@ def test_content_summary_extracts_bounded_text_and_redacts():
     assert content_summary({"output": [{"content": [{"text": "response text"}]}]}) == "response text"
 
 
+def test_content_summary_caps_unrecognized_dict_entries():
+    payload = {f"metadata_{i}": None for i in range(200)}
+    payload["prompt"] = "past traversal cap"
+
+    assert content_summary(payload) is None
+
+
 def test_project_content_audit_is_disabled_by_default():
     assert ProjectSave(name="Example", dept_id="dept_test").content_audit_enabled is False
 
