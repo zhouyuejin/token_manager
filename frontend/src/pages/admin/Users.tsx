@@ -5,8 +5,8 @@ import {
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
   Select, Popconfirm, Radio, Alert 
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined } from '@ant-design/icons'
-import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from '../../api/users'
+import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined, KeyOutlined } from '@ant-design/icons'
+import { getUsers, createUser, updateUser, deleteUser, adjustQuota, resetPassword, User } from '../../api/users'
 import { getModelGroups, ModelGroup } from '../../api/modelGroups'
 import { getAdminProjects, getProjectUsers, Project, setProjectUsers } from '../../api/projects'
 import dayjs from 'dayjs'
@@ -24,6 +24,8 @@ const UsersPage = () => {
   const [quotaMode, setQuotaMode] = useState<QuotaMode>('increase')
   const [groups, setGroups] = useState<ModelGroup[]>([])
   const [projectUser, setProjectUser] = useState<User | null>(null)
+  const [passwordUser, setPasswordUser] = useState<User | null>(null)
+  const [resettingPassword, setResettingPassword] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [projectMembers, setProjectMembers] = useState<Record<string, string[]>>({})
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([])
@@ -31,6 +33,7 @@ const UsersPage = () => {
   const [projectsError, setProjectsError] = useState(false)
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
+  const [passwordForm] = Form.useForm()
   // GC-8: 监听 role 字段；admin 时隐藏 quota / model_group_ids 表单项
   const watchedRole = Form.useWatch('role', form)
   const watchedQuotaMode = Form.useWatch('quota_mode', form)
@@ -124,6 +127,18 @@ const UsersPage = () => {
     } catch (error) {
       console.error(error)
     }
+  }
+
+  const handleResetPassword = async ({ new_password }: { new_password: string }) => {
+    if (!passwordUser) return
+    setResettingPassword(true)
+    try {
+      await resetPassword(passwordUser.user_id, new_password)
+      message.success('密码已重置；该用户的 access token 到期前仍有效')
+      setPasswordUser(null)
+      passwordForm.resetFields()
+    } catch { /* 请求拦截器显示错误 */ }
+    finally { setResettingPassword(false) }
   }
 
   const handleQuotaAdjust = async (values: { amount?: number; reason: string }) => {
@@ -331,6 +346,9 @@ const UsersPage = () => {
           >
             编辑
           </Button>
+          <Button type="text" icon={<KeyOutlined />} onClick={() => setPasswordUser(record)}>
+            重置密码
+          </Button>
           <Button type="text" icon={<TeamOutlined />} onClick={() => openProjectModal(record)}>分配项目</Button>
           <Popconfirm
             title={record.role === 'admin' ? "不能删除管理员用户" : "确认删除此用户？"}
@@ -392,6 +410,52 @@ const UsersPage = () => {
           overflow: 'hidden',
         }}
       />
+
+      <WriteOnly><Modal
+        title={`重置密码 - ${passwordUser?.username || ''}`}
+        open={!!passwordUser}
+        onCancel={() => {
+          setPasswordUser(null)
+          passwordForm.resetFields()
+        }}
+        onOk={() => passwordForm.submit()}
+        confirmLoading={resettingPassword}
+        okText="确认重置"
+        cancelText="取消"
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="确认后该用户的旧密码和 refresh token 失效；已登录的 access token 在到期前仍可使用。"
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={passwordForm} layout="vertical" onFinish={handleResetPassword}>
+          <Form.Item
+            name="new_password"
+            label="新密码"
+            rules={[{ required: true, min: 8, message: '密码至少 8 位' }]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label="确认新密码"
+            dependencies={['new_password']}
+            rules={[
+              { required: true, message: '请再次输入新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  return !value || getFieldValue('new_password') === value
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('两次输入的密码不一致'))
+                },
+              }),
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+        </Form>
+      </Modal></WriteOnly>
 
       <WriteOnly><Modal
         title={`分配可用项目 - ${projectUser?.username || ''}`}

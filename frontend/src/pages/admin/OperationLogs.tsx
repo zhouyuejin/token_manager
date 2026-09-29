@@ -12,6 +12,7 @@ const ACTION_LABELS: Record<string, string> = {
   update: '更新',
   delete: '删除',
   change_password: '修改密码',
+  reset_password: '重置密码',
   update_status: '修改状态',
   auto_freeze: '自动冻结',
   unfreeze: '解除冻结',

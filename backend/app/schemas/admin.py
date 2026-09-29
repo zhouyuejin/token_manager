@@ -29,6 +29,11 @@ class AdminUserUpdate(BaseModel):
     model_group_ids: Optional[List[str]] = None
 
 
+class AdminPasswordReset(BaseModel):
+    """管理员重置密码请求；密码为前端传输的 SHA256 hex。"""
+    new_password: str = Field(..., min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+
+
 class AdminUserResponse(BaseModel):
     """用户响应"""
     user_id: str
