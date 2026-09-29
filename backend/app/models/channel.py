@@ -89,11 +89,11 @@ class Channel(Base):
     priority = Column(Integer, default=0, comment="优先级（数值越大优先级越高）")
     timeout = Column(Integer, default=60, comment="请求超时时间（秒）")
     upstream_format = Column(
-        String(32), default="chat", nullable=False,
+        String(32), default="chat", server_default="chat", nullable=False,
         comment="上游API格式: chat/anthropic/gemini/responses/auto/custom"
     )
     auth_type = Column(
-        String(32), default="auto", nullable=False,
+        String(32), default="auto", server_default="auto", nullable=False,
         comment="认证方式: auto/bearer/api_key/azure_api_key/query_key"
     )
     auth_headers = Column(

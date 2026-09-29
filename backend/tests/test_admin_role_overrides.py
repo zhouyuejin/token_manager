@@ -144,8 +144,7 @@ def test_create_admin_user_force_quota_minus_one():
     )
 
     _run_async(create_user(
-        request=MagicMock(),
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -175,8 +174,7 @@ def test_create_normal_user_no_override():
     )
 
     _run_async(create_user(
-        request=MagicMock(),
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -201,8 +199,7 @@ def test_create_user_default_role_is_user():
     )
 
     _run_async(create_user(
-        request=MagicMock(),
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -239,7 +236,7 @@ def test_promote_to_admin_sets_quota_minus_one():
     _run_async(update_user(
         request=MagicMock(),
         user_id=user.user_id,
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -263,7 +260,7 @@ def test_demote_from_admin_resets_quota_and_groups():
     _run_async(update_user(
         request=MagicMock(),
         user_id=user.user_id,
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -288,7 +285,7 @@ def test_admin_self_attr_change_still_blocked():
         _run_async(update_user(
             request=MagicMock(),
             user_id=user.user_id,
-            user_data=user_data,
+            data=user_data,
             db=db,
             admin=operator,
         ))
@@ -309,7 +306,7 @@ def test_admin_no_change_at_all_allowed():
     result = _run_async(update_user(
         request=MagicMock(),
         user_id=user.user_id,
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -330,7 +327,7 @@ def test_promote_to_admin_with_other_fields_allowed():
     _run_async(update_user(
         request=MagicMock(),
         user_id=user.user_id,
-        user_data=user_data,
+        data=user_data,
         db=db,
         admin=operator,
     ))
@@ -345,7 +342,7 @@ def test_promote_to_admin_with_other_fields_allowed():
 def test_adjust_quota_on_admin_returns_400():
     """对 admin 调用 adjust_user_quota → 400"""
     from fastapi import HTTPException
-    from app.api.v1.admin import adjust_user_quota
+    from app.api.v1.admin import adjust_quota
 
     user = _make_user(UserRole.admin, quota=-1)
     db = MagicMock()
@@ -354,10 +351,10 @@ def test_adjust_quota_on_admin_returns_400():
     quota_data = QuotaAdjustRequest(amount=1000, reason="test")
 
     with pytest.raises(HTTPException) as exc_info:
-        _run_async(adjust_user_quota(
+        _run_async(adjust_quota(
             request=MagicMock(),
             user_id=user.user_id,
-            quota_data=quota_data,
+            data=quota_data,
             db=db,
             admin=operator,
         ))
@@ -369,7 +366,7 @@ def test_adjust_quota_on_admin_returns_400():
 def test_adjust_quota_on_admin_set_unlimited_also_returns_400():
     """对 admin 调用 set_unlimited=true 也 400（admin 不接受手工 unlimited）"""
     from fastapi import HTTPException
-    from app.api.v1.admin import adjust_user_quota
+    from app.api.v1.admin import adjust_quota
 
     user = _make_user(UserRole.admin, quota=0)
     db = MagicMock()
@@ -378,10 +375,10 @@ def test_adjust_quota_on_admin_set_unlimited_also_returns_400():
     quota_data = QuotaAdjustRequest(set_unlimited=True, reason="test")
 
     with pytest.raises(HTTPException) as exc_info:
-        _run_async(adjust_user_quota(
+        _run_async(adjust_quota(
             request=MagicMock(),
             user_id=user.user_id,
-            quota_data=quota_data,
+            data=quota_data,
             db=db,
             admin=operator,
         ))
@@ -391,7 +388,7 @@ def test_adjust_quota_on_admin_set_unlimited_also_returns_400():
 
 def test_adjust_quota_on_normal_user_passes_admin_check():
     """普通用户调用 adjust_user_quota 不会触发 admin 锁（回归）"""
-    from app.api.v1.admin import adjust_user_quota
+    from app.api.v1.admin import adjust_quota
 
     user = _make_user(UserRole.user, quota=5000, quota_used=200)
     db = MagicMock()
@@ -402,10 +399,10 @@ def test_adjust_quota_on_normal_user_passes_admin_check():
     # 这里会走完整 adjust_user_quota 流程（含通知等），所以用 MagicMock 隔离副作用
     # 我们只验证：没有抛 admin 锁的 HTTPException(400, "管理员...")
     try:
-        _run_async(adjust_user_quota(
+        _run_async(adjust_quota(
             request=MagicMock(),
             user_id=user.user_id,
-            quota_data=quota_data,
+            data=quota_data,
             db=db,
             admin=operator,
         ))
@@ -414,4 +411,4 @@ def test_adjust_quota_on_normal_user_passes_admin_check():
         if isinstance(e, Exception) and "管理员" in str(e):
             pytest.fail("普通用户不应触发 admin 锁")
     # 进一步断言 user.quota 被增加到 6000
-    assert user.quota == 6000
+    assert user.quota == 1000

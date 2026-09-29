@@ -100,15 +100,18 @@ def test_user_cost_dashboard_filters_own_key(db, scope):
     db.add_all([
         UsageLog(log_id='a', user_id='owner', key_id='key-a', project_id='p', department_id='d',
                  channel_id='channel-a', model='priced', prompt_tokens=10, completion_tokens=10,
-                 total_tokens=20, cost_usd=Decimal('0.02'), latency_ms=10, status_code=200),
+                 total_tokens=20, cost_usd=Decimal('0.02'), latency_ms=10, status_code=200,
+                 created_at=datetime.now()),
         UsageLog(log_id='b', user_id='owner', key_id='key-b', project_id='p', department_id='d',
                  channel_id='channel-b', model='priced', prompt_tokens=20, completion_tokens=20,
-                 total_tokens=40, cost_usd=Decimal('0.04'), latency_ms=20, status_code=200),
+                 total_tokens=40, cost_usd=Decimal('0.04'), latency_ms=20, status_code=200,
+                 created_at=datetime.now()),
     ])
+    db.flush()
     db.commit()
     result = run_async(get_usage_stats(
         start_date='2000-01-01', end_date='2100-01-01', department_id=None, project_id=None,
-        key_id='key-a', model=None, channel_id=None, current_user=owner, db=db))
+        key_id='key-a', model=None, channel_id=None, api_type=None, current_user=owner, db=db))
     assert result.total_tokens == 20
     assert result.total_cost == 0.02
     assert result.avg_latency_ms == 10
@@ -372,6 +375,7 @@ def test_budget_block_reaches_all_four_entrypoints(db, scope, monkeypatch, chat,
     @app.middleware('http')
     async def auth(request, call_next):
         request.state.user, request.state.api_key = user, key
+        request.state.request_id = 'req_test'
         return await call_next(request)
     response = TestClient(app).post('/api/conv/messages' if chat else '/api/chat/completions', json={
         'model': 'priced', 'messages': [{'role': 'user', 'content': 'hi'}], 'max_tokens': 100, 'stream': stream

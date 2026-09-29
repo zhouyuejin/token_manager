@@ -1,39 +1,31 @@
-"""
-测试 ModelGroup 与 ModelMapping 的多对多关系（新 ORM）。
-
-数据库：MySQL token_db_test（与生产一致）。
-覆盖 §4.1：ModelGroup.model_mappings / ModelMapping.model_groups 关系、
-唯一约束、级联删除、disabled 模型可绑定、数据迁移函数。
-"""
+"""当前 ModelGroup 与 Model 关联表约束。"""
 import os
+
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
-
-import app.models  # noqa: F401, E402
+import app.models  # noqa: F401
 from app.core.database import Base
-from app.models.model_group import ModelGroup, ModelGroupStatus, migrate_provider_group_bindings_to_models
-from app.models.provider import Provider, ProviderType, ProviderStatus
-from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.model import Model, ModelStatus
+from app.models.model_group import ModelGroup, ModelGroupStatus
 
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
     "mysql+pymysql://token_user:token_password@mysql:3306/token_db_test?charset=utf8mb4",
 )
-
-_engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
-Base.metadata.create_all(bind=_engine)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+Base.metadata.create_all(bind=engine)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def _truncate_all(db: Session):
-    """按外键依赖反向截断。"""
     for table in reversed(Base.metadata.sorted_tables):
-        db.execute(text(f"SET FOREIGN_KEY_CHECKS=0"))
+        db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         db.execute(text(f"TRUNCATE TABLE {table.name}"))
-        db.execute(text(f"SET FOREIGN_KEY_CHECKS=1"))
+        db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
     db.commit()
 
 
@@ -48,137 +40,69 @@ def db():
 
 
 @pytest.fixture
-def provider(db: Session) -> Provider:
-    p = Provider(
-        provider_id="prov_a",
-        name="Test Provider A",
-        type=ProviderType.openai,
-        endpoint="https://api.test.com/v1/chat/completions",
-        api_key="sk-test",
-        status=ProviderStatus.active,
-    )
-    db.add(p)
-    db.commit()
-    db.refresh(p)
-    return p
-
-
-@pytest.fixture
 def group(db: Session) -> ModelGroup:
-    g = ModelGroup(
-        group_id="grp_a",
-        name="Group A",
-        status=ModelGroupStatus.active,
-        is_default=1,
-    )
-    db.add(g)
+    group = ModelGroup(group_id="grp_a", name="Group A", status=ModelGroupStatus.active, is_default=1)
+    db.add(group)
     db.commit()
-    db.refresh(g)
-    return g
+    return group
 
 
 @pytest.fixture
-def models_in_provider(db: Session, provider: Provider):
-    m1 = ModelMapping(model_id="model-a", provider_id=provider.provider_id, provider_model="model-a", status=ModelMappingStatus.active)
-    m2 = ModelMapping(model_id="model-b", provider_id=provider.provider_id, provider_model="model-b", status=ModelMappingStatus.active)
-    db.add_all([m1, m2])
+def models(db: Session):
+    first, second = Model(model_id="model-a"), Model(model_id="model-b")
+    db.add_all([first, second])
     db.commit()
-    return m1, m2
+    return first, second
 
 
-# ---- 关系 / 约束 / 级联 ----
-
-def test_group_model_mappings_relationship_exists(db: Session, group: ModelGroup, models_in_provider):
-    """ModelGroup.model_mappings 与 ModelMapping 多对多联通"""
-    m1, _ = models_in_provider
-    group.model_mappings.append(m1)
+def test_group_models_relationship_is_bidirectional(db: Session, group: ModelGroup, models):
+    first, _ = models
+    group.models.append(first)
     db.commit()
 
-    fresh = db.query(ModelGroup).filter(ModelGroup.group_id == group.group_id).first()
-    bound_ids = {m.model_id for m in fresh.model_mappings}
-    assert bound_ids == {"model-a"}
+    fresh = db.query(ModelGroup).filter_by(group_id=group.group_id).one()
+    assert {model.model_id for model in fresh.models} == {"model-a"}
+    assert [item.group_id for item in db.query(Model).filter_by(model_id="model-a").one().model_groups] == ["grp_a"]
 
 
-def test_model_model_groups_relationship_exists(db: Session, group: ModelGroup, models_in_provider):
-    """ModelMapping.model_groups 联通"""
-    m1, m2 = models_in_provider
-    m1.model_groups.append(group)
+def test_group_can_bind_multiple_models(group: ModelGroup, models):
+    group.models = list(models)
+
+    assert sorted(model.model_id for model in group.models) == ["model-a", "model-b"]
+
+
+def test_unique_group_model_constraint(db: Session, group: ModelGroup, models):
+    model, _ = models
+    group.models.append(model)
     db.commit()
 
-    fresh = db.query(ModelMapping).filter(ModelMapping.model_id == "model-a").first()
-    bound_group_ids = {g.group_id for g in fresh.model_groups}
-    assert bound_group_ids == {"grp_a"}
-    other = db.query(ModelMapping).filter(ModelMapping.model_id == "model-b").first()
-    assert other.model_groups == []
-
-
-def test_pair_can_bind_two_distinct_models(db: Session, group: ModelGroup, models_in_provider):
-    """同一分组可绑定多个模型"""
-    m1, m2 = models_in_provider
-    group.model_mappings = [m1, m2]
-    db.commit()
-
-    fresh = db.query(ModelGroup).filter(ModelGroup.group_id == group.group_id).first()
-    bound_ids = sorted(m.model_id for m in fresh.model_mappings)
-    assert bound_ids == ["model-a", "model-b"]
-
-
-def test_unique_group_model_constraint(db: Session, group: ModelGroup, models_in_provider):
-    """(group_id, model_id) UNIQUE：直接 INSERT 重复行应抛 IntegrityError"""
-    m1, _ = models_in_provider
-    group.model_mappings.append(m1)
-    db.commit()
-
-    with pytest.raises(Exception) as ei:
+    with pytest.raises(IntegrityError):
         db.execute(text(
             "INSERT INTO model_group_model_mappings (group_id, model_id) VALUES (:g, :m)"
         ), {"g": "grp_a", "m": "model-a"})
         db.commit()
-    assert "Duplicate" in str(ei.value) or "duplicate" in str(ei.value) or "1062" in str(ei.value)
     db.rollback()
 
 
-def test_deleting_group_cascades_associations(db: Session, group: ModelGroup, models_in_provider):
-    """删除分组时，关联行级联清理（MySQL FK ON DELETE CASCADE）"""
-    m1, m2 = models_in_provider
-    group.model_mappings = [m1, m2]
+def test_deleting_group_cascades_associations(db: Session, group: ModelGroup, models):
+    group.models = list(models)
     db.commit()
-
-    before = db.execute(text(
+    assert db.execute(text(
         "SELECT COUNT(*) FROM model_group_model_mappings WHERE group_id='grp_a'"
-    )).scalar()
-    assert before == 2
+    )).scalar() == 2
 
     db.delete(group)
     db.commit()
 
-    after = db.execute(text(
+    assert db.execute(text(
         "SELECT COUNT(*) FROM model_group_model_mappings WHERE group_id='grp_a'"
-    )).scalar()
-    assert after == 0
+    )).scalar() == 0
 
 
-def test_disabled_model_can_be_bound_to_group(db: Session, group: ModelGroup, provider: Provider):
-    """规则 §2.9：允许绑定 disabled 模型"""
-    m = ModelMapping(
-        model_id="model-disabled",
-        provider_id=provider.provider_id,
-        provider_model="model-disabled",
-        status=ModelMappingStatus.disabled,
-    )
-    db.add(m)
+def test_disabled_model_can_be_bound(db: Session, group: ModelGroup):
+    model = Model(model_id="model-disabled", status=ModelStatus.disabled)
+    db.add(model)
+    group.models.append(model)
     db.commit()
 
-    group.model_mappings.append(m)
-    db.commit()
-
-    fresh = db.query(ModelGroup).filter(ModelGroup.group_id == group.group_id).first()
-    bound_ids = {mm.model_id for mm in fresh.model_mappings}
-    assert "model-disabled" in bound_ids
-
-
-# ---- 数据迁移 ----
-
-
-
-
+    assert [item.model_id for item in db.query(ModelGroup).filter_by(group_id="grp_a").one().models] == ["model-disabled"]

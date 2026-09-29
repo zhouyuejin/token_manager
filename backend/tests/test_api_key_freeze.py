@@ -217,8 +217,8 @@ def test_upstream_4xx_observed_even_when_failover_succeeds(session, redis_client
     proxy = ProxyService(session)
     key = session.query(ApiKey).first()
     user = session.query(User).filter(User.user_id == 'owner').first()
-    candidates = [(SimpleNamespace(channel_id='one'), SimpleNamespace(upstream_model='gpt'), 'upstream'),
-                  (SimpleNamespace(channel_id='two'), SimpleNamespace(upstream_model='gpt'), 'upstream')]
+    candidates = [(SimpleNamespace(channel_id='one', cooldown_until=None), SimpleNamespace(upstream_model='gpt'), 'upstream'),
+                  (SimpleNamespace(channel_id='two', cooldown_until=None), SimpleNamespace(upstream_model='gpt'), 'upstream')]
     monkeypatch.setattr(proxy, 'select_candidates', lambda *args: candidates)
     results = iter([{'success': False, 'status_code': 400}, {'success': True, 'status_code': 200, 'channel_id': 'two'}])
     monkeypatch.setattr(proxy, '_forward_one', lambda *args: next(results))
@@ -277,6 +277,7 @@ def test_proxy_rejections_are_counted(session, redis_client, monkeypatch, kind):
         monkeypatch.setattr(proxy, 'check_quota', lambda *args: {'allowed': True})
         monkeypatch.setattr(api, 'check_proxy_rate_limit', lambda *args: {'allowed': False, 'retry_after_ms': 1500})
     request = Request({'type': 'http', 'headers': []})
+    request.state.request_id = 'req_test'
     key = session.query(ApiKey).first()
     request.state.api_key = key
     request.state.user = session.query(User).filter(User.user_id == 'owner').first()

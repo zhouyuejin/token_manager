@@ -64,6 +64,14 @@ def setup_project(client, name='项目', user_ids=None):
     return project
 
 
+def _persist_key(db, project_id, key_id='key_test'):
+    key = ApiKey(key_id=key_id, user_id='owner', api_key=f'tmk_{key_id}',
+                 key_name='key', project_id=project_id, status='active')
+    db.add(key)
+    db.commit()
+    return {'key_id': key_id, 'project_id': project_id}
+
+
 def test_key_creation_requires_authorized_active_project(ctx):
     db, client = ctx
     assert client.post('/keys', json={'name': 'missing'}).status_code == 422
@@ -73,7 +81,8 @@ def test_key_creation_requires_authorized_active_project(ctx):
     client.put(f"/projects/admin/{project['project_id']}/users", json={'user_ids': ['owner']})
     result = client.post('/keys', json=payload)
     assert result.status_code == 200, result.text
-    assert result.json()['project_id'] == project['project_id']
+    assert result.json()['status'] == 'pending'
+    assert db.query(ApiKey).count() == 0
     assert client.get('/projects').json()['items'][0]['project_id'] == project['project_id']
     client.put(f"/projects/admin/{project['project_id']}", json={'name': '项目', 'dept_id': project['dept_id'], 'status': 'disabled'})
     assert client.post('/keys', json=payload).status_code == 403
@@ -83,7 +92,7 @@ def test_update_rejects_clear_and_unassigned_project_rotate_preserves(ctx):
     db, client = ctx
     p1 = setup_project(client, user_ids=['owner'])
     p2 = setup_project(client)
-    key = client.post('/keys', json={'name': 'key', 'project_id': p1['project_id']}).json()
+    key = _persist_key(db, p1['project_id'])
     key_id = key['key_id']
     assert client.put(f'/keys/{key_id}', json={'project_id': None}).status_code == 422
     assert client.put(f'/keys/admin/{key_id}', json={'project_id': p2['project_id']}).status_code == 403
@@ -111,7 +120,7 @@ def test_delete_only_allows_unused_projects_and_departments(ctx):
 def test_delete_project_rejects_existing_key_to_preserve_attribution(ctx):
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
-    assert client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).status_code == 200
+    _persist_key(db, project['project_id'])
     client.put(f"/projects/admin/{project['project_id']}/users", json={'user_ids': []})
 
     response = client.delete(f"/projects/admin/{project['project_id']}")
@@ -122,7 +131,7 @@ def test_delete_project_rejects_existing_key_to_preserve_attribution(ctx):
 def test_usage_snapshots_cost_department_and_failure_zero(ctx):
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
-    key = client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).json()
+    key = _persist_key(db, project['project_id'])
     db.add(Model(model_id='model', price_per_1k_input=Decimal('1'), price_per_1k_output=Decimal('2')))
     db.commit()
     service = ProxyService(db)
@@ -178,7 +187,7 @@ def test_stream_metadata_keeps_channel_result_and_usage(ctx, monkeypatch, status
     from app.models.channel import Channel, ChannelType
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
-    key_data = client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).json()
+    key_data = _persist_key(db, project['project_id'])
     key = db.query(ApiKey).filter_by(key_id=key_data['key_id']).one()
     user = db.query(User).filter_by(user_id='owner').one()
     channel = Channel(channel_id='selected', name='selected', type=ChannelType.openai, endpoint='https://upstream.test', timeout=10, upstream_format='chat', auth_type='bearer')
@@ -244,7 +253,7 @@ def test_request_attribution_stays_after_key_change(ctx):
     db, client = ctx
     p1 = setup_project(client, user_ids=['owner'])
     p2 = setup_project(client, user_ids=['owner'])
-    key = client.post('/keys', json={'name': 'key', 'project_id': p1['project_id']}).json()
+    key = _persist_key(db, p1['project_id'])
     service = ProxyService(db)
     service.capture_usage_attribution(key['key_id'])
     client.put(f"/keys/{key['key_id']}", json={'project_id': p2['project_id']})
@@ -258,7 +267,7 @@ def test_failover_other_4xx_is_logged_with_attribution(ctx, monkeypatch):
     import app.services.proxy_service as module
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
-    key_data = client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).json()
+    key_data = _persist_key(db, project['project_id'])
     key = db.query(ApiKey).filter_by(key_id=key_data['key_id']).one()
     user = db.query(User).filter_by(user_id='owner').one()
     service = ProxyService(db)
@@ -278,7 +287,7 @@ def test_request_price_and_mixed_legacy_cost(ctx):
     from app.models.model import PriceType
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
-    key = client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).json()
+    key = _persist_key(db, project['project_id'])
     db.add_all([
         Model(model_id='request', price_type=PriceType.request, price_per_request=Decimal('0.3')),
         Model(model_id='token', price_per_1k_input=Decimal('1'), price_per_1k_output=Decimal('2')),
@@ -314,7 +323,7 @@ def test_proxy_stream_route_persists_channel_attribution_and_cost(ctx, monkeypat
     from app.models.channel import Channel, ChannelType
     db, client = ctx
     project = setup_project(client, user_ids=['owner'])
-    key_data = client.post('/keys', json={'name': 'key', 'project_id': project['project_id']}).json()
+    key_data = _persist_key(db, project['project_id'])
     key = db.query(ApiKey).filter_by(key_id=key_data['key_id']).one()
     user = db.query(User).filter_by(user_id='owner').one()
     user.quota = -1
@@ -339,6 +348,7 @@ def test_proxy_stream_route_persists_channel_attribution_and_cost(ctx, monkeypat
 
     @stream_app.middleware('http')
     async def inject_auth(request, call_next):
+        request.state.request_id = 'req_test'
         request.state.user = user
         request.state.api_key = key
         return await call_next(request)

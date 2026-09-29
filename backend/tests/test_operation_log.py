@@ -34,7 +34,6 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
-    yield
     db = TestingSessionLocal()
     try:
         for table in reversed(Base.metadata.sorted_tables):
@@ -44,6 +43,7 @@ def setup_db():
         db.commit()
     finally:
         db.close()
+    yield
 
 
 def _create_admin(db, username="admin", email="admin@example.com", password="adminpass"):
@@ -128,7 +128,7 @@ class TestCreateUserOperationLog:
 
             detail = json.loads(log.detail)
             assert detail["username"] == "newuser"
-            assert detail["email"] == "newuser@example.com"
+            assert detail["email"] == "[REDACTED_EMAIL]"
             assert detail["role"] == "user"
             assert detail["quota"] == 5000
         finally:
@@ -203,7 +203,7 @@ class TestDeleteUserOperationLog:
             assert log.target_type == "user"
             assert log.target_id == user_id
             detail = json.loads(log.detail)
-            assert detail["username"] == "deluser"
+            assert detail == {}
         finally:
             db.close()
 

@@ -10,10 +10,22 @@ import app.models  # noqa: F401, E402
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
-from app.models.provider import Provider, ProviderType, ProviderStatus
-from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.model import Model, ModelStatus
+from app.models.channel import Channel, ChannelType, ChannelStatus
+from app.models.model_channel import ModelChannel
 from app.services.proxy_service import ProxyService
 # db fixture 由 conftest.py 提供（MySQL）
+
+
+@pytest.fixture
+def active_channel(db: Session) -> Channel:
+    channel = Channel(
+        channel_id="ch_active", name="Active", type=ChannelType.openai,
+        endpoint="https://a/", api_key="k", status=ChannelStatus.active,
+    )
+    db.add(channel)
+    db.commit()
+    return channel
 
 
 @pytest.fixture
@@ -59,75 +71,23 @@ def non_default_active_group(db: Session) -> ModelGroup:
 
 
 @pytest.fixture
-def provider_with_group(db: Session, default_active_group: ModelGroup) -> Provider:
-    """Provider with a model mapping that belongs to the default group."""
-    p = Provider(
-        provider_id="prov_test",
-        name="Test Provider",
-        type=ProviderType.openai,
-        endpoint="https://api.test.com/v1/chat/completions",
-        api_key="sk-test",
-        status=ProviderStatus.active,
-    )
-    db.add(p)
+def model_in_default_group(db: Session, default_active_group: ModelGroup, active_channel) -> Model:
+    model = Model(model_id="gpt-4", status=ModelStatus.active, model_groups=[default_active_group])
+    db.add(model)
     db.flush()
-    # Create model mapping and associate with the default group
-    m = ModelMapping(
-        model_id="gpt-4",
-        provider_id="prov_test",
-        provider_model="gpt-4",
-        status=ModelMappingStatus.active,
-    )
-    db.add(m)
-    db.flush()
-    m.model_groups.append(default_active_group)
+    db.add(ModelChannel(model_id=model.model_id, channel_id=active_channel.channel_id, upstream_model=model.model_id))
     db.commit()
-    db.refresh(p)
-    return p
+    return model
 
 
 @pytest.fixture
-def provider_no_default_group(db: Session, non_default_active_group: ModelGroup) -> Provider:
-    """Provider with a model mapping in a non-default group (used for denial scenarios)."""
-    p = Provider(
-        provider_id="prov_no_default",
-        name="Provider No Default",
-        type=ProviderType.openai,
-        endpoint="https://api.test2.com/v1/chat/completions",
-        api_key="sk-test2",
-        status=ProviderStatus.active,
-    )
-    db.add(p)
+def model_in_non_default_group(db: Session, non_default_active_group: ModelGroup, active_channel) -> Model:
+    model = Model(model_id="gpt-3.5", status=ModelStatus.active, model_groups=[non_default_active_group])
+    db.add(model)
     db.flush()
-    # Create model mapping and associate with the non-default group
-    m = ModelMapping(
-        model_id="gpt-3.5",
-        provider_id="prov_no_default",
-        provider_model="gpt-3.5-turbo",
-        status=ModelMappingStatus.active,
-    )
-    db.add(m)
-    db.flush()
-    m.model_groups.append(non_default_active_group)
+    db.add(ModelChannel(model_id=model.model_id, channel_id=active_channel.channel_id, upstream_model=model.model_id))
     db.commit()
-    db.refresh(p)
-    return p
-
-
-@pytest.fixture
-def model_mapping_for_provider(
-    db: Session, provider_with_group: Provider
-) -> ModelMapping:
-    m = ModelMapping(
-        model_id="gpt-4",
-        provider_id=provider_with_group.provider_id,
-        provider_model="gpt-4",
-        status=ModelMappingStatus.active,
-    )
-    db.add(m)
-    db.commit()
-    db.refresh(m)
-    return m
+    return model
 
 
 @pytest.fixture
@@ -246,41 +206,22 @@ def test_get_effective_multiple_default_groups(db: Session, user_no_groups):
 
 def test_check_access_denied_no_groups(
     db: Session, non_default_active_group, user_no_groups, api_key,
-    provider_no_default_group
+    model_in_non_default_group
 ):
-    """User has no effective groups, provider uses non-default group → denied"""
-    # Create model mapping for this provider
-    m = ModelMapping(
-        model_id="gpt-4",
-        provider_id=provider_no_default_group.provider_id,
-        provider_model="gpt-4",
-        status=ModelMappingStatus.active,
-    )
-    db.add(m)
-    db.commit()
-
+    """User has no effective groups and the model belongs to a non-default group → denied"""
     service = ProxyService(db)
-    result = service.check_model_group_access(api_key, user_no_groups, "gpt-4")
+    result = service.check_model_group_access(api_key, user_no_groups, "gpt-3.5")
     assert result["allowed"] is False
     assert result["message"] == "当前 Key 未被授权访问该模型"
 
 
 def test_check_access_denied_no_group_leak(
     db: Session, non_default_active_group, user_no_groups, api_key,
-    provider_no_default_group
+    model_in_non_default_group
 ):
     """GC-3: Error message must not leak group names when access is denied"""
-    m = ModelMapping(
-        model_id="gpt-4",
-        provider_id=provider_no_default_group.provider_id,
-        provider_model="gpt-4",
-        status=ModelMappingStatus.active,
-    )
-    db.add(m)
-    db.commit()
-
     service = ProxyService(db)
-    result = service.check_model_group_access(api_key, user_no_groups, "gpt-4")
+    result = service.check_model_group_access(api_key, user_no_groups, "gpt-3.5")
     assert result["allowed"] is False
     msg = result["message"]
     assert "default" not in msg.lower()
@@ -291,12 +232,10 @@ def test_check_access_denied_no_group_leak(
 
 
 def test_check_access_model_not_found(
-    db: Session, api_key, user_no_groups, default_active_group, provider_with_group
+    db: Session, api_key, user_no_groups, model_in_default_group
 ):
     """Unknown model → denied with generic message"""
     service = ProxyService(db)
     result = service.check_model_group_access(api_key, user_no_groups, "nonexistent-model")
     assert result["allowed"] is False
     assert result["message"] == "当前 Key 未被授权访问该模型"
-
-
