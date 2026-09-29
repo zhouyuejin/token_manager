@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Alert, Button, Card, Col, Empty, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Card, Col, Empty, Form, InputNumber, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import useSWR from 'swr'
 import { useSwrData } from '../../hooks/useSwr'
@@ -7,6 +7,9 @@ import { useThemeToken } from '../../theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { WriteOnly } from '../../components/WriteOnly'
 import { getChannelHealth, recoverChannelHealth, ChannelHealth, ChannelHealthWindow } from '../../api/channels'
+import { getAlertRules, updateAlertRules, AlertRuleConfig } from '../../api/alerts'
+import { useAuthStore } from '../../store/auth'
+import { hasPermission } from '../../utils/adminPermissions.mjs'
 
 const windowOptions = [
   { value: '5m', label: '最近 5 分钟' },
@@ -38,11 +41,19 @@ const WindowMetrics = ({ window }: { window: ChannelHealthWindow }) => (
 
 const HealthDashboard = () => {
   const [windowName, setWindowName] = useState<'5m' | '1h' | '24h'>('5m')
+  const [form] = Form.useForm<AlertRuleConfig>()
+  const [savingRules, setSavingRules] = useState(false)
   const { data, isLoading, mutate } = useSwrData<{ items: ChannelHealth[] }>('/admin/health/channels')
   const { data: systemHealth, error: systemHealthError, mutate: refreshSystemHealth } = useSWR('/health', fetchSystemHealth, { refreshInterval: 30000, shouldRetryOnError: false })
+  const { data: alertRules, error: alertRulesError, isLoading: alertRulesLoading, mutate: mutateAlertRules } = useSWR('/admin/alerts/rules', getAlertRules)
   const { token } = useThemeToken()
   const message = useMessage()
+  const permissions = useAuthStore((state) => state.user?.permissions || [])
+  const canEditRules = hasPermission(permissions, 'admin:write')
   const items = data?.items || []
+  useEffect(() => {
+    if (alertRules) form.setFieldsValue(alertRules)
+  }, [alertRules, form])
   const selectedWindow = useMemo(() => items.reduce((acc, item) => {
     const current = item.windows[windowName]
     acc.requests += current.requests
@@ -58,6 +69,20 @@ const HealthDashboard = () => {
       mutate()
     } catch {
       message.error('恢复 cooldown 失败')
+    }
+  }
+
+  const saveAlertRules = async (values: AlertRuleConfig) => {
+    setSavingRules(true)
+    try {
+      const saved = await updateAlertRules(values)
+      form.setFieldsValue(saved)
+      await mutateAlertRules(saved, false)
+      message.success('告警规则保存成功')
+    } catch {
+      message.error('告警规则保存失败')
+    } finally {
+      setSavingRules(false)
     }
   }
 
@@ -82,6 +107,32 @@ const HealthDashboard = () => {
       </Space>
       {systemHealth.status !== 'healthy' && <Alert type={systemHealth.status === 'unhealthy' ? 'error' : 'warning'} showIcon style={{ marginTop: 12 }} message="请先检查上方异常组件；上游探测和后台任务状态可在下方渠道明细中进一步排查。" />}
     </Card>}
+    <Card title="告警规则" loading={alertRulesLoading} style={{ marginBottom: 16 }}>
+      {alertRulesError ? <Alert type="error" showIcon message="告警规则加载失败" description="请刷新后重试。" /> : <Form form={form} layout="vertical" onFinish={saveAlertRules}>
+        <Row gutter={16}>
+          <Col xs={24} md={12}>
+            <Form.Item name="channel_error_rate_percent" label="渠道错误率阈值" extra="百分比（0–100%）；最近 5 分钟达到该值时触发。" rules={[{ required: true }]}>
+              <InputNumber min={0} max={100} step={1} disabled={!canEditRules} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="channel_error_min_requests" label="触发所需最小请求数" extra="整数（≥1）；统计最近 5 分钟的请求。" rules={[{ required: true }]}>
+              <InputNumber min={1} step={1} precision={0} disabled={!canEditRules} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="quota_remaining_percent" label="上游配额余量阈值" extra="百分比（0–100%）；余量小于或等于该值时触发。" rules={[{ required: true }]}>
+              <InputNumber min={0} max={100} step={1} disabled={!canEditRules} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item name="project_growth_multiplier" label="项目消费增长倍数" extra="倍数（>0）；比较最近 1 小时与此前 24 小时的平均每小时消费。" rules={[{ required: true }, { validator: (_, value) => value > 0 ? Promise.resolve() : Promise.reject(new Error('必须大于 0')) }]}>
+              <InputNumber min={0} step={0.1} disabled={!canEditRules} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="project_growth_min_cost_usd" label="项目最小消费额" extra="美元（≥0）；最近 1 小时消费达到该值后才比较增长倍数。" rules={[{ required: true }]}>
+              <InputNumber min={0} step={0.01} disabled={!canEditRules} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <WriteOnly><Button type="primary" htmlType="submit" loading={savingRules} disabled={!alertRules}>保存告警规则</Button></WriteOnly>
+      </Form>}
+    </Card>
     <Row gutter={16} style={{ marginBottom: 16 }}>
       <Col xs={24} sm={8}><Card><Statistic title="请求数" value={selectedWindow.requests} /></Card></Col>
       <Col xs={24} sm={8}><Card><Statistic title="成功数" value={selectedWindow.successes} valueStyle={{ color: '#16a34a' }} /></Card></Col>
