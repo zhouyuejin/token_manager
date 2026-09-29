@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import String
+from sqlalchemy import inspect
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
@@ -65,17 +65,24 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        if connection.dialect.name == "mysql":
+            inspector = inspect(connection)
+            if not inspector.has_table("alembic_version"):
+                connection.exec_driver_sql(
+                    "CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL PRIMARY KEY)"
+                )
+            elif inspector.get_columns("alembic_version")[0]["type"].length < 64:
+                connection.exec_driver_sql(
+                    "ALTER TABLE alembic_version MODIFY COLUMN version_num VARCHAR(64) NOT NULL"
+                )
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            # Custom revision id column to support longer revision ids
-            # (e.g. "20260911_0924_add_channel_advanced_config" = 41 chars).
-            # Default is VARCHAR(32) which is too short for timestamped ids.
-            version_num=String(length=64),
         )
 
         with context.begin_transaction():
             context.run_migrations()
+        connection.commit()
 
 
 if context.is_offline_mode():
