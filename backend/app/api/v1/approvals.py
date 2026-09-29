@@ -33,6 +33,14 @@ def _service(db):
     })
 
 
+def _review_item(request):
+    item = {column.name: getattr(request, column.name) for column in request.__table__.columns}
+    if request.request_type == 'api_key':
+        item['payload'] = {key: value for key, value in item['payload'].items()
+                           if key not in {'result', 'secret_consumed'}}
+    return item
+
+
 @router.post('/quota')
 def create_quota_application(
     data: QuotaApplicationCreate,
@@ -179,14 +187,7 @@ def list_review_applications(
     if status and status not in {'pending', 'needs_info', 'approved', 'rejected', 'cancelled'}:
         raise HTTPException(422, '不支持的审批状态')
     requests = _service(db).list_review(reviewer, request_type, status, requester_user_id, project_id)
-    result = []
-    for request in requests:
-        item = {column.name: getattr(request, column.name) for column in request.__table__.columns}
-        if request.request_type == 'api_key':
-            item['payload'] = {key: value for key, value in item['payload'].items()
-                               if key not in {'result', 'secret_consumed'}}
-        result.append(item)
-    return result
+    return [_review_item(request) for request in requests]
 
 
 @router.get('/review/requesters')
@@ -207,7 +208,8 @@ def decide_application(
     request_id: str, data: ApprovalDecision,
     db: Session = Depends(get_db), reviewer: User = Depends(get_current_user),
 ):
-    return _service(db).decide(reviewer, request_id, data.decision, data.comment)
+    request = _service(db).decide(reviewer, request_id, data.decision, data.comment)
+    return _review_item(request) if request.request_type == 'api_key' else request
 
 
 @router.post('/{request_id}/cancel')

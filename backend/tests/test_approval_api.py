@@ -1,7 +1,13 @@
+import json
+
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
 
 from app.api.v1 import approvals
+from app.core.database import get_db
+from app.dependencies import get_current_user
+from app.models.api_key import ApiKey
 from app.models.approval import ApprovalRequest
 from app.models.notification import Notification, NotificationType
 from app.models.operation_log import OperationLog
@@ -241,3 +247,61 @@ def test_reviewer_history_never_returns_api_key_plaintext(db):
 
     assert result[0]['payload'] == {'project_id': 'project_one'}
     assert 'result' not in result[0]
+
+
+def test_approval_http_flow_applies_all_request_types_and_limits_key_reveal(db):
+    requester = add_user(db, 'requester')
+    owner = add_user(db, 'owner')
+    admin = add_user(db, 'admin', UserRole.admin)
+    requester.quota = 10
+    add_project(db, 'key_project', owner.user_id)
+    add_project(db, 'join_project', owner.user_id)
+    db.add(UserProject(user_id=requester.user_id, project_id='key_project'))
+    db.add(ModelGroup(group_id='group_one', name='可用分组', status=ModelGroupStatus.active))
+    db.commit()
+
+    app = FastAPI()
+    app.include_router(approvals.router, prefix='/approvals')
+    app.dependency_overrides[get_db] = lambda: db
+
+    def current_user(request: Request):
+        return db.query(User).filter_by(user_id=request.headers['x-user-id']).one()
+
+    app.dependency_overrides[get_current_user] = current_user
+    client = TestClient(app)
+
+    def post(path, user, data):
+        response = client.post(path, json=data, headers={'x-user-id': user.user_id})
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    key_request = post('/approvals/api-key', requester, {
+        'project_id': 'key_project', 'name': '联调', 'reason': '接口联调',
+    })
+    assert db.query(ApiKey).count() == 0
+    key_decision = post(f"/approvals/{key_request['request_id']}/decision", owner,
+                        {'decision': 'approved', 'comment': '同意'})
+    key = db.query(ApiKey).one()
+    assert key.api_key not in json.dumps(key_decision)
+    first = client.get('/approvals/mine', headers={'x-user-id': requester.user_id}).json()
+    assert first[0]['result']['api_key'] == key.api_key
+    second = client.get('/approvals/mine', headers={'x-user-id': requester.user_id}).json()
+    assert 'result' not in second[0]
+
+    quota = post('/approvals/quota', requester, {'amount': 7, 'reason': '需要额度'})
+    post(f"/approvals/{quota['request_id']}/decision", admin,
+         {'decision': 'approved', 'comment': '同意'})
+    db.refresh(requester)
+    assert requester.quota == 17
+
+    group = post('/approvals/model-group', requester, {'group_id': 'group_one', 'reason': '需要模型'})
+    post(f"/approvals/{group['request_id']}/decision", admin,
+         {'decision': 'approved', 'comment': '同意'})
+    db.refresh(requester)
+    assert 'group_one' in json.loads(requester.model_group_ids)
+
+    project = post('/approvals/project-access', requester,
+                   {'project_id': 'join_project', 'reason': '加入项目'})
+    post(f"/approvals/{project['request_id']}/decision", owner,
+         {'decision': 'approved', 'comment': '同意'})
+    assert db.query(UserProject).filter_by(user_id=requester.user_id, project_id='join_project').one()

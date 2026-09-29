@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 import pytest
+from fastapi.encoders import jsonable_encoder
 from fastapi import HTTPException
 
 from app.models.operation_log import OperationLog
@@ -271,8 +272,12 @@ def test_api_key_application_creates_key_only_after_approval_and_reveals_secret_
     assert request.approver_user_id == approver.user_id
     assert db.query(ApiKey).count() == 0
 
-    decide_application(request.request_id, ApprovalDecision(decision='approved', comment='同意'), db, approver)
+    decision = jsonable_encoder(decide_application(
+        request.request_id, ApprovalDecision(decision='approved', comment='同意'), db, approver,
+    ))
+    assert 'result' not in decision['payload']
     key = db.query(ApiKey).one()
+    assert key.api_key not in str(decision)
     assert key.user_id == requester.user_id
     assert key.project_id == 'key_project'
     assert key.ip_whitelist == '["203.0.113.10"]'
