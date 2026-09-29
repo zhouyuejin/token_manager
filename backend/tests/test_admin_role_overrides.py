@@ -171,9 +171,13 @@ def test_create_normal_user_no_override():
         role="user",
         quota=5000,
         model_group_ids=["mg_a"],
+        qps_limit=12,
+        rpm_limit=120,
+        tpm_limit=12000,
+        concurrency_limit=4,
     )
 
-    _run_async(create_user(
+    result = _run_async(create_user(
         data=user_data,
         db=db,
         admin=operator,
@@ -183,6 +187,8 @@ def test_create_normal_user_no_override():
     assert added.role == UserRole.user
     assert added.quota == 5000  # 不被覆盖
     assert added.model_group_ids == '["mg_a"]'  # 不被覆盖
+    assert (added.qps_limit, added.rpm_limit, added.tpm_limit, added.concurrency_limit) == (12, 120, 12000, 4)
+    assert (result.qps_limit, result.rpm_limit, result.tpm_limit, result.concurrency_limit) == (12, 120, 12000, 4)
 
 
 def test_create_user_default_role_is_user():
@@ -269,6 +275,24 @@ def test_demote_from_admin_resets_quota_and_groups():
     assert user.quota == 0
     assert user.model_group_ids == "[]"
     db.commit.assert_called()
+
+
+def test_update_user_rate_limits():
+    from app.api.v1.admin import update_user
+
+    user = _make_user(UserRole.user)
+    db = _find_existing_user(user)
+    operator = _make_user(UserRole.admin)
+
+    _run_async(update_user(
+        request=MagicMock(),
+        user_id=user.user_id,
+        data=AdminUserUpdate(qps_limit=8, rpm_limit=60, tpm_limit=6000, concurrency_limit=2),
+        db=db,
+        admin=operator,
+    ))
+
+    assert (user.qps_limit, user.rpm_limit, user.tpm_limit, user.concurrency_limit) == (8, 60, 6000, 2)
 
 
 def test_admin_self_attr_change_still_blocked():

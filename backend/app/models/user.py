@@ -1,7 +1,7 @@
 """
 用户模型
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Boolean
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Boolean, Integer
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -40,6 +40,10 @@ class User(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     last_login_at = Column(DateTime, nullable=True)
     model_group_ids = Column(Text, default='[]', comment="允许使用的模型分组ID列表，JSON数组")
+    qps_limit = Column(Integer, default=0, nullable=False, comment="用户每秒请求限制，0表示不限制")
+    rpm_limit = Column(Integer, default=0, nullable=False, comment="用户每分钟请求限制，0表示不限制")
+    tpm_limit = Column(Integer, default=0, nullable=False, comment="用户每分钟估算Token限制，0表示不限制")
+    concurrency_limit = Column(Integer, default=0, nullable=False, comment="用户并发请求限制，0表示不限制")
     
     # 通知设置
     quota_low_alert = Column(Boolean, default=True, comment="额度不足通知")

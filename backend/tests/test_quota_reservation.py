@@ -383,13 +383,15 @@ def test_consumption_notification_fires_below_legacy_threshold(db, account):
     assert user.quota_used == 508
 
 
-def test_stream_send_exception_closes_generator_and_releases(db, account):
+@pytest.mark.parametrize("disconnect", [False, True])
+def test_stream_end_closes_generator_and_releases(db, account, disconnect):
     import asyncio
     from app.api.streaming import QuotaStreamingResponse
     from app.models.quota_reservation import QuotaReservation
     from app.services.quota_reservation_service import QuotaReservationService
     rid = reserve(db, account)
     closed = []
+    concurrency_released = []
     def chunks():
         try:
             with QuotaReservationService(db).lease(rid):
@@ -397,20 +399,25 @@ def test_stream_send_exception_closes_generator_and_releases(db, account):
                 yield 'data: more\n\n'
         finally:
             closed.append(True)
-    response = QuotaStreamingResponse(chunks(), db.get_bind(), rid)
+    response = QuotaStreamingResponse(chunks(), db.get_bind(), rid,
+                                     on_close=lambda: concurrency_released.append(True))
     async def receive():
         await asyncio.Event().wait()
     async def send(message):
-        if message['type'] == 'http.response.body':
+        if disconnect and message['type'] == 'http.response.body':
             raise OSError('client disconnected')
     loop = asyncio.new_event_loop()
     try:
-        with pytest.raises(BaseException):
+        if disconnect:
+            with pytest.raises(BaseException):
+                loop.run_until_complete(response({'type': 'http', 'asgi': {'version': '3.0'}}, receive, send))
+        else:
             loop.run_until_complete(response({'type': 'http', 'asgi': {'version': '3.0'}}, receive, send))
     finally:
         loop.close()
     db.rollback()
     assert closed == [True]
+    assert concurrency_released == [True]
     assert db.get(QuotaReservation, rid).status == 'released'
 
 

@@ -142,7 +142,7 @@ async def chat_completions(
     estimated_tokens = sum(estimate_request(request_data))
 
     rate_limit_redis = get_rate_limit_redis_client()
-    rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, chat_request.model, estimated_tokens)
+    rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, user, chat_request.model, estimated_tokens)
     concurrency_key = rate_limit.get("concurrency_key")
     if not rate_limit["allowed"]:
         record_api_key_error(db, api_key, "rate_limit")
@@ -342,11 +342,16 @@ async def _proxy_protocol(request: Request, db: Session, path: str, api_type: st
         raise HTTPException(status_code=403, detail=group_check["message"])
     estimated_tokens = sum(estimate_request(request_data))
     rate_limit_redis = get_rate_limit_redis_client()
-    rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, model, estimated_tokens)
+    rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, user, model, estimated_tokens)
     concurrency_key = rate_limit.get("concurrency_key")
     if not rate_limit["allowed"]:
         record_api_key_error(db, api_key, "rate_limit")
-        raise HTTPException(status_code=429, detail=rate_limit.get("detail") or "请求过于频繁")
+        retry_after_ms = rate_limit.get("retry_after_ms", 1000)
+        raise HTTPException(
+            status_code=429,
+            detail=rate_limit.get("detail") or "请求过于频繁",
+            headers={"Retry-After": str(max(1, math.ceil(retry_after_ms / 1000)))},
+        )
     try:
         service.reserve_quota(user, api_key, model, request_data)
         result = service.forward_protocol_with_failover(

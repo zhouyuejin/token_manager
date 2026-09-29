@@ -17,6 +17,10 @@ class AdminUserCreate(BaseModel):
     role: str = "user"
     quota: int = 0
     model_group_ids: List[str] = Field(default_factory=list)
+    qps_limit: int = Field(default=0, ge=0)
+    rpm_limit: int = Field(default=0, ge=0)
+    tpm_limit: int = Field(default=0, ge=0)
+    concurrency_limit: int = Field(default=0, ge=0)
 
 
 class AdminUserUpdate(BaseModel):
@@ -27,6 +31,10 @@ class AdminUserUpdate(BaseModel):
     status: Optional[str] = None
     quota: Optional[int] = None
     model_group_ids: Optional[List[str]] = None
+    qps_limit: Optional[int] = Field(default=None, ge=0)
+    rpm_limit: Optional[int] = Field(default=None, ge=0)
+    tpm_limit: Optional[int] = Field(default=None, ge=0)
+    concurrency_limit: Optional[int] = Field(default=None, ge=0)
 
 
 class AdminPasswordReset(BaseModel):
@@ -45,6 +53,10 @@ class AdminUserResponse(BaseModel):
     quota_used: int
     created_at: UtcDateTime
     model_group_ids: List[str] = Field(default_factory=list)
+    qps_limit: int = 0
+    rpm_limit: int = 0
+    tpm_limit: int = 0
+    concurrency_limit: int = 0
 
     @computed_field
     @property
