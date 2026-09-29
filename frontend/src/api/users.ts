@@ -12,6 +12,10 @@ export interface User {
   unlimited: boolean
   created_at: string
   model_group_ids: string[]
+  qps_limit: number
+  rpm_limit: number
+  tpm_limit: number
+  concurrency_limit: number
 }
 
 export interface CreateUserParams {
@@ -21,6 +25,10 @@ export interface CreateUserParams {
   role?: string
   quota?: number
   model_group_ids?: string[]
+  qps_limit?: number
+  rpm_limit?: number
+  tpm_limit?: number
+  concurrency_limit?: number
 }
 
 export interface NotificationSettings {
@@ -55,6 +63,10 @@ export const updateUser = (userId: string, data: {
   status?: string
   role?: string
   model_group_ids?: string[]
+  qps_limit?: number
+  rpm_limit?: number
+  tpm_limit?: number
+  concurrency_limit?: number
 }) => put(`/admin/users/${userId}`, data)
 
 export const deleteUser = (userId: string) => del(`/admin/users/${userId}`)

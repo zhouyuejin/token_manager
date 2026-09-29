@@ -569,6 +569,18 @@ const UsersPage = () => {
               style={{ width: '100%', height: 40, borderRadius: 10 }}
             />
           </Form.Item>
+          <Form.Item name="qps_limit" label="用户级 QPS（0 不限）" initialValue={0}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="rpm_limit" label="用户级 RPM（0 不限）" initialValue={0}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="tpm_limit" label="用户级 TPM（0 不限）" initialValue={0}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="concurrency_limit" label="用户级并发（0 不限）" initialValue={0}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
           <Form.Item 
             name="model_group_ids" 
             label={<span style={{ color: token.colorTextSecondary }}>模型分组</span>}
@@ -675,6 +687,18 @@ const UsersPage = () => {
               <Select.Option value="active">启用</Select.Option>
               <Select.Option value="disabled">禁用</Select.Option>
             </Select>
+          </Form.Item>
+          <Form.Item name="qps_limit" label="用户级 QPS（0 不限）">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="rpm_limit" label="用户级 RPM（0 不限）">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="tpm_limit" label="用户级 TPM（0 不限）">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="concurrency_limit" label="用户级并发（0 不限）">
+            <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item 
             name="model_group_ids" 

@@ -437,7 +437,9 @@ async def list_users(
         user_id=u.user_id, username=u.username, email=u.email, role=u.role.value if hasattr(u.role, 'value') else str(u.role),
         status=u.status.value if hasattr(u.status, 'value') else str(u.status),
         quota=u.quota, quota_used=u.quota_used, created_at=u.created_at,
-        model_group_ids=json.loads(u.model_group_ids or '[]')
+        model_group_ids=json.loads(u.model_group_ids or '[]'),
+        qps_limit=u.qps_limit, rpm_limit=u.rpm_limit,
+        tpm_limit=u.tpm_limit, concurrency_limit=u.concurrency_limit,
     ) for u in users])
 
 
@@ -452,7 +454,9 @@ async def create_user(data: AdminUserCreate, request: Request = None, db: Sessio
         user_id=f"u_{secrets.token_hex(8)}", username=data.username, email=data.email,
         password=data.password, role=role,
         quota=-1 if role == UserRole.admin else data.quota,
-        model_group_ids="[]" if role == UserRole.admin else json.dumps(data.model_group_ids)
+        model_group_ids="[]" if role == UserRole.admin else json.dumps(data.model_group_ids),
+        qps_limit=data.qps_limit, rpm_limit=data.rpm_limit,
+        tpm_limit=data.tpm_limit, concurrency_limit=data.concurrency_limit,
     )
     db.add(user)
     db.commit()
@@ -466,7 +470,9 @@ async def create_user(data: AdminUserCreate, request: Request = None, db: Sessio
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
         quota=user.quota, quota_used=user.quota_used, created_at=user.created_at,
-        model_group_ids=json.loads(user.model_group_ids or '[]')
+        model_group_ids=json.loads(user.model_group_ids or '[]'),
+        qps_limit=user.qps_limit, rpm_limit=user.rpm_limit,
+        tpm_limit=user.tpm_limit, concurrency_limit=user.concurrency_limit,
     )
 
 
@@ -482,7 +488,9 @@ async def get_user(user_id: str, db: Session = Depends(get_db), admin: User = De
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
         quota=user.quota, quota_used=user.quota_used, created_at=user.created_at,
-        model_group_ids=json.loads(user.model_group_ids or '[]')
+        model_group_ids=json.loads(user.model_group_ids or '[]'),
+        qps_limit=user.qps_limit, rpm_limit=user.rpm_limit,
+        tpm_limit=user.tpm_limit, concurrency_limit=user.concurrency_limit,
     )
 
 
@@ -501,6 +509,8 @@ async def update_user(user_id: str, data: AdminUserUpdate, request: Request, db:
         raise HTTPException(status_code=400, detail="不能编辑管理员用户")
     new_role = changes.pop("role", None)
     for field, value in changes.items():
+        if field in {"qps_limit", "rpm_limit", "tpm_limit", "concurrency_limit"} and value is None:
+            continue
         if field == "model_group_ids" and value is not None:
             value = json.dumps(value)
         if getattr(user, field) != value:
