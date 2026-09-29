@@ -429,26 +429,31 @@ async def list_users(
 
 
 @router.post("/users")
-async def create_user(data: AdminUserCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+async def create_user(data: AdminUserCreate, request: Request = None, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """创建用户"""
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
     
+    role = UserRole(data.role)
     user = User(
         user_id=f"u_{secrets.token_hex(8)}", username=data.username, email=data.email,
-        password=data.password, role=UserRole(data.role),
-        quota=data.quota, model_group_ids=json.dumps(data.model_group_ids)
+        password=data.password, role=role,
+        quota=-1 if role == UserRole.admin else data.quota,
+        model_group_ids="[]" if role == UserRole.admin else json.dumps(data.model_group_ids)
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    record_operation(db=db, operator=admin, action="create", target_type="user", target_id=user.user_id,
+                     detail={"username": user.username, "email": user.email, "role": user.role.value,
+                             "quota": user.quota}, ip_address=extract_client_ip(request) if request else None)
     
     return AdminUserResponse(
         user_id=user.user_id, username=user.username, email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
         quota=user.quota, quota_used=user.quota_used, created_at=user.created_at,
-        model_group_ids=data.model_group_ids
+        model_group_ids=json.loads(user.model_group_ids or '[]')
     )
 
 
@@ -476,15 +481,21 @@ async def update_user(user_id: str, data: AdminUserUpdate, request: Request, db:
         raise HTTPException(status_code=404, detail="用户不存在")
     
     changed = {}
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if (user.role == UserRole.admin and admin.user_id == user.user_id
+            and any(value is not None for field, value in changes.items() if field != "role")
+            and changes.get("role") in (None, "admin")):
+        raise HTTPException(status_code=400, detail="不能编辑管理员用户")
+    new_role = changes.pop("role", None)
+    for field, value in changes.items():
         if field == "model_group_ids" and value is not None:
             value = json.dumps(value)
         if getattr(user, field) != value:
             changed[field] = value
             setattr(user, field, value)
     
-    if _apply_role_transition(user, data.role, changed):
-        pass  # role transition 已修改 changed
+    if new_role is not None:
+        _apply_role_transition(user, new_role, changed)
     
     db.commit()
     
@@ -498,6 +509,7 @@ async def delete_user(user_id: str, request: Request, db: Session = Depends(get_
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
     if user.role == UserRole.admin:
         raise HTTPException(status_code=400, detail="不能删除管理员账户")
     
@@ -513,6 +525,9 @@ async def adjust_quota(user_id: str, data: QuotaAdjustRequest, request: Request,
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    if user.role == UserRole.admin:
+        raise HTTPException(status_code=400, detail="不能调整管理员额度")
     
     balance_before = user.quota
     if data.set_unlimited:

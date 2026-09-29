@@ -2,7 +2,6 @@
 import os
 import pytest
 import secrets
-from unittest.mock import patch, MagicMock
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -12,8 +11,11 @@ from app.main import app
 from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey
-from app.models.provider import Provider
-from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.channel import Channel, ChannelType, ChannelStatus
+from app.models.model import Model, ModelStatus
+from app.models.model_channel import ModelChannel
+from app.models.model_group import ModelGroup, ModelGroupStatus
+from app.models.quota_record import QuotaRecord, QuotaRecordType
 from app.core.security import hash_password_sha256
 
 TEST_DATABASE_URL = os.environ.get(
@@ -37,8 +39,10 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def setup_db(monkeypatch):
     Base.metadata.create_all(bind=engine)
+    import app.middleware as middleware
+    monkeypatch.setattr(middleware, "SessionLocal", TestingSessionLocal)
     yield
     db = TestingSessionLocal()
     try:
@@ -84,39 +88,38 @@ def _create_user(db, username, email, quota=0):
 
 
 def _create_provider_and_model(db, user):
-    """创建最少配置的 provider + model_mapping + api_key"""
-    provider = Provider(
-        provider_id=f"prov_{secrets.token_hex(4)}",
+    """创建可访问的 Model/Channel 绑定和 API Key。"""
+    channel_id = f"ch_{secrets.token_hex(4)}"
+    channel = Channel(
+        channel_id=channel_id,
         name="TestProvider",
-        type="openai",
+        type=ChannelType.openai,
         endpoint="https://api.test.com",
         api_key="sk-test",
         priority=50,
-        status="active",
+        status=ChannelStatus.active,
     )
-    db.add(provider)
-    db.commit()
-
-    model = ModelMapping(
+    group = ModelGroup(group_id=f"grp_{secrets.token_hex(4)}", name="Test", status=ModelGroupStatus.active, is_default=1)
+    model = Model(
         model_id="test-model-001",
         display_name="TestModel",
-        provider_id=provider.provider_id,
-        provider_model="gpt-3.5-turbo",
-        status=ModelMappingStatus.active,
+        status=ModelStatus.active,
+        model_groups=[group],
     )
-    db.add(model)
+    db.add_all([channel, group, model])
     db.commit()
+    db.add(ModelChannel(model_id=model.model_id, channel_id=channel_id, upstream_model="gpt-3.5-turbo"))
 
     api_key = ApiKey(
         key_id=f"key_{secrets.token_hex(8)}",
         user_id=user.user_id,
         key_name="test-key",
-        api_key=hash_password_sha256("test_secret_key"),
+        api_key="tmk_test_secret_key",
         status="active",
     )
     db.add(api_key)
     db.commit()
-    return provider, model, api_key
+    return channel, model, api_key
 
 
 # =============================================================================
@@ -215,10 +218,8 @@ class TestRegisterNoAdmin:
 # Test 4-7: check_quota 四种报错
 # =============================================================================
 class TestCheckQuotaErrors:
-    @patch("app.services.proxy_service.ProxyService.forward_stream_request")
-    def test_quota_zero_returns_403(self, mock_forward,):
+    def test_quota_zero_returns_403(self):
         """quota=0 时返回 403，reason=quota_zero"""
-        mock_forward.return_value = iter([])
         db = TestingSessionLocal()
         try:
             user = _create_user(db, "qzero", "qzero@test.com", quota=0)
@@ -228,17 +229,16 @@ class TestCheckQuotaErrors:
             db.close()
 
         resp = client.post(
-            "/api/v1/chat/completions",
+            "/api/v1/proxy/chat/completions",
             json={"model": "test-model-001", "messages": [{"role": "user", "content": "hi"}]},
-            headers={"X-API-Key": api_key_str},
+            headers={"Authorization": f"Bearer {api_key_str}"},
         )
         assert resp.status_code == 403
-        assert "额度为 0" in resp.json()["detail"]
+        assert "额度不足" in resp.json()["detail"]
+        assert "0 tokens" in resp.json()["detail"]
 
-    @patch("app.services.proxy_service.ProxyService.forward_stream_request")
-    def test_quota_insufficient_returns_403(self, mock_forward):
+    def test_quota_insufficient_returns_403(self):
         """quota 有值但剩余不足时返回 403，reason=quota_insufficient"""
-        mock_forward.return_value = iter([])
         db = TestingSessionLocal()
         try:
             user = _create_user(db, "qinsuff", "qinsuff@test.com", quota=100)
@@ -250,9 +250,9 @@ class TestCheckQuotaErrors:
             db.close()
 
         resp = client.post(
-            "/api/v1/chat/completions",
+            "/api/v1/proxy/chat/completions",
             json={"model": "test-model-001", "messages": [{"role": "user", "content": "hi"}]},
-            headers={"X-API-Key": api_key_str},
+            headers={"Authorization": f"Bearer {api_key_str}"},
         )
         assert resp.status_code == 403
         detail = resp.json()["detail"]
@@ -274,8 +274,8 @@ class TestQuotaAdjustNotifications:
     def _admin_token(self):
         return self._get_token("admin", "adminpass")
 
-    def test_quota_increase_creates_notification(self):
-        """管理员增加额度，DB 中存在 quota_increase 通知，内容含增加额度"""
+    def test_quota_increase_creates_ledger_record(self):
+        """管理员增加额度时记入额度账本。"""
         db = TestingSessionLocal()
         try:
             admin = _create_admin(db)
@@ -288,30 +288,23 @@ class TestQuotaAdjustNotifications:
         token = self._admin_token()
         resp = client.post(
             f"/api/v1/admin/users/{user_id}/quota",
-            json={"amount": 50, "reason": "bonus"},
+            json={"amount": 150, "reason": "bonus"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["new_quota"] == 150
+        assert resp.json() == {"message": "额度调整成功"}
 
-        # 验证 DB 中有 quota_increase 通知
+        # 调额按绝对余额处理，并记入额度账本。
         db2 = TestingSessionLocal()
         try:
-            from app.models.notification import Notification, NotificationType
-            notifs = db2.query(Notification).filter(
-                Notification.user_id == user.user_id,
-                Notification.type == NotificationType.quota_increase,
-            ).all()
-            assert len(notifs) == 1, f"Expected 1 notification, got {len(notifs)}"
-            notif = notifs[0]
-            assert "50" in notif.content, f"通知内容未包含增加额度: {notif.content}"
-            assert "150" in notif.content, f"通知内容未包含新额度: {notif.content}"
+            record = db2.query(QuotaRecord).filter_by(user_id=user_id).one()
+            assert record.type == QuotaRecordType.increase
+            assert (record.balance_before, record.balance_after, record.amount) == (100, 150, 50)
         finally:
             db2.close()
 
-    def test_quota_decrease_creates_notification(self):
-        """管理员减少额度，DB 中存在 quota_decrease 通知，内容含减少额度"""
+    def test_quota_decrease_creates_ledger_record(self):
+        """管理员减少额度时记入额度账本。"""
         db = TestingSessionLocal()
         try:
             admin = _create_admin(db)
@@ -324,33 +317,27 @@ class TestQuotaAdjustNotifications:
         token = self._admin_token()
         resp = client.post(
             f"/api/v1/admin/users/{user_id}/quota",
-            json={"amount": -30, "reason": "correction"},
+            json={"amount": 70, "reason": "correction"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["new_quota"] == 70
+        assert resp.json() == {"message": "额度调整成功"}
 
         # 验证 DB 中有 quota_decrease 通知
         db2 = TestingSessionLocal()
         try:
-            from app.models.notification import Notification, NotificationType
-            notifs = db2.query(Notification).filter(
-                Notification.user_id == user.user_id,
-                Notification.type == NotificationType.quota_decrease,
-            ).all()
-            assert len(notifs) == 1, f"Expected 1 notification, got {len(notifs)}"
-            notif = notifs[0]
-            assert "30" in notif.content, f"通知内容未包含减少额度: {notif.content}"
-            assert "70" in notif.content, f"通知内容未包含剩余额度: {notif.content}"
+            record = db2.query(QuotaRecord).filter_by(user_id=user_id).one()
+            assert record.type == QuotaRecordType.decrease
+            assert (record.balance_before, record.balance_after, record.amount) == (100, 70, 30)
         finally:
             db2.close()
 
     def test_quota_adjust_notification_contains_reason(self):
-        """验证 metadata 中包含操作原因"""
+        """额度账本保留调整原因和操作者。"""
         db = TestingSessionLocal()
         try:
             admin = _create_admin(db)
+            admin_id = admin.user_id
             user = _create_user(db, "reason_user", "reason@test.com", quota=200)
             db.commit()
             user_id = user.user_id
@@ -360,29 +347,21 @@ class TestQuotaAdjustNotifications:
         token = self._admin_token()
         resp = client.post(
             f"/api/v1/admin/users/{user_id}/quota",
-            json={"amount": 25, "reason": "monthly bonus"},
+            json={"amount": 225, "reason": "monthly bonus"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
 
         db2 = TestingSessionLocal()
         try:
-            from app.models.notification import Notification, NotificationType
-            import json
-            notif = db2.query(Notification).filter(
-                Notification.user_id == user.user_id,
-                Notification.type == NotificationType.quota_increase,
-            ).first()
-            assert notif is not None, "通知不存在"
-            extra = json.loads(notif.extra_data) if notif.extra_data else {}
-            # operator 字段应存在于 metadata 中
-            assert "operator" in extra, f"metadata 中缺少 operator: {extra}"
+            record = db2.query(QuotaRecord).filter_by(user_id=user_id).one()
+            assert record.reason == "monthly bonus"
+            assert record.operator_id == admin_id
         finally:
             db2.close()
 
     def test_quota_adjust_response_unaffected(self):
-        """通知发送失败时 API 仍返回 new_quota"""
-        import unittest.mock as mock
+        """调整额度的响应返回当前接口契约。"""
 
         db = TestingSessionLocal()
         try:
@@ -394,13 +373,10 @@ class TestQuotaAdjustNotifications:
             db.close()
 
         token = self._admin_token()
-        with mock.patch("app.services.notification_service.create_notification", side_effect=Exception("mocked error")):
-            resp = client.post(
-                f"/api/v1/admin/users/{user_id}/quota",
-                json={"amount": 20, "reason": "test"},
-                headers={"Authorization": f"Bearer {token}"},
-            )
+        resp = client.post(
+            f"/api/v1/admin/users/{user_id}/quota",
+            json={"amount": 120, "reason": "test"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.json()}"
-        data = resp.json()
-        assert "new_quota" in data, f"响应缺少 new_quota 字段: {data}"
-        assert data["new_quota"] == 120
+        assert resp.json() == {"message": "额度调整成功"}

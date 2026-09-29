@@ -18,8 +18,9 @@ import app.models  # noqa: F401, E402
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
-from app.models.provider import Provider, ProviderType, ProviderStatus
-from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.model import Model, ModelStatus
+from app.models.channel import Channel, ChannelType, ChannelStatus
+from app.models.model_channel import ModelChannel
 from app.core.security import hash_password_sha256
 from app.core.database import Base, get_db
 from sqlalchemy import create_engine, text
@@ -115,19 +116,22 @@ def fixtures_basic():
         g_extra = ModelGroup(group_id="g_extra", name="额外", status=ModelGroupStatus.active, is_default=0)
         db.add_all([g_def, g_extra])
 
-        p = Provider(provider_id="prov_a", name="A", type=ProviderType.openai,
-                     endpoint="https://a/", api_key="k", status=ProviderStatus.active)
-        p_disabled = Provider(provider_id="prov_d", name="D", type=ProviderType.openai,
-                              endpoint="https://d/", api_key="k", status=ProviderStatus.disabled)
+        p = Channel(channel_id="prov_a", name="A", type=ChannelType.openai,
+                    endpoint="https://a/", api_key="k", status=ChannelStatus.active)
+        p_disabled = Channel(channel_id="prov_d", name="D", type=ChannelType.openai,
+                             endpoint="https://d/", api_key="k", status=ChannelStatus.disabled)
         db.add_all([p, p_disabled])
 
-        m1 = ModelMapping(model_id="m-active", provider_id="prov_a",
-                          provider_model="m-active", status=ModelMappingStatus.active)
-        m2 = ModelMapping(model_id="m-disabled", provider_id="prov_a",
-                          provider_model="m-disabled", status=ModelMappingStatus.disabled)
-        m3 = ModelMapping(model_id="m-on-disabled-prov", provider_id="prov_d",
-                          provider_model="x", status=ModelMappingStatus.active)
+        m1 = Model(model_id="m-active", status=ModelStatus.active)
+        m2 = Model(model_id="m-disabled", status=ModelStatus.disabled)
+        m3 = Model(model_id="m-on-disabled-prov", status=ModelStatus.active)
         db.add_all([m1, m2, m3])
+        db.flush()
+        db.add_all([
+            ModelChannel(model_id="m-active", channel_id="prov_a", upstream_model="m-active"),
+            ModelChannel(model_id="m-disabled", channel_id="prov_a", upstream_model="m-disabled"),
+            ModelChannel(model_id="m-on-disabled-prov", channel_id="prov_d", upstream_model="x"),
+        ])
 
         # 绑定：m1 → g_def, m2 → g_def (disabled 模型也绑定), m3 → g_def
         m1.model_groups.append(g_def)

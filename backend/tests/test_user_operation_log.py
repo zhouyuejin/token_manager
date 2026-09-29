@@ -17,8 +17,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.core.database import Base, get_db
+from app.dependencies import get_current_user
 from app.models.user import User, UserRole, UserStatus
 from app.models.operation_log import OperationLog
+from app.models.api_key import ApiKey
+from app.models.organization import Department
+from app.models.project import Project, UserProject
 from app.core.security import hash_password_sha256
 
 # SQLite in-memory 多 connection 互不可见；强制单 connection 共享表。
@@ -49,7 +53,6 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
-    yield
     db = TestingSessionLocal()
     try:
         for table in reversed(Base.metadata.sorted_tables):
@@ -59,6 +62,7 @@ def setup_db():
         db.commit()
     finally:
         db.close()
+    yield
 
 
 def _create_regular_user(db, username="alice", email="alice@example.com", password="alicepass1"):
@@ -72,11 +76,18 @@ def _create_regular_user(db, username="alice", email="alice@example.com", passwo
         quota=1000,
     )
     db.add(user)
+    db.add(Department(dept_id='dept_alice', name='部门'))
+    db.flush()
+    db.add(Project(project_id='project_alice', dept_id='dept_alice', name='项目', owner_user_id=user.user_id))
+    db.flush()
+    db.add(UserProject(user_id=user.user_id, project_id='project_alice'))
     db.commit()
     return user
 
 
 def _get_user_token(username="alice", password="alicepass1"):
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides.pop(get_current_user, None)
     db = TestingSessionLocal()
     try:
         _create_regular_user(db, username=username, password=password)
@@ -86,7 +97,21 @@ def _get_user_token(username="alice", password="alicepass1"):
         "/api/v1/auth/login",
         data={"username": username, "password": hash_password_sha256(password)},
     )
+    assert response.status_code == 200, response.text
     return response.json()["access_token"]
+
+
+def _persist_key(name):
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter_by(username='alice').one()
+        key = ApiKey(key_id='key_test', user_id=user.user_id, api_key='tmk_test',
+                     key_name=name, project_id='project_alice')
+        db.add(key)
+        db.commit()
+        return key.key_id
+    finally:
+        db.close()
 
 
 class TestChangePasswordLogs:
@@ -166,25 +191,23 @@ class TestCreateApiKeyLogs:
             headers=headers,
             json={
                 "name": "my-key",
+                "project_id": "project_alice",
             },
         )
         assert response.status_code == 200
-        key_id = response.json()["key_id"]
+        request_id = response.json()["request_id"]
 
         db = TestingSessionLocal()
         try:
             log = db.query(OperationLog).filter(
-                OperationLog.action == "create",
-                OperationLog.target_type == "api_key",
+                OperationLog.action == "approval_created",
+                OperationLog.target_type == "approval_request",
             ).first()
-            assert log is not None, "创建 API Key 未埋点"
+            assert log is not None, "API Key 申请未埋点"
             assert log.operator_name == "alice"
-            assert log.target_id == key_id
-            assert log.ip_address is not None
+            assert log.target_id == request_id
             detail = json.loads(log.detail)
-            assert detail["name"] == "my-key"
-            # 敏感字段 api_key 明文不应出现在详情里
-            assert "api_key" not in detail
+            assert detail["request_type"] == "api_key"
         finally:
             db.close()
 
@@ -193,13 +216,7 @@ class TestUpdateApiKeyLogs:
     """PUT /api-keys/{key_id} -> OperationLog action="update", detail = changed fields only"""
 
     def _create_key(self, headers):
-        resp = client.post(
-            "/api/v1/api-keys",
-            headers=headers,
-            json={"name": "orig-name"},
-        )
-        assert resp.status_code == 200
-        return resp.json()["key_id"]
+        return _persist_key('orig-name')
 
     def test_update_api_key_records_log(self):
         token = _get_user_token()
@@ -235,12 +252,7 @@ class TestUpdateApiKeyStatusLogs:
     def test_disable_api_key_records_log(self):
         token = _get_user_token()
         headers = {"Authorization": f"Bearer {token}"}
-        create_resp = client.post(
-            "/api/v1/api-keys",
-            headers=headers,
-            json={"name": "to-disable"},
-        )
-        key_id = create_resp.json()["key_id"]
+        key_id = _persist_key('to-disable')
 
         response = client.put(
             f"/api/v1/api-keys/{key_id}/status",
@@ -271,12 +283,7 @@ class TestDeleteApiKeyLogs:
     def test_delete_api_key_records_log(self):
         token = _get_user_token()
         headers = {"Authorization": f"Bearer {token}"}
-        create_resp = client.post(
-            "/api/v1/api-keys",
-            headers=headers,
-            json={"name": "to-delete"},
-        )
-        key_id = create_resp.json()["key_id"]
+        key_id = _persist_key('to-delete')
 
         response = client.delete(
             f"/api/v1/api-keys/{key_id}",

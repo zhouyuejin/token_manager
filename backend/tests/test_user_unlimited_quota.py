@@ -128,9 +128,7 @@ def test_deduct_quota_does_not_overwrite_unlimited_sentinel(db):
     svc = ProxyService(db)
 
     # deduct_quota 是 async，手动运行 event loop
-    asyncio.get_event_loop().run_until_complete(
-        svc.deduct_quota(user, key, {"total_tokens": 500})
-    )
+    asyncio.run(svc.deduct_quota(user, key, {"total_tokens": 500}))
 
     # 验证 quota 未被修改（unlimited sentinel 保持 -1）
     assert user.quota == -1

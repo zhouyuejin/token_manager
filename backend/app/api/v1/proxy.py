@@ -20,6 +20,7 @@ from app.models.user import User
 from app.models.api_key import ApiKey
 from app.models.model import Model, ModelStatus
 from app.models.channel import Channel, ChannelStatus
+from app.models.model_channel import ModelChannel
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.services.proxy_service import ProxyService, create_proxy_service
 from app.services.api_key_freeze_service import record_api_key_error
@@ -76,7 +77,7 @@ async def list_models(request: Request, db: Session = Depends(get_db)):
         .join(Model.model_groups)
         .join(Model.model_channels)
         .join(Channel)
-        .options(selectinload(Model.model_channels).selectinload(Channel))
+        .options(selectinload(Model.model_channels).selectinload(ModelChannel.channel))
         .filter(
             ModelGroup.group_id.in_(effective_group_ids),
             ModelGroup.status == ModelGroupStatus.active,

@@ -205,7 +205,7 @@ class TestNotifyAdminsNewUser:
                 # 恢复 enum，避免影响其他测试
                 db.execute(text(
                     "ALTER TABLE notifications "
-                    "MODIFY COLUMN type ENUM('quota_low','quota_increase','quota_decrease','daily_report','system','user_registered') NOT NULL"
+                    "MODIFY COLUMN type ENUM('quota_low','quota_increase','quota_decrease','daily_report','system','user_registered','approval_result','approval_update') NOT NULL"
                 ))
                 db.commit()
         finally:

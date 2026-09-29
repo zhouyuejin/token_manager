@@ -14,8 +14,9 @@ from app.core.database import Base, get_db
 from app.models.user import User, UserRole, UserStatus
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.model_group import ModelGroup, ModelGroupStatus
-from app.models.provider import Provider, ProviderType, ProviderStatus
-from app.models.model_mapping import ModelMapping, ModelMappingStatus
+from app.models.model import Model, ModelStatus
+from app.models.project import Project, UserProject
+from app.models.organization import Department
 from app.core.security import hash_password_sha256
 
 # ========== Test Setup ==========
@@ -347,11 +348,22 @@ class TestAdminModelGroupDefaultEndpoints:
 class TestAdminApiKeyEndpoints:
     """测试管理员 API Key 端点"""
 
+    def _create_project(self, db, user_id="usr_admin"):
+        db.flush()
+        db.add(Department(dept_id="dept_test", name="测试部门", status="active"))
+        db.flush()
+        db.add(Project(project_id="project_test", dept_id="dept_test", name="测试项目", status="active"))
+        db.flush()
+        db.add(UserProject(user_id=user_id, project_id="project_test"))
+        db.commit()
+        return "project_test"
+
     def test_admin_create_key_no_model_groups_param(self):
         """管理员创建 API Key 时不传递 model_group_ids（该参数已移除）"""
         db = TestingSessionLocal()
         try:
             _create_admin(db)
+            project_id = self._create_project(db)
             db.commit()
         finally:
             db.close()
@@ -360,7 +372,7 @@ class TestAdminApiKeyEndpoints:
         response = client.post(
             "/api/v1/api-keys/admin",
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Admin Key", "user_id": "usr_admin"},
+            json={"name": "Admin Key", "user_id": "usr_admin", "project_id": project_id},
         )
         assert response.status_code == 200
         data = response.json()
@@ -373,6 +385,7 @@ class TestAdminApiKeyEndpoints:
         db = TestingSessionLocal()
         try:
             _create_admin(db)
+            project_id = self._create_project(db)
             db.commit()
         finally:
             db.close()
@@ -382,12 +395,12 @@ class TestAdminApiKeyEndpoints:
         client.post(
             "/api/v1/api-keys/admin",
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Admin Key 1", "user_id": "usr_admin"},
+            json={"name": "Admin Key 1", "user_id": "usr_admin", "project_id": project_id},
         )
         client.post(
             "/api/v1/api-keys/admin",
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Admin Key 2", "user_id": "usr_admin"},
+            json={"name": "Admin Key 2", "user_id": "usr_admin", "project_id": project_id},
         )
 
         response = client.get(
@@ -407,6 +420,7 @@ class TestAdminApiKeyEndpoints:
         db = TestingSessionLocal()
         try:
             _create_admin(db)
+            project_id = self._create_project(db)
             db.commit()
         finally:
             db.close()
@@ -415,7 +429,7 @@ class TestAdminApiKeyEndpoints:
         create_resp = client.post(
             "/api/v1/api-keys/admin",
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": "Original Name", "user_id": "usr_admin"},
+            json={"name": "Original Name", "user_id": "usr_admin", "project_id": project_id},
         )
         key_id = create_resp.json()["key_id"]
 
@@ -445,23 +459,11 @@ class TestModelGroupCrudWithModelIds:
         try:
             _create_admin(db)
             # 创建 provider 和 model mapping
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-                health_status="healthy",
-            )
-            db.add(provider)
-            model_mapping = ModelMapping(
+            model = Model(
                 model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
+                status=ModelStatus.active,
             )
-            db.add(model_mapping)
+            db.add(model)
             db.commit()
         finally:
             db.close()
@@ -486,27 +488,13 @@ class TestModelGroupCrudWithModelIds:
         db = TestingSessionLocal()
         try:
             _create_admin(db)
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-                health_status="healthy",
-            )
-            db.add(provider)
-            model1 = ModelMapping(
+            model1 = Model(
                 model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
+                status=ModelStatus.active,
             )
-            model2 = ModelMapping(
+            model2 = Model(
                 model_id="gpt-3.5",
-                provider_id="prov_test",
-                provider_model="gpt-3.5-turbo",
-                status=ModelMappingStatus.active,
+                status=ModelStatus.active,
             )
             db.add(model1)
             db.add(model2)
@@ -539,23 +527,11 @@ class TestModelGroupCrudWithModelIds:
         db = TestingSessionLocal()
         try:
             _create_admin(db)
-            provider = Provider(
-                provider_id="prov_test",
-                name="Test Provider",
-                type=ProviderType.openai,
-                endpoint="https://api.test.com/v1",
-                api_key="sk-test",
-                status=ProviderStatus.active,
-                health_status="healthy",
-            )
-            db.add(provider)
-            model_mapping = ModelMapping(
+            model = Model(
                 model_id="gpt-4",
-                provider_id="prov_test",
-                provider_model="gpt-4",
-                status=ModelMappingStatus.active,
+                status=ModelStatus.active,
             )
-            db.add(model_mapping)
+            db.add(model)
             db.commit()
         finally:
             db.close()
