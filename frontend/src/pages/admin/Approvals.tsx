@@ -6,6 +6,7 @@ import { Project } from '../../api/projects'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
 import ApprovalDecisionModal from '../../components/ApprovalDecisionModal'
+import { WriteOnly } from '../../components/WriteOnly'
 
 const typeLabels: Record<ApprovalType, string> = {
   api_key: 'API Key', quota: '额度', model_group: '模型分组', project_access: '项目权限',
@@ -63,11 +64,13 @@ const Approvals = () => {
     { title: '状态', dataIndex: 'status', render: (value: ApprovalStatus) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag> },
     { title: '提交时间', dataIndex: 'created_at', render: (value: string) => new Date(value).toLocaleString() },
     { title: '操作', render: (_: unknown, record: ApprovalRequest) => record.status === 'pending' ? (
+      <WriteOnly>
       <Space>
         <a onClick={() => setDecisionTarget({ request: record, decision: 'approved' })}>通过</a>
         <a style={{ color: '#ff4d4f' }} onClick={() => setDecisionTarget({ request: record, decision: 'rejected' })}>拒绝</a>
         <a onClick={() => setDecisionTarget({ request: record, decision: 'needs_info' })}>要求补充</a>
       </Space>
+      </WriteOnly>
     ) : '—' },
   ]
 
@@ -107,12 +110,12 @@ const Approvals = () => {
           ]} /> }}
         />
       </Card>
-      <ApprovalDecisionModal
+      <WriteOnly><ApprovalDecisionModal
         request={decisionTarget?.request || null}
         decision={decisionTarget?.decision || 'approved'}
         onCancel={() => setDecisionTarget(null)}
         onSubmit={(request, comment) => submitDecision(request, decisionTarget?.decision || 'approved', comment)}
-      />
+      /></WriteOnly>
     </Space>
   )
 }

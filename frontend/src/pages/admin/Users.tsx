@@ -10,6 +10,7 @@ import { getUsers, createUser, updateUser, deleteUser, adjustQuota, User } from 
 import { getModelGroups, ModelGroup } from '../../api/modelGroups'
 import { getAdminProjects, getProjectUsers, Project, setProjectUsers } from '../../api/projects'
 import dayjs from 'dayjs'
+import { WriteOnly } from '../../components/WriteOnly'
 
 type QuotaMode = 'increase' | 'set_unlimited' | 'cancel_unlimited'
 
@@ -254,12 +255,12 @@ const UsersPage = () => {
           ) : record.unlimited ? (
             <>
               <Tag color="gold" style={{ borderRadius: 6 }}>∞ · 无限制</Tag>
-              <Button
+              <WriteOnly><Button
                 type="text"
                 size="small"
                 icon={<DollarOutlined />}
                 onClick={() => openQuotaModal(record)}
-              />
+              /></WriteOnly>
             </>
           ) : (
             <>
@@ -269,14 +270,14 @@ const UsersPage = () => {
               }}>
                 {record.quota_used?.toLocaleString()} / {quota?.toLocaleString()}
               </span>
-              <Button
+              <WriteOnly><Button
                 type="text"
                 size="small"
                 icon={<DollarOutlined />}
                 onClick={() => openQuotaModal(record)}
               >
                 调整
-              </Button>
+              </Button></WriteOnly>
             </>
           )}
         </Space>
@@ -316,7 +317,7 @@ const UsersPage = () => {
       key: 'action',
       fixed: 'right' as const,
       render: (_: any, record: User) => (
-        <Space>
+        <WriteOnly><Space>
           <Button
             type="text"
             icon={<EditOutlined />}
@@ -345,7 +346,7 @@ const UsersPage = () => {
               删除
             </Button>
           </Popconfirm>
-        </Space>
+        </Space></WriteOnly>
       ),
     },
   ]
@@ -360,7 +361,7 @@ const UsersPage = () => {
         }}>
           用户管理
         </h2>
-        <Button 
+        <WriteOnly><Button
           type="primary" 
           icon={<PlusOutlined />}
           onClick={() => setModalVisible(true)}
@@ -371,7 +372,7 @@ const UsersPage = () => {
           }}
         >
           创建用户
-        </Button>
+        </Button></WriteOnly>
       </div>
 
       <Table
@@ -392,7 +393,7 @@ const UsersPage = () => {
         }}
       />
 
-      <Modal
+      <WriteOnly><Modal
         title={`分配可用项目 - ${projectUser?.username || ''}`}
         open={!!projectUser}
         onCancel={() => setProjectUser(null)}
@@ -418,7 +419,7 @@ const UsersPage = () => {
           style={{ width: '100%' }}
         />
         <p>停用项目仅保留已有分配用于识别历史关系，不能新增分配。</p>
-      </Modal>
+      </Modal></WriteOnly>
 
       {/* 创建用户弹窗 */}
       <Modal

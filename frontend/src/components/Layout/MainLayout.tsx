@@ -34,6 +34,7 @@ import NotificationDropdown from "../NotificationDropdown";
 import { useNotificationStore } from "../../store/notification";
 import { useSwrData } from "../../hooks/useSwr";
 import { useDefaultModelGroupWarning } from "../../hooks/useDefaultModelGroupWarning";
+import { canReadAdminPath, hasPermission } from "../../utils/adminPermissions.mjs";
 
 const { Sider } = Layout;
 
@@ -108,7 +109,9 @@ const MainLayout = () => {
   const location = useLocation();
   const { token, user, logout } = useAuthStore();
   const { unreadCount } = useNotificationStore();
-  const isAdmin = user?.role === "admin";
+  const permissions = user?.permissions || [];
+  const isAdmin = hasPermission(permissions, "admin:read");
+  const canManageDepartments = hasPermission(permissions, "department:read");
   const { needsAttention: showDefaultGroupDot } =
     useDefaultModelGroupWarning(isAdmin);
 
@@ -158,18 +161,16 @@ const MainLayout = () => {
   }, [collapsed]);
 
   const menuItems: MenuProps["items"] = [
-    isAdmin
-      ? {
-          key: "/admin/dashboard",
-          icon: <DashboardOutlined />,
-          label: "仪表盘",
-        }
-      : { key: "/stats", icon: <DashboardOutlined />, label: "仪表盘" },
+    {
+      key: isAdmin ? "/admin/dashboard" : "/stats",
+      icon: <DashboardOutlined />,
+      label: "仪表盘",
+    },
     { key: "/notifications", icon: <BellOutlined />, label: "消息通知" },
     { key: "/approvals", icon: <FileSearchOutlined />, label: "申请与审批" },
     { key: "/api-keys", icon: <KeyOutlined />, label: "API Key" },
     { key: "/chat", icon: <MessageOutlined />, label: "AI 对话" },
-    ...(isAdmin
+    ...(isAdmin || canManageDepartments
       ? [
           {
             key: "admin",
@@ -244,7 +245,7 @@ const MainLayout = () => {
                 icon: <FileSearchOutlined />,
                 label: "路由监控",
               },
-            ],
+            ].filter((item) => canReadAdminPath(item.key, permissions)),
           },
         ]
       : []),

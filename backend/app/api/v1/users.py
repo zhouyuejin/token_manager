@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_password
 from app.models.user import User
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_effective_permissions
 from app.schemas.user import UserInfo, PasswordChange, NotificationSettings
 from app.services.operation_log_service import record_operation
 from app.utils.request import extract_client_ip
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.get("/me", response_model=UserInfo)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
+async def get_current_user_info(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     获取当前用户信息
     """
@@ -29,7 +29,8 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         quota=current_user.quota,
         quota_used=current_user.quota_used,
         quota_remain=current_user.quota - current_user.quota_used,
-        created_at=current_user.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        created_at=current_user.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        permissions=get_effective_permissions(db, current_user),
     )
 
 

@@ -6,7 +6,7 @@ from starlette.requests import Request
 from app.api.v1.auth import _oidc_user, login
 from app.api.v1.admin import _apply_role_transition
 from app.api.v1.projects import check_department_access
-from app.dependencies import require_admin
+from app.dependencies import get_effective_permissions, require_admin
 from app.models.organization import Department
 from app.models.role_permission import RolePermission
 from app.models.user import User, UserRole, UserStatus
@@ -69,9 +69,57 @@ def test_auditor_can_read_but_cannot_write_admin_routes(db):
     auditor = make_user(UserRole.auditor)
 
     assert require_admin(make_request(), auditor, db) is auditor
-    with pytest.raises(HTTPException) as exc:
-        require_admin(make_request("PUT"), auditor, db)
-    assert exc.value.status_code == 403
+    for method in ("POST", "PUT", "DELETE"):
+        with pytest.raises(HTTPException) as exc:
+            require_admin(make_request(method), auditor, db)
+        assert exc.value.status_code == 403
+
+
+def test_effective_permissions_follow_role_permission_rows(db):
+    db.add_all([
+        RolePermission(role="department_admin", permission="department:read"),
+        RolePermission(role="department_admin", permission="department:write"),
+        RolePermission(role="auditor", permission="admin:read"),
+    ])
+    db.commit()
+
+    assert get_effective_permissions(db, make_user(UserRole.department_admin)) == [
+        "department:read", "department:write",
+    ]
+    assert get_effective_permissions(db, make_user(UserRole.auditor)) == ["admin:read"]
+    assert get_effective_permissions(db, make_user(UserRole.user)) == []
+    assert get_effective_permissions(db, make_user(UserRole.admin)) == [
+        "admin:read", "admin:write", "department:read", "department:write",
+    ]
+
+
+def test_current_user_info_returns_effective_permissions(db):
+    from app.api.v1.users import get_current_user_info
+
+    user = make_user(UserRole.department_admin)
+    db.add(user)
+    db.add(RolePermission(role="department_admin", permission="department:read"))
+    db.commit()
+
+    result = asyncio.run(get_current_user_info(current_user=user, db=db))
+
+    assert result.permissions == ["department:read"]
+
+
+def test_roles_page_reads_current_permission_rows(db):
+    from app.api.v1.admin import list_role_permissions
+
+    db.add_all([
+        RolePermission(role="department_admin", permission="department:read"),
+        RolePermission(role="auditor", permission="admin:read"),
+    ])
+    db.commit()
+    result = asyncio.run(list_role_permissions(db=db, admin=make_user(UserRole.admin)))
+    roles = {item["role"]: item["permissions"] for item in result["items"]}
+
+    assert roles["admin"] == ["admin:read", "admin:write", "department:read", "department:write"]
+    assert roles["department_admin"] == ["department:read"]
+    assert roles["auditor"] == ["admin:read"]
 
 
 def test_non_admin_role_change_preserves_user_quota():

@@ -10,6 +10,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOut
 import { getModels, createModel, updateModel, deleteModel, syncModelPricing, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
 import { useSwrData } from '../../hooks/useSwr'
 import { getChannels, Channel, syncChannelModels, batchBindModelsToChannel } from '../../api/channels'
+import { WriteOnly } from '../../components/WriteOnly'
 
 const routeStrategyLabels: Record<string, string> = {
   priority: '优先级',
@@ -508,7 +509,7 @@ const ModelsPage = () => {
           <AppstoreOutlined style={{ marginRight: 12, color: '#3B82F6' }} />
           模型管理
         </h2>
-        <Space>
+        <WriteOnly><Space>
           <Button
             icon={<DollarOutlined />}
             onClick={handleSyncPricing}
@@ -532,7 +533,7 @@ const ModelsPage = () => {
           >
             添加模型
           </Button>
-        </Space>
+        </Space></WriteOnly>
       </div>
 
       <Alert
@@ -640,12 +641,12 @@ const ModelsPage = () => {
               width: 150,
               fixed: 'right',
               render: (_: any, record: ModelMapping) => (
-                <Space>
+                <WriteOnly><Space>
                   <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(record)} style={{ color: '#3B82F6' }}>编辑</Button>
                   <Popconfirm title="确认删除此模型？" onConfirm={() => handleDelete(record.model_id)}>
                     <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
                   </Popconfirm>
-                </Space>
+                </Space></WriteOnly>
               )
             }
           ]}
@@ -1048,9 +1049,9 @@ const ModelsPage = () => {
         width={720}
         destroyOnHidden
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAddBinding}>
+          <WriteOnly><Button type="primary" icon={<PlusOutlined />} onClick={openAddBinding}>
             添加绑定
-          </Button>
+          </Button></WriteOnly>
         }
       >
         <Table<ModelChannel>
@@ -1100,11 +1101,11 @@ const ModelsPage = () => {
               width: 70,
               align: 'center',
               render: (enabled: boolean, record: ModelChannel) => (
-                <Switch
+                <WriteOnly><Switch
                   size="small"
                   checked={enabled}
                   onChange={(v) => handleToggleBinding(record, v)}
-                />
+                /></WriteOnly>
               ),
             },
             {
@@ -1112,7 +1113,7 @@ const ModelsPage = () => {
               key: 'actions',
               width: 140,
               render: (_: any, record: ModelChannel) => (
-                <Space size="small">
+                <WriteOnly><Space size="small">
                   <Button
                     type="link"
                     size="small"
@@ -1134,7 +1135,7 @@ const ModelsPage = () => {
                       解绑
                     </Button>
                   </Popconfirm>
-                </Space>
+                </Space></WriteOnly>
               ),
             },
           ]}
