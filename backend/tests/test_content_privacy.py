@@ -64,6 +64,25 @@ def test_usage_content_is_only_stored_when_project_audit_is_enabled(db):
     assert enabled.response_summary == "safe response"
 
 
+def test_usage_log_keeps_audit_snapshot_out_of_model_fields(db):
+    service = ProxyService(db)
+    service.usage_attribution["key_test"] = {
+        "project_id": "project_test",
+        "department_id": "dept_test",
+        "content_audit_enabled": True,
+    }
+
+    service.record_usage(
+        user_id="user_test", key_id="key_test", channel_id=None, model="model_test",
+        tokens={}, latency_ms=1, status_code=200, request_content={"prompt": "audited"},
+    )
+    db.commit()
+
+    usage = db.query(UsageLog).one()
+    assert (usage.project_id, usage.department_id) == ("project_test", "dept_test")
+    assert usage.request_summary == "audited"
+
+
 def test_route_and_operation_logs_are_redacted_before_persistence(db):
     service = ProxyService(db)
     service.record_route_decision(

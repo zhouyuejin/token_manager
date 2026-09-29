@@ -86,8 +86,10 @@ class ProxyService:
         from app.services.quota_reservation_service import QuotaReservationService
         from fastapi import HTTPException
         try:
+            attribution = self.capture_usage_attribution(api_key.key_id)
             self.reservation_id = QuotaReservationService(self.db).reserve(
-                user, api_key, model, request_data, self.capture_usage_attribution(api_key.key_id))
+                user, api_key, model, request_data,
+                {field: attribution[field] for field in ("project_id", "department_id")})
         except HTTPException as exc:
             if exc.status_code == 403:
                 record_api_key_error(self.db, api_key, 'quota')
@@ -861,12 +863,14 @@ class ProxyService:
             reservation = self.db.get(QuotaReservation, self.reservation_id)
             usage_cost = cost(reservation, tokens) if status_code == 200 else Decimal('0')
             attribution = {'project_id': reservation.project_id, 'department_id': reservation.department_id}
+        usage_attribution = attribution or self.capture_usage_attribution(key_id)
         audit_enabled = request_attribution.get("content_audit_enabled", False)
         usage_log = UsageLog(
             log_id=f"log_{secrets.token_hex(8)}", user_id=user_id, key_id=key_id,
             channel_id=channel_id, model=model,
             api_type=api_type,
-            **(attribution or self.capture_usage_attribution(key_id)),
+            project_id=usage_attribution.get("project_id"),
+            department_id=usage_attribution.get("department_id"),
             cost_usd=usage_cost,
             reservation_id=self.reservation_id,
             prompt_tokens=tokens.get("prompt_tokens", 0),

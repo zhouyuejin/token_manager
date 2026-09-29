@@ -74,6 +74,26 @@ def test_actual_cost_release_and_expiry(db, account):
     assert db.query(User).filter_by(user_id=account).one().quota_used == 42
 
 
+def test_reservation_persists_only_accounting_attribution(db, account, monkeypatch):
+    from app.models.quota_reservation import QuotaReservation
+
+    service = ProxyService(db)
+    monkeypatch.setattr(service, 'capture_usage_attribution', lambda _: {
+        'project_id': 'project_test',
+        'department_id': 'dept_test',
+        'content_audit_enabled': True,
+    })
+    user = db.query(User).filter_by(user_id=account).one()
+    key = db.query(ApiKey).filter_by(key_id=account).one()
+
+    reservation_id = service.reserve_quota(
+        user, key, 'priced', {'messages': [{'role': 'user', 'content': 'hi'}], 'max_tokens': 100},
+    )
+
+    row = db.get(QuotaReservation, reservation_id)
+    assert (row.project_id, row.department_id) == ('project_test', 'dept_test')
+
+
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize('chat', [False, True])
 @pytest.mark.parametrize('status', [200, 503])
