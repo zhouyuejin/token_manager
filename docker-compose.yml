@@ -89,6 +89,27 @@ services:
       - token-net
     restart: unless-stopped
 
+  # 每日逻辑备份，使用 UTC 18:00（Asia/Shanghai 02:00）
+  backup:
+    image: mysql:8.0
+    container_name: token-backup
+    command: ["bash", "/scripts/daily-backup.sh"]
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-token_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-token_password}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-token_db}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/daily-backup.sh:/scripts/daily-backup.sh:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - token-net
+    restart: unless-stopped
+
   # Nginx反向代理
   nginx:
     image: nginx:alpine

@@ -66,7 +66,7 @@
 | D1 | P1 | 关键业务浏览器验收 | B1–B3、C1–C2 | 验证完成；用户确认浏览器验收通过，源账本详情缺口已修复 |
 | D2 | P2 | 真实 OIDC 联调 | B1、可用测试 IdP | 配置修复及代码级验证完成；真实 IdP 待条件 |
 | D3 | P2 | 内容审计性能验证 | A1 | 摘要逻辑、边界及微基准验证完成；完整代理路径未纳入 |
-| D4 | P1 | 运维、监控及恢复演练 | 稳定候选版本 | 待验收 |
+| D4 | P1 | 运维、监控及恢复演练 | 稳定候选版本 | 本地健康诊断、监控及隔离恢复演练完成；每日备份首次产物与异地副本待核验 |
 | E1 | P2 | 协议与能力配置剩余项 | 明确协议支持范围 | 待范围确认 |
 | E2 | 按决定 | 原 PRD 差异收口 | 核对后续设计决定 | 待范围确认 |
 
@@ -438,3 +438,15 @@ npm run build
 - 结论：摘要逻辑最长样本中位耗时约 0.30 ms，峰值临时 Python 分配约 5.7 KB；没有引入缓存或队列的依据。此结果不包含 multipart 解析、UsageLog 写入及上游网络延迟。
 - 迁移：无数据库结构变更，无需迁移。
 - 遗留：无 D3 摘要逻辑验收遗留；完整代理路径及生产环境端到端资源测量不在本次范围内，不据此宣称已完成。
+
+### 2026-09-29：D4 健康、监控和灾备
+
+- 状态：本地代码、监控与隔离恢复演练完成；每日任务已启用，完整 D4 验收待首次定时产物及异地副本。
+- 改动：`/health` 在降级时返回后台任务缺项，或按渠道列出探测缺失/过期/失败分类及最近探测时间；不暴露上游错误正文或密钥。Compose 新增每日北京时间 02:00 的逻辑备份服务，复用 backend 数据库账号执行只读 dump，写入被 Git 忽略的宿主机 `backups/`，目录 `0700`、备份文件 `0600`。手册修正 MySQL 8 普通账号 dump 缺少 PROCESS 权限的问题，并确保失败不会被 gzip 管道掩盖或留下正式文件名的半成品。
+- 失败验证：首次隔离 dump 因 MySQL 8 tablespace 权限要求失败；原管道存在只报告 gzip 退出状态的风险。改用 `--no-tablespaces` 和 `pipefail` 后，隔离备份及 `gzip -t` 通过。健康诊断首轮发现 datetime 不可 JSON 序列化，转为 ISO 字符串后通过。
+- 验证：`bash -n scripts/daily-backup.sh`、`docker compose config --quiet`、`git diff --check` 通过。当前本地 `/health` 为 healthy，MySQL/Redis/backend/Prometheus/Grafana/backup 容器运行；Prometheus 两个 target 为 up，Grafana 已加载 6 个运营面板。隔离环境停 MySQL、Redis 时分别观察到 `unhealthy`，模拟过期渠道时观察到 `degraded` 及 `probe_degraded` 原因。隔离库备份、`gzip -t`、重建数据库、恢复、`alembic upgrade head` 及应用启动完成；恢复后密钥可解密，活动 reservation 保持 `reserved`，到期后转为 `expired`。通过合成代理请求产生 `d4-channel` 路由失败计数，隔离 Prometheus 抓取到 `success=false`。
+- 恢复耗时：第二轮完整恢复约 16 秒；演练库 schema 版本为 `20260929_1400_user_rate_limits`。备份仅含合成数据，文件保存于权限为 `0700` 的 `/private/tmp/token-manager-d4/`；未覆盖现有 `token_db`。
+- 当前状态：原记录中的上游 degraded 在本次核验时已恢复为 healthy，无法从当前运行态还原其历史具体原因；隔离故障验证确认新的健康响应能定位探测分类。每日调度器已启动，首次运行时间为下一次北京时间 02:00，本次尚未等到定时文件生成。
+- 迁移：无数据库结构变更，无需迁移。
+- 发布：本地 Compose backend 和 Prometheus/Grafana/backup 已运行；未向远程环境发布。
+- 遗留：按灾备手册将 `backups/` 复制到独立故障域或加密对象存储，并核验首次每日备份文件、`gzip -t` 和定时日志；当前无远程副本目的地配置。D4 在首次定时产物和异地副本完成前保持未关闭。

@@ -164,6 +164,7 @@ async def health_check():
     from app.tasks.daily_report import scheduler as report_scheduler
 
     components = {}
+    details = {}
     try:
         with engine.connect() as connection:
             connection.exec_driver_sql("SELECT 1")
@@ -176,35 +177,52 @@ async def health_check():
     except Exception:
         components["redis"] = "unhealthy"
 
-    components["background_tasks"] = (
-        "healthy" if scheduler.running and report_scheduler.running
-        and scheduler.get_job("check_upstream_health") else "degraded"
-    )
+    failed_tasks = []
+    if not scheduler.running:
+        failed_tasks.append("scheduler_stopped")
+    if not report_scheduler.running:
+        failed_tasks.append("report_scheduler_stopped")
+    if not scheduler.get_job("check_upstream_health"):
+        failed_tasks.append("upstream_health_job_missing")
+    components["background_tasks"] = "degraded" if failed_tasks else "healthy"
+    if failed_tasks:
+        details["background_tasks"] = {"failed_checks": failed_tasks}
     try:
         with SessionLocal() as db:
             channels = db.query(Channel).filter(Channel.status == "active").all()
         if not channels:
             components["upstream"] = "not_configured"
-        elif any(not channel.last_check_at or channel.last_check_at < datetime.utcnow() - timedelta(minutes=3)
-                 for channel in channels):
-            components["upstream"] = "degraded"
-        elif any(getattr(channel.health_status, "value", channel.health_status) == "unhealthy"
-                 for channel in channels):
-            components["upstream"] = "degraded"
-        elif any(getattr(channel.health_status, "value", channel.health_status) == "degraded"
-                 for channel in channels):
-            components["upstream"] = "degraded"
         else:
-            components["upstream"] = "healthy"
+            cutoff = datetime.utcnow() - timedelta(minutes=3)
+            issues = []
+            for channel in channels:
+                reasons = []
+                if not channel.last_check_at:
+                    reasons.append("check_missing")
+                elif channel.last_check_at < cutoff:
+                    reasons.append("check_stale")
+                health = getattr(channel.health_status, "value", channel.health_status)
+                if health in ("unhealthy", "degraded"):
+                    reasons.append(f"probe_{health}")
+                if reasons:
+                    issues.append({
+                        "channel_id": channel.channel_id,
+                        "reasons": reasons,
+                        "last_check_at": channel.last_check_at.isoformat() if channel.last_check_at else None,
+                    })
+            components["upstream"] = "degraded" if issues else "healthy"
+            if issues:
+                details["upstream"] = {"channels": issues}
     except Exception:
         components["upstream"] = "unknown"
+        details["upstream"] = {"reason": "channel_query_failed"}
 
     status = "unhealthy" if any(components[name] == "unhealthy" for name in ("mysql", "redis")) else (
         "degraded" if any(value == "degraded" for value in components.values()) else "healthy"
     )
     response_status = 503 if status == "unhealthy" else 200
     return JSONResponse(
-        {"status": status, "version": "1.0.0", "components": components},
+        {"status": status, "version": "1.0.0", "components": components, "details": details},
         status_code=response_status,
     )
 
