@@ -67,6 +67,13 @@ export interface QuotaAdjustParams {
 
 export const adjustQuota = (userId: string, data: QuotaAdjustParams) => post(`/admin/users/${userId}/quota`, data)
 
+export async function changePassword(data: { old_password: string; new_password: string }): Promise<void> {
+  await put('/users/me/password', {
+    old_password: await hashPassword(data.old_password),
+    new_password: await hashPassword(data.new_password),
+  })
+}
+
 /**
  * 重置密码 - 密码在前端进行 SHA256 哈希后再传输
  */

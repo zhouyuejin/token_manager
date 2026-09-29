@@ -121,12 +121,35 @@ class TestChangePasswordLogs:
         token = _get_user_token()
         headers = {"Authorization": f"Bearer {token}"}
 
+        rejected = client.put(
+            "/api/v1/users/me/password",
+            headers=headers,
+            json={"old_password": hash_password_sha256("wrong-password"), "new_password": hash_password_sha256("alicepass2")},
+        )
+        assert rejected.status_code == 400
+        old_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "alice", "password": hash_password_sha256("alicepass1")},
+        )
+        assert old_login.status_code == 200
+
         response = client.put(
             "/api/v1/users/me/password",
             headers=headers,
             json={"old_password": hash_password_sha256("alicepass1"), "new_password": hash_password_sha256("alicepass2")},
         )
         assert response.status_code == 200
+
+        old_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "alice", "password": hash_password_sha256("alicepass1")},
+        )
+        new_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "alice", "password": hash_password_sha256("alicepass2")},
+        )
+        assert old_login.status_code == 401
+        assert new_login.status_code == 200
 
         db = TestingSessionLocal()
         try:
@@ -139,6 +162,10 @@ class TestChangePasswordLogs:
             assert log.operator_id == "usr_alice"
             assert log.target_id == "usr_alice"
             assert log.ip_address is not None
+            assert not log.detail or all(value not in log.detail for value in (
+                hash_password_sha256("alicepass1"),
+                hash_password_sha256("alicepass2"),
+            ))
         finally:
             db.close()
 
