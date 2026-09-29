@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.dependencies import get_current_user, require_admin
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.organization import Department
 from app.models.project import Project, UserProject
 from app.models.api_key import ApiKey
@@ -62,6 +62,13 @@ def check_owner(db, owner_id):
         raise HTTPException(404, '负责人不存在')
 
 
+def check_department_access(db, user, dept_id):
+    if user.role == UserRole.department_admin and not db.query(Department.dept_id).filter(
+        Department.dept_id == dept_id, Department.owner_user_id == user.user_id
+    ).first():
+        raise HTTPException(404, '部门不存在')
+
+
 def audit(db, request, admin, action, target_type, target_id, detail):
     record_operation(db=db, operator=admin, action=action, target_type=target_type,
                      target_id=target_id, detail=detail, ip_address=extract_client_ip(request))
@@ -77,13 +84,19 @@ async def list_available_projects(current_user: User = Depends(get_current_user)
 
 @router.get('/admin/departments')
 async def list_departments(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return {'items': [department_response(row) for row in db.query(Department).all()]}
+    query = db.query(Department)
+    if admin.role == UserRole.department_admin:
+        query = query.filter(Department.owner_user_id == admin.user_id)
+    return {'items': [department_response(row) for row in query.all()]}
 
 
 @router.post('/admin/departments')
 async def create_department(data: DepartmentSave, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    check_owner(db, data.owner_user_id)
-    row = Department(dept_id='dept_' + secrets.token_hex(8), **data.model_dump())
+    values = data.model_dump()
+    if admin.role == UserRole.department_admin:
+        values['owner_user_id'] = admin.user_id
+    check_owner(db, values['owner_user_id'])
+    row = Department(dept_id='dept_' + secrets.token_hex(8), **values)
     db.add(row)
     db.commit()
     audit(db, request, admin, 'create', 'department', row.dept_id, data.model_dump())
@@ -95,8 +108,12 @@ async def update_department(dept_id: str, data: DepartmentSave, request: Request
     row = db.query(Department).filter(Department.dept_id == dept_id).first()
     if not row:
         raise HTTPException(404, '部门不存在')
-    check_owner(db, data.owner_user_id)
-    for field, value in data.model_dump().items():
+    check_department_access(db, admin, dept_id)
+    values = data.model_dump()
+    if admin.role == UserRole.department_admin:
+        values['owner_user_id'] = admin.user_id
+    check_owner(db, values['owner_user_id'])
+    for field, value in values.items():
         setattr(row, field, value)
     db.commit()
     audit(db, request, admin, 'update', 'department', dept_id, data.model_dump())
@@ -108,6 +125,7 @@ async def delete_department(dept_id: str, request: Request, admin: User = Depend
     row = db.query(Department).filter(Department.dept_id == dept_id).first()
     if not row:
         raise HTTPException(404, '部门不存在')
+    check_department_access(db, admin, dept_id)
     if db.query(Project.project_id).filter(Project.dept_id == dept_id).first():
         raise HTTPException(409, '部门下存在项目，请先处理项目')
     if (db.query(UsageLog.log_id).filter(UsageLog.department_id == dept_id).first()
@@ -122,12 +140,16 @@ async def delete_department(dept_id: str, request: Request, admin: User = Depend
 
 @router.get('/admin')
 async def list_projects(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    rows = db.query(Project).options(joinedload(Project.department)).all()
+    query = db.query(Project).options(joinedload(Project.department))
+    if admin.role == UserRole.department_admin:
+        query = query.join(Department).filter(Department.owner_user_id == admin.user_id)
+    rows = query.all()
     return {'items': [project_response(row) for row in rows]}
 
 
 @router.post('/admin')
 async def create_project(data: ProjectSave, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    check_department_access(db, admin, data.dept_id)
     if not db.query(Department).filter(Department.dept_id == data.dept_id).first():
         raise HTTPException(404, '部门不存在')
     check_owner(db, data.owner_user_id)
@@ -141,6 +163,8 @@ async def create_project(data: ProjectSave, request: Request, admin: User = Depe
 @router.put('/admin/{project_id}')
 async def update_project(project_id: str, data: ProjectSave, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     row = get_project(db, project_id)
+    check_department_access(db, admin, row.dept_id)
+    check_department_access(db, admin, data.dept_id)
     if not db.query(Department).filter(Department.dept_id == data.dept_id).first():
         raise HTTPException(404, '部门不存在')
     check_owner(db, data.owner_user_id)
@@ -155,6 +179,7 @@ async def update_project(project_id: str, data: ProjectSave, request: Request, a
 @router.delete('/admin/{project_id}')
 async def delete_project(project_id: str, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     row = get_project(db, project_id)
+    check_department_access(db, admin, row.dept_id)
     if db.query(UserProject.user_id).filter(UserProject.project_id == project_id).first():
         raise HTTPException(409, '项目已分配用户，请先撤销分配')
     if db.query(ApiKey.key_id).filter(ApiKey.project_id == project_id).first():
@@ -172,14 +197,16 @@ async def delete_project(project_id: str, request: Request, admin: User = Depend
 
 @router.get('/admin/{project_id}/users')
 async def get_project_users(project_id: str, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    get_project(db, project_id)
+    project = get_project(db, project_id)
+    check_department_access(db, admin, project.dept_id)
     rows = db.query(User.user_id, User.username).join(UserProject, UserProject.user_id == User.user_id).filter(UserProject.project_id == project_id).all()
     return {'user_ids': [row.user_id for row in rows], 'items': [{'user_id': row.user_id, 'username': row.username} for row in rows]}
 
 
 @router.put('/admin/{project_id}/users')
 async def set_project_users(project_id: str, data: ProjectUsers, request: Request, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    get_project(db, project_id)
+    project = get_project(db, project_id)
+    check_department_access(db, admin, project.dept_id)
     user_ids = set(data.user_ids)
     found = {row.user_id for row in db.query(User.user_id).filter(User.user_id.in_(user_ids)).all()}
     if found != user_ids:
@@ -193,7 +220,10 @@ async def set_project_users(project_id: str, data: ProjectUsers, request: Reques
 
 @router.get('/admin/users/{user_id}/available')
 async def get_user_available_projects(user_id: str, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    rows = db.query(Project).join(UserProject).join(Department).filter(
+    query = db.query(Project).join(UserProject).join(Department).filter(
         UserProject.user_id == user_id, Project.status == 'active', Department.status == 'active',
-    ).all()
+    )
+    if admin.role == UserRole.department_admin:
+        query = query.filter(Department.owner_user_id == admin.user_id)
+    rows = query.all()
     return {'items': [project_response(row) for row in rows]}

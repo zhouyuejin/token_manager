@@ -68,3 +68,10 @@ export interface UserInfo {
 }
 
 export const getCurrentUser = () => get<UserInfo>('/users/me')
+
+export interface LoginOptions {
+  oidc_enabled: boolean
+  password_login_enabled: boolean
+}
+
+export const getLoginOptions = () => get<LoginOptions>('/auth/oidc/config')

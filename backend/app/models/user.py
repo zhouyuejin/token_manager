@@ -11,6 +11,8 @@ import enum
 class UserRole(enum.Enum):
     """用户角色"""
     admin = "admin"
+    department_admin = "department_admin"
+    auditor = "auditor"
     user = "user"
 
 
@@ -30,6 +32,7 @@ class User(Base):
     password = Column(String(255), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user, nullable=False)
+    oidc_subject = Column(String(255), unique=True, nullable=True)
     quota = Column(BigInteger, default=0, comment="总额度")
     quota_used = Column(BigInteger, default=0, comment="已使用额度")
     status = Column(Enum(UserStatus), default=UserStatus.active)

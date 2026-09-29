@@ -2,6 +2,7 @@
 数据模型导出
 """
 from app.models.user import User, UserRole, UserStatus
+from app.models.role_permission import RolePermission
 from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.channel import Channel, ChannelType, ChannelStatus, ChannelHealthStatus, KeyStrategy
 from app.models.quota_record import QuotaRecord, QuotaRecordType, QuotaRecordSource
