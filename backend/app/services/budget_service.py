@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy import or_
+from app.services.metrics import budget_rejections, budget_usage
 
 from app.models.budget import Budget, BudgetAlert
 from app.models.organization import Department
@@ -71,7 +72,12 @@ class BudgetService:
         for budget in budgets:
             # 准入从新事务开始，快照在组织/预算锁之后建立；不锁其它用户账本。
             remaining = self.summary(budget)['remaining_usd']
+            budget_usage.labels(scope_type=budget.scope_type).set(
+                float(max(0, min(1, (budget.amount_usd - remaining) / budget.amount_usd)))
+                if budget.amount_usd else 0
+            )
             if budget.policy == 'block' and (remaining < amount or remaining < 0):
+                budget_rejections.labels(scope_type=budget.scope_type).inc()
                 kind = '项目' if budget.scope_type == 'project' else '部门'
                 raise HTTPException(403, f'{kind}月预算不足（{budget.month}），可用 ${max(remaining, 0):.8f}，本次预扣 ${amount:.8f}')
 

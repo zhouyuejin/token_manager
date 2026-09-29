@@ -1,0 +1,16 @@
+{
+  "uid": "token-operations",
+  "title": "Token Manager Operations",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {"id": 1, "title": "Route decisions / second", "type": "timeseries", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}, "targets": [{"expr": "sum by (success) (rate(token_route_decisions_total[5m]))", "legendFormat": "success={{success}}", "refId": "A"}]},
+    {"id": 2, "title": "Rate limit rejections / second", "type": "timeseries", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}, "targets": [{"expr": "sum by (window) (rate(token_rate_limit_rejections_total[5m]))", "legendFormat": "{{window}}", "refId": "A"}]},
+    {"id": 3, "title": "Budget usage ratio", "type": "timeseries", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}, "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []}, "targets": [{"expr": "token_budget_usage_ratio", "legendFormat": "{{scope_type}}", "refId": "A"}]},
+    {"id": 4, "title": "Active channel cooldowns", "type": "stat", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}, "targets": [{"expr": "token_active_channel_cooldowns", "refId": "A"}]},
+    {"id": 5, "title": "Budget rejections / second", "type": "timeseries", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}, "targets": [{"expr": "sum by (scope_type) (rate(token_budget_rejections_total[5m]))", "legendFormat": "{{scope_type}}", "refId": "A"}]},
+    {"id": 6, "title": "Channel cooldown activations / second", "type": "timeseries", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}, "targets": [{"expr": "rate(token_channel_cooldowns_total[5m])", "refId": "A"}]}
+  ]
+}

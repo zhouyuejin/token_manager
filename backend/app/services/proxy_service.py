@@ -69,6 +69,10 @@ class ProxyService:
             error_message=redact_sensitive_text(error_message, 500),
         ))
         self.db.commit()
+        from app.services.metrics import route_decisions
+        route_decisions.labels(
+            model=model[:100], channel_id=selected_channel or "none", success=str(bool(success)).lower()
+        ).inc()
 
     @staticmethod
     def _route_skip_reasons(retry_path):
@@ -477,6 +481,9 @@ class ProxyService:
         记录 channel 失败（降级）。
         设置 60s cooldown。
         """
+        from app.services.metrics import channel_cooldowns
+        if not channel.cooldown_until or channel.cooldown_until <= datetime.now():
+            channel_cooldowns.inc()
         channel.cooldown_until = datetime.now() + timedelta(seconds=60)
 
     def forward_with_failover(

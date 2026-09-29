@@ -27,6 +27,7 @@ httpx==0.25.2
 
 # Scheduler
 apscheduler==3.10.4
+prometheus-client==0.21.1
 
 # Utilities
 python-dotenv==1.0.0

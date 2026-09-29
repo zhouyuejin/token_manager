@@ -15,6 +15,7 @@ from app.services.email_service import (
     send_daily_report,
     send_quota_change_notification
 )
+from app.services.metrics import active_channel_cooldowns
 
 
 # 全局调度器
@@ -260,6 +261,8 @@ def send_daily_reports():
 
 def setup_scheduler():
     """设置定时任务"""
+    scheduler.add_job(check_upstream_health, trigger=IntervalTrigger(seconds=60),
+                      id='check_upstream_health', name='探测上游渠道', replace_existing=True)
     scheduler.add_job(check_budget_alerts, trigger=IntervalTrigger(seconds=60),
                       id='check_budget_alerts', name='检查预算阈值告警', replace_existing=True)
     scheduler.add_job(check_operational_alerts, trigger=IntervalTrigger(seconds=60),
@@ -332,10 +335,42 @@ async def check_operational_alerts():
         await AlertService(db).check()
 
 
+async def check_upstream_health():
+    from app.models.channel import Channel, ChannelHealthStatus
+    from app.services.channel_test_service import ChannelTestService
+    from app.services.secret_crypto import decrypt_secret
+
+    with SessionLocal() as db:
+        channels = db.query(Channel).filter(Channel.status == "active").all()
+        async def probe(channel):
+            try:
+                result = await ChannelTestService().test_connection(
+                    type_=channel.type.value,
+                    endpoint=channel.endpoint,
+                    api_key=decrypt_secret(channel.api_key),
+                    timeout=min(channel.timeout or 10, 10),
+                )
+                channel.health_status = (
+                    ChannelHealthStatus.healthy if result.get("success")
+                    else ChannelHealthStatus.degraded
+                )
+            except Exception as exc:
+                logger.warning("上游渠道探测失败 channel_id=%s error=%s", channel.channel_id, type(exc).__name__)
+                channel.health_status = ChannelHealthStatus.degraded
+            channel.last_check_at = datetime.utcnow()
+
+        await asyncio.gather(*(probe(channel) for channel in channels))
+        db.commit()
+        now = datetime.utcnow()
+        active = sum(bool(ch.cooldown_until and ch.cooldown_until > now) for ch in channels)
+        active_channel_cooldowns.set(active)
+
+
 def start_scheduler():
     """启动定时任务"""
     setup_scheduler()
     scheduler.start()
+    asyncio.create_task(check_upstream_health())
     
     try:
         import asyncio
