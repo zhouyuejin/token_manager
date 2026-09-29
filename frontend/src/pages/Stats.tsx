@@ -28,6 +28,7 @@ const StatsPage = () => {
   const [keyId, setKeyId] = useState<string>()
   const [model, setModel] = useState<string>()
   const [channelId, setChannelId] = useState<string>()
+  const [apiType, setApiType] = useState<string>()
   // 额度数据（来自当前登录用户）
   const quotaTotal: number = user?.quota ?? 0
   const quotaUsed: number = Math.min(user?.quota_used ?? 0, quotaTotal)
@@ -101,7 +102,7 @@ const StatsPage = () => {
 
   useEffect(() => {
     fetchData()
-  }, [dateRange, departmentId, projectId, keyId, model, channelId])
+  }, [dateRange, departmentId, projectId, keyId, model, channelId, apiType])
 
   // 使用 SWR 获取 API Keys（独立于 dateRange）
   const { data: keysData, mutate: mutateKeys } = useSwrData<{total: number; items: any[]}>('/api-keys')
@@ -121,6 +122,7 @@ const StatsPage = () => {
         ...(keyId ? { key_id: keyId } : {}),
         ...(model ? { model } : {}),
         ...(channelId ? { channel_id: channelId } : {}),
+        ...(apiType ? { api_type: apiType } : {}),
       }
       const statsData = await getUsageStats(statsParams)
       setStats(statsData)
@@ -285,6 +287,13 @@ const StatsPage = () => {
           <Select allowClear placeholder="API Key" style={{ width: 140 }} value={keyId} onChange={setKeyId} options={(options?.keys || []).filter((row: any) => !projectId || row.project_id === projectId).map((row: any) => ({ value: row.key_id, label: row.name || row.key_id }))} />
           <Select allowClear placeholder="模型" style={{ width: 140 }} value={model} onChange={setModel} options={(options?.models || []).map((value: string) => ({ value, label: value }))} />
           <Select allowClear placeholder="渠道" style={{ width: 140 }} value={channelId} onChange={setChannelId} options={(options?.channels || []).map((row: any) => ({ value: row.channel_id, label: row.name }))} />
+          <Select allowClear placeholder="接口类型" style={{ width: 160 }} value={apiType} onChange={setApiType} options={[
+            { value: 'chat', label: 'Chat Completions' },
+            { value: 'responses', label: 'Responses' },
+            { value: 'embeddings', label: 'Embeddings' },
+            { value: 'images', label: 'Images' },
+            { value: 'audio/transcriptions', label: 'Audio Transcriptions' },
+          ]} />
           <RangePicker 
             value={dateRange}
             onChange={(dates: any) => {
@@ -333,6 +342,17 @@ const StatsPage = () => {
                 fontWeight: 600,
               }}
               prefix={<ApiOutlined style={{ color: '#3B82F6' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorder}`, borderRadius: 16 }}>
+            <Statistic
+              title={<span style={{ color: token.colorTextSecondary }}>筛选成本</span>}
+              value={stats?.total_cost || 0}
+              precision={4}
+              prefix="$"
+              valueStyle={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}
             />
           </Card>
         </Col>
@@ -623,7 +643,7 @@ const StatsPage = () => {
           pagination={false}
           dataSource={stats?.by_api_type || []}
           columns={[
-            { title: '接口类型', dataIndex: 'api_type', render: (value: string) => ({ chat: 'Chat Completions', responses: 'Responses', embeddings: 'Embeddings', images: 'Images', 'audio/transcriptions': 'Audio Transcriptions' } as Record<string, string>)[value] || value },
+            { title: '接口类型', dataIndex: 'api_type', render: (value: string) => ({ chat: 'Chat Completions', responses: 'Responses', embeddings: 'Embeddings', images: 'Images', 'audio/transcriptions': 'Audio Transcriptions', rerank: 'Rerank' } as Record<string, string>)[value] || value },
             { title: '调用次数', dataIndex: 'requests' },
             { title: 'Token 数', dataIndex: 'tokens' },
           ]}

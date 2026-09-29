@@ -31,6 +31,7 @@ const ModelGroupForm = lazy(() => import('./pages/admin/ModelGroupForm'))
 const OperationLogs = lazy(() => import('./pages/admin/OperationLogs'))
 const LoginLogs = lazy(() => import('./pages/admin/LoginLogs'))
 const HealthDashboard = lazy(() => import('./pages/admin/HealthDashboard'))
+const Roles = lazy(() => import('./pages/admin/Roles'))
 const RouteMonitor = lazy(() => import('./pages/admin/RouteMonitor'))
 const AdminApprovals = lazy(() => import('./pages/admin/Approvals'))
 
@@ -123,6 +124,7 @@ function App() {
               <Route path="departments" element={<ProjectsPage departmentsOnly />} />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="health" element={<HealthDashboard />} />
+              <Route path="roles" element={<Roles />} />
               <Route path="logs/routes" element={<RouteMonitor />} />
               <Route path="channels/new" element={<ChannelForm />} />
               <Route path="channels/:channelId/edit" element={<ChannelForm />} />

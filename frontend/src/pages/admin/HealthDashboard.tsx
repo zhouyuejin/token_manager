@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Button, Card, Col, Empty, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
+import { Alert, Button, Card, Col, Empty, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
+import useSWR from 'swr'
 import { useSwrData } from '../../hooks/useSwr'
 import { useThemeToken } from '../../theme/useThemeToken'
 import { useMessage } from '../../utils/message'
@@ -16,6 +17,14 @@ const formatDate = (value?: string | null) => value ? new Date(value).toLocaleSt
 
 const metricColor = (value: number) => value >= 99 ? '#16a34a' : value >= 95 ? '#d97706' : '#dc2626'
 const healthLabels: Record<string, string> = { healthy: '健康', degraded: '降级', unhealthy: '不健康' }
+const componentLabels: Record<string, string> = { mysql: 'MySQL', redis: 'Redis', upstream: '上游', background_tasks: '后台任务', not_configured: '未配置', unknown: '未知' }
+
+const fetchSystemHealth = async () => {
+  const response = await fetch('/health')
+  const data = await response.json()
+  if (!response.ok && response.status !== 503) throw new Error('健康状态请求失败')
+  return data as { status: string; components: Record<string, string> }
+}
 
 const WindowMetrics = ({ window }: { window: ChannelHealthWindow }) => (
   <Space direction="vertical" size={0} style={{ width: '100%' }}>
@@ -29,6 +38,7 @@ const WindowMetrics = ({ window }: { window: ChannelHealthWindow }) => (
 const HealthDashboard = () => {
   const [windowName, setWindowName] = useState<'5m' | '1h' | '24h'>('5m')
   const { data, isLoading, mutate } = useSwrData<{ items: ChannelHealth[] }>('/admin/health/channels')
+  const { data: systemHealth, error: systemHealthError, mutate: refreshSystemHealth } = useSWR('/health', fetchSystemHealth, { refreshInterval: 30000, shouldRetryOnError: false })
   const { token } = useThemeToken()
   const message = useMessage()
   const items = data?.items || []
@@ -62,8 +72,15 @@ const HealthDashboard = () => {
   return <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100%' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
       <div><h2 style={{ marginBottom: 4 }}>渠道健康看板</h2><span style={{ color: '#64748b' }}>基于代理用量日志实时聚合</span></div>
-      <Space><Select value={windowName} options={[...windowOptions]} onChange={setWindowName} /><Button icon={<ReloadOutlined />} onClick={() => mutate()}>刷新</Button></Space>
+      <Space><Select value={windowName} options={[...windowOptions]} onChange={setWindowName} /><Button icon={<ReloadOutlined />} onClick={() => { mutate(); refreshSystemHealth() }}>刷新</Button></Space>
     </div>
+    {systemHealthError ? <Alert type="error" showIcon style={{ marginBottom: 16 }} message="系统健康状态加载失败" description="无法读取 /health，请检查服务可用性和网络连接。" /> : systemHealth && <Card title="系统依赖与任务状态" style={{ marginBottom: 16 }}>
+      <Space wrap>
+        <Tag color={systemHealth.status === 'healthy' ? 'green' : systemHealth.status === 'degraded' ? 'orange' : 'red'}>{healthLabels[systemHealth.status] || systemHealth.status}</Tag>
+        {Object.entries(systemHealth.components).map(([name, status]) => <Tag key={name} color={status === 'healthy' ? 'green' : status === 'not_configured' ? 'default' : 'orange'}>{componentLabels[name] || name}：{healthLabels[status] || componentLabels[status] || status}</Tag>)}
+      </Space>
+      {systemHealth.status !== 'healthy' && <Alert type={systemHealth.status === 'unhealthy' ? 'error' : 'warning'} showIcon style={{ marginTop: 12 }} message="请先检查上方异常组件；上游探测和后台任务状态可在下方渠道明细中进一步排查。" />}
+    </Card>}
     <Row gutter={16} style={{ marginBottom: 16 }}>
       <Col xs={24} sm={8}><Card><Statistic title="请求数" value={selectedWindow.requests} /></Card></Col>
       <Col xs={24} sm={8}><Card><Statistic title="成功数" value={selectedWindow.successes} valueStyle={{ color: '#16a34a' }} /></Card></Col>
