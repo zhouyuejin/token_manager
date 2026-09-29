@@ -64,7 +64,7 @@
 | C2 | P1 | 用户级聚合限流 | A1、A2 | 代码与自动化验证完成；用户确认 D1 浏览器验收完成 |
 | C3 | P1 | 校正迁移、发布及计划状态 | A2 | 本地 Compose 迁移及前端部署完成；运行状态已核验 |
 | D1 | P1 | 关键业务浏览器验收 | B1–B3、C1–C2 | 验证完成；用户确认浏览器验收通过，源账本详情缺口已修复 |
-| D2 | P2 | 真实 OIDC 联调 | B1、可用测试 IdP | 待验收 |
+| D2 | P2 | 真实 OIDC 联调 | B1、可用测试 IdP | 配置修复及代码级验证完成；真实 IdP 待条件 |
 | D3 | P2 | 内容审计性能验证 | A1 | 待验收 |
 | D4 | P1 | 运维、监控及恢复演练 | 稳定候选版本 | 待验收 |
 | E1 | P2 | 协议与能力配置剩余项 | 明确协议支持范围 | 待范围确认 |
@@ -414,3 +414,14 @@ npm run build
 - 版本记录：Git `HEAD` 为 `1824ba63ba93ab97523f9bee128aa3589d4d260`，部署包含未提交工作区改动；后端镜像 `sha256:2f26e112de3f00143b4ac8b5e0a048479b865cdc49cdd47bc3fb172c0f22fb04`；前端 `index.html` SHA-256 为 `3fe89c485b4e44ff7010d63cf0fae4074ac096de35489ade995ee7661d6a9f6f`，Billing bundle SHA-256 为 `ced98d04d2bfbe976e0d1ca08ca0f67798a1dc691a5edc7b8b0b7376e3aa8cb9`。
 - 回滚：本次迁移仅为用户表增加默认 0 的限流列；回退应用代码不要求降级数据库。需要完整恢复时可用上述迁移前 SQL 备份。未执行远程发布。
 - 遗留：无本地 C3 迁移/部署遗留；远程环境发布如需执行，应另行指定目标环境。
+
+### 2026-09-29：D2 真实 OIDC 联调准备
+
+- 状态：代码配置修复完成；真实 IdP 验收待条件
+- 改动：Compose backend 增加 OIDC issuer、client ID/secret、redirect URI、frontend URL 和密码登录开关传参；secret 只从运行环境读取，不写入文档或 Git。现有回调已执行 issuer、audience、nonce、RS256 签名、已验证邮箱绑定和禁用账户检查。
+- 失败测试：修复前 Compose backend 环境未声明任何 OIDC 配置；根因为部署配置缺少变量映射。
+- 验证：`docker compose config --format json` 核对六项配置均进入 backend 环境，当前没有配置 client secret；`docker compose exec -T backend pytest -q tests/test_oidc_rbac.py tests/test_auth_refresh.py`：19 通过、0 失败。Docker Compose 提示顶层 `version` 已废弃，为既有无关警告。真实 IdP 端到端流程未运行。
+- 迁移：无数据库结构变更，无需迁移。
+- 联调：本地 `.env` 不含 OIDC 配置，当前没有测试 IdP；首次建号、已验证邮箱绑定、重复登录、禁用账户及错误 issuer/audience/nonce/签名仍待真实 IdP 验收。
+- 发布：未发布。
+- 遗留：配置测试 IdP 并按 D2 验收矩阵完成真实浏览器登录；不得将代码级检查写作真实 IdP 验收完成。
