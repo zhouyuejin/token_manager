@@ -59,6 +59,7 @@ const getPageTitle = (pathname: string): string => {
     "/admin/departments": "部门管理",
     "/admin/channels": "渠道管理",
     "/admin/health": "渠道健康看板",
+    "/admin/roles": "角色与权限",
     "/admin/models": "模型管理",
     "/admin/model-groups": "模型分组",
     "/admin/logs/operations": "操作日志",
@@ -71,6 +72,8 @@ const getPageTitle = (pathname: string): string => {
 
 const roleLabel = (role?: string) => {
   if (role === "admin") return "管理员";
+  if (role === "department_admin") return "部门管理员";
+  if (role === "auditor") return "审计只读";
   if (role === "user") return "普通用户";
   return "";
 };
@@ -192,6 +195,7 @@ const MainLayout = () => {
                 icon: <BarChartOutlined />,
                 label: "渠道健康",
               },
+              { key: "/admin/roles", icon: <TeamOutlined />, label: "角色与权限" },
               {
                 key: "/admin/models",
                 icon: <AppstoreOutlined />,

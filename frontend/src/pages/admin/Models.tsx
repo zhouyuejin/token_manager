@@ -4,7 +4,7 @@ import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, 
   Select, Popconfirm, Tabs, Row, Col, InputNumber, Radio, Checkbox,
-  Drawer, Switch, Divider, Tooltip
+  Drawer, Switch, Divider, Tooltip, Alert
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreOutlined, DollarOutlined, SettingOutlined, CloudDownloadOutlined, LinkOutlined, SearchOutlined } from '@ant-design/icons'
 import { getModels, createModel, updateModel, deleteModel, syncModelPricing, ModelMapping, ModelChannel, getModelChannels, bindChannelToModel, unbindChannel, updateModelChannel } from '../../api/models'
@@ -534,6 +534,14 @@ const ModelsPage = () => {
           </Button>
         </Space>
       </div>
+
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="平台协议入口"
+        description={<Space wrap><Tag>Chat Completions</Tag><Tag>Responses</Tag><Tag>Embeddings</Tag><Tag>Images</Tag><Tag>Audio Transcriptions</Tag><span>Rerank 尚未开放；供应商上游格式请在渠道配置中查看。</span></Space>}
+      />
 
       {/* 模型列表 */}
       <div style={{

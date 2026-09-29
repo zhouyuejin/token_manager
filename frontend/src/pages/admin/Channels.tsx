@@ -211,6 +211,10 @@ const ChannelsPage = () => {
       }
     },
     {
+      title: '上游格式', dataIndex: 'upstream_format', key: 'upstream_format', width: 150,
+      render: (format?: string) => <Tag color="blue">{({ auto: '自动', chat: 'Chat', anthropic: 'Anthropic', gemini: 'Gemini', responses: 'Responses', custom: '供应商自定义' } as Record<string, string>)[format || 'auto'] || format || '自动'}</Tag>,
+    },
+    {
       title: 'Cooldown', key: 'cooldown', width: 180,
       render: (_: unknown, record: Channel) => {
         const health = healthMap[record.channel_id]
