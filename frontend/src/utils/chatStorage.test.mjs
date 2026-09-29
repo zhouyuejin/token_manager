@@ -1,13 +1,9 @@
-// Plain-Node test for chatStorage. No test framework required: uses
-// node:test (built-in to Node >=18). Run with:
-//   node --test frontend/src/utils/chatStorage.test.mjs
-//
-// Strategy: stub `localStorage` on globalThis before importing the module
-// so the SUT's references resolve to the stub. The stub is a fresh in-memory
-// map per test (set in beforeEach).
+// Plain-Node test for chatStorage. Run with `npm run test:utils`.
 
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import test from 'node:test'
+import ts from 'typescript'
 
 const makeStorage = () => {
   const map = new Map()
@@ -20,23 +16,33 @@ const makeStorage = () => {
   }
 }
 
-const importFresh = async () => {
-  // Bust the ESM cache so the module re-reads globalThis.localStorage.
-  const url = new URL('./chatStorage.ts', import.meta.url)
-  const mod = await import(`${url}?t=${Date.now()}`)
-  return mod
+async function loadModule() {
+  const source = (await readFile(new URL('./chatStorage.ts', import.meta.url), 'utf8'))
+    .replace(
+      "import { useAuthStore } from '../store/auth'",
+      'const useAuthStore = { getState: () => ({ user: { user_id: globalThis.__testUserId } }) }',
+    )
+  const output = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2020,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText
+  return import(`data:text/javascript,${encodeURIComponent(output)}`)
 }
 
 test('returns empty config when storage is empty', async () => {
   globalThis.localStorage = makeStorage()
-  const { loadModelConfig } = await importFresh()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig } = await loadModule()
   assert.deepEqual(loadModelConfig(), {})
 })
 
 test('roundtrips a saved config', async () => {
   const store = makeStorage()
   globalThis.localStorage = store
-  const { loadModelConfig, saveModelConfig } = await importFresh()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig, saveModelConfig } = await loadModule()
   saveModelConfig({ modelId: 'm-2' })
   assert.deepEqual(loadModelConfig(), { modelId: 'm-2' })
 })
@@ -44,7 +50,8 @@ test('roundtrips a saved config', async () => {
 test('overwrites a previous config', async () => {
   const store = makeStorage()
   globalThis.localStorage = store
-  const { loadModelConfig, saveModelConfig } = await importFresh()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig, saveModelConfig } = await loadModule()
   saveModelConfig({ modelId: 'm-2' })
   saveModelConfig({ modelId: 'm-7' })
   assert.deepEqual(loadModelConfig(), { modelId: 'm-7' })
@@ -52,16 +59,46 @@ test('overwrites a previous config', async () => {
 
 test('coerces non-string fields to undefined', async () => {
   const store = makeStorage()
-  store.setItem('chat.modelConfig.v1', JSON.stringify({ modelId: null, extra: 'ignored' }))
+  store.setItem('chat.modelConfig.v1.user-1', JSON.stringify({ modelId: null, extra: 'ignored' }))
   globalThis.localStorage = store
-  const { loadModelConfig } = await importFresh()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig } = await loadModule()
   assert.deepEqual(loadModelConfig(), { modelId: undefined })
 })
 
 test('returns empty config on corrupted JSON', async () => {
   const store = makeStorage()
-  store.setItem('chat.modelConfig.v1', '{not json')
+  store.setItem('chat.modelConfig.v1.user-1', '{not json')
   globalThis.localStorage = store
-  const { loadModelConfig } = await importFresh()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig } = await loadModule()
   assert.deepEqual(loadModelConfig(), {})
+})
+
+test('keeps saved configs isolated by user', async () => {
+  globalThis.localStorage = makeStorage()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig, saveModelConfig } = await loadModule()
+  saveModelConfig({ modelId: 'm-1' })
+
+  globalThis.__testUserId = 'user-2'
+  assert.deepEqual(loadModelConfig(), {})
+  saveModelConfig({ modelId: 'm-2' })
+
+  globalThis.__testUserId = 'user-1'
+  assert.deepEqual(loadModelConfig(), { modelId: 'm-1' })
+})
+
+test('clears only the logged-out user config', async () => {
+  globalThis.localStorage = makeStorage()
+  globalThis.__testUserId = 'user-1'
+  const { loadModelConfig, saveModelConfig, clearModelConfigStorage } = await loadModule()
+  saveModelConfig({ modelId: 'm-1' })
+  clearModelConfigStorage('user-1')
+  assert.deepEqual(loadModelConfig(), {})
+
+  globalThis.__testUserId = 'user-2'
+  saveModelConfig({ modelId: 'm-2' })
+  clearModelConfigStorage('user-1')
+  assert.deepEqual(loadModelConfig(), { modelId: 'm-2' })
 })
