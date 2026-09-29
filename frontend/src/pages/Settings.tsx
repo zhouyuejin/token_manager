@@ -4,10 +4,12 @@ import { Card, Form, Input, Button, Switch } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, BellOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
 import { useMessage } from '../utils/message'
-import { getNotificationSettings, updateNotificationSettings } from '../api/users'
+import { changePassword, getNotificationSettings, updateNotificationSettings } from '../api/users'
+import { getRequestErrorMessage } from '../utils/security'
 
 const SettingsPage = () => {
   const { user } = useAuthStore()
+  const [passwordForm] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const message = useMessage()
@@ -42,11 +44,11 @@ const SettingsPage = () => {
     }
     setLoading(true)
     try {
-      // TODO: 调用修改密码API
+      await changePassword(values)
+      passwordForm.resetFields()
       message.success('密码修改成功')
     } catch (error) {
-      console.error(error)
-      message.error('密码修改失败')
+      message.error(getRequestErrorMessage((error as any)?.response?.data, '密码修改失败'))
     } finally {
       setLoading(false)
     }
@@ -178,7 +180,7 @@ const SettingsPage = () => {
         }
         style={cardStyle}
       >
-        <Form layout="vertical" onFinish={onPasswordChange}>
+        <Form form={passwordForm} layout="vertical" onFinish={onPasswordChange}>
           <Form.Item 
             name="old_password" 
             label={<span style={{ color: token.colorTextSecondary }}>原密码</span>} 
