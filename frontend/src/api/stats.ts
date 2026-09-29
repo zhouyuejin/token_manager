@@ -17,6 +17,11 @@ export interface UsageStats {
     tokens: number
     requests: number
   }[]
+  by_api_type: {
+    api_type: string
+    tokens: number
+    requests: number
+  }[]
 }
 
 export const getUsageStats = (params: {
@@ -27,6 +32,7 @@ export const getUsageStats = (params: {
   key_id?: string
   model?: string
   channel_id?: string
+  api_type?: string
 }) => get<UsageStats>('/stats/usage', { params })
 
 export interface AdminStats {

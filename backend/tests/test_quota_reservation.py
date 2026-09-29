@@ -122,6 +122,7 @@ def test_all_entrypoints_reserve_and_finish(db, account, SessionLocal, monkeypat
     @app.middleware('http')
     async def auth(request, call_next):
         request.state.user, request.state.api_key = user, key
+        request.state.request_id = 'test-request'
         return await call_next(request)
     if chat:
         db.add(ChatConversation(conversation_id='conv', user_id=account, model_id='priced'))
@@ -473,6 +474,7 @@ def test_proxy_stream_allows_renewal_with_single_connection_pool(db, account, mo
         request = Request({'type': 'http', 'headers': []})
         request.state.user = session.query(User).filter_by(user_id=account).one()
         request.state.api_key = session.query(ApiKey).filter_by(key_id=account).one()
+        request.state.request_id = 'test-request'
         loop = asyncio.new_event_loop()
         async def consume():
             response = await proxy.chat_completions(request, proxy.ChatCompletionRequest(

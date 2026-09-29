@@ -10,6 +10,7 @@ import logging
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import Response
 from app.api.streaming import QuotaStreamingResponse
 from app.services.quota_reservation_service import estimate_request
 from sqlalchemy.orm import Session, selectinload
@@ -295,6 +296,127 @@ async def chat_completions(
 # ========== v1 前缀路由 ==========
 
 v1_router = APIRouter()
+
+
+async def _proxy_protocol(request: Request, db: Session, path: str, api_type: str, multipart: bool = False):
+    user: User = getattr(request.state, "user", None)
+    api_key: ApiKey = getattr(request.state, "api_key", None)
+    if not user or not api_key:
+        raise HTTPException(status_code=401, detail="无效的API Key")
+
+    content_type = request.headers.get("content-type", "application/json")
+    if multipart:
+        form = await request.form()
+        fields, files = {}, []
+        for key, value in form.multi_items():
+            if hasattr(value, "read"):
+                files.append((key, (value.filename, await value.read(), value.content_type)))
+            else:
+                fields[key] = str(value)
+        model = fields.get("model")
+        body = (fields, files)
+        request_data = {"max_tokens": 1024}
+    else:
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象")
+        model = body.get("model")
+        request_data = {**body, "max_tokens": body.get("max_tokens") or 1024}
+    if not isinstance(model, str) or not model:
+        raise HTTPException(status_code=422, detail="缺少 model")
+
+    service = create_proxy_service(db)
+    group_check = service.check_model_group_access(api_key, user, model)
+    if not group_check["allowed"]:
+        raise HTTPException(status_code=403, detail=group_check["message"])
+    estimated_tokens = sum(estimate_request(request_data))
+    rate_limit_redis = get_rate_limit_redis_client()
+    rate_limit = check_proxy_rate_limit(rate_limit_redis, api_key, model, estimated_tokens)
+    concurrency_key = rate_limit.get("concurrency_key")
+    if not rate_limit["allowed"]:
+        record_api_key_error(db, api_key, "rate_limit")
+        raise HTTPException(status_code=429, detail=rate_limit.get("detail") or "请求过于频繁")
+    try:
+        service.reserve_quota(user, api_key, model, request_data)
+        result = service.forward_protocol_with_failover(
+            model, user, api_key, api_type, path, body, content_type,
+        )
+        if result.get("usage_recorded"):
+            raise HTTPException(status_code=result.get("status_code", 502), detail=result.get("error", "请求失败"))
+
+        response_data = None
+        try:
+            response_data = json.loads(result.get("body", b"{}"))
+        except (ValueError, TypeError):
+            pass
+        usage_data = response_data.get("usage") if isinstance(response_data, dict) else None
+        if isinstance(usage_data, dict):
+            usage_data = {
+                "prompt_tokens": usage_data.get("prompt_tokens", usage_data.get("input_tokens", 0)),
+                "completion_tokens": usage_data.get("completion_tokens", usage_data.get("output_tokens", 0)),
+                "total_tokens": usage_data.get("total_tokens"),
+            }
+            if usage_data["total_tokens"] is None:
+                usage_data["total_tokens"] = usage_data["prompt_tokens"] + usage_data["completion_tokens"]
+            tokens = service.calculate_tokens({"max_tokens": 0}, {"usage": usage_data})
+        else:
+            tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        status_code = result.get("status_code", 502)
+        service.record_usage(
+            user.user_id, api_key.key_id, result.get("channel_id"), model, tokens,
+            result.get("latency_ms", 0), status_code, result.get("error"),
+            api_type=api_type,
+        )
+        if result.get("success"):
+            await service.deduct_quota(user, api_key, tokens)
+        else:
+            db.commit()
+            raise HTTPException(status_code=status_code, detail=result.get("error", "请求失败"))
+        return Response(content=result.get("body", b""), status_code=status_code,
+                        media_type=result.get("content_type", "application/json"))
+    finally:
+        try:
+            service.release_reservation()
+        finally:
+            release_proxy_concurrency(rate_limit_redis, concurrency_key)
+
+
+async def responses(request: Request, db: Session = Depends(get_db)):
+    return await _proxy_protocol(request, db, "responses", "responses")
+
+
+async def embeddings(request: Request, db: Session = Depends(get_db)):
+    return await _proxy_protocol(request, db, "embeddings", "embeddings")
+
+
+async def image_generations(request: Request, db: Session = Depends(get_db)):
+    return await _proxy_protocol(request, db, "images/generations", "images")
+
+
+async def image_edits(request: Request, db: Session = Depends(get_db)):
+    return await _proxy_protocol(request, db, "images/edits", "images", multipart=True)
+
+
+async def image_variations(request: Request, db: Session = Depends(get_db)):
+    return await _proxy_protocol(request, db, "images/variations", "images", multipart=True)
+
+
+async def audio_transcriptions(request: Request, db: Session = Depends(get_db)):
+    return await _proxy_protocol(request, db, "audio/transcriptions", "audio/transcriptions", multipart=True)
+
+
+for protocol_path, handler in (
+    ("/responses", responses), ("/embeddings", embeddings),
+    ("/images/generations", image_generations), ("/images/edits", image_edits),
+    ("/images/variations", image_variations),
+    ("/audio/transcriptions", audio_transcriptions),
+):
+    router.add_api_route(protocol_path, handler, methods=["POST"])
+    v1_router.add_api_route(protocol_path, handler, methods=["POST"])
 
 @v1_router.get("/models")
 async def v1_list_models(request: Request, db: Session = Depends(get_db)):

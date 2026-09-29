@@ -617,6 +617,19 @@ const StatsPage = () => {
         </Row>
       )}
 
+      <Card title="接口类型用量" loading={loading} style={{ marginBottom: 20 }}>
+        <Table
+          rowKey="api_type"
+          pagination={false}
+          dataSource={stats?.by_api_type || []}
+          columns={[
+            { title: '接口类型', dataIndex: 'api_type', render: (value: string) => ({ chat: 'Chat Completions', responses: 'Responses', embeddings: 'Embeddings', images: 'Images', 'audio/transcriptions': 'Audio Transcriptions' } as Record<string, string>)[value] || value },
+            { title: '调用次数', dataIndex: 'requests' },
+            { title: 'Token 数', dataIndex: 'tokens' },
+          ]}
+        />
+      </Card>
+
       {/* 按模型统计 + 每日趋势 */}
       <Row gutter={[20, 20]}>
         <Col xs={24} lg={12}>
