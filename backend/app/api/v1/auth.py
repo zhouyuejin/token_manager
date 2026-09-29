@@ -27,6 +27,7 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.login_log import LoginLog
 from app.models.role_permission import RolePermission
 from app.utils.request import extract_client_ip, extract_user_agent
+from app.services.content_privacy import redact_sensitive_text
 from jose import JWTError, jwt
 
 router = APIRouter()
@@ -128,7 +129,7 @@ def _create_login_log(db: Session, username: str, user_id: Optional[str],
     try:
         log = LoginLog(
             log_id=secrets.token_hex(16),
-            username=username,
+            username=redact_sensitive_text(username, 50),
             user_id=user_id,
             ip_address=ip,
             user_agent=ua,

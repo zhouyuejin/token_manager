@@ -1,5 +1,5 @@
 """项目及用户授权，不引入组织树。"""
-from sqlalchemy import Column, String, ForeignKey
+from sqlalchemy import Column, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -12,6 +12,7 @@ class Project(Base):
     name = Column(String(100), nullable=False)
     owner_user_id = Column(String(32), nullable=True)
     status = Column(String(16), nullable=False, default='active')
+    content_audit_enabled = Column(Boolean, nullable=False, default=False, server_default='0')
     department = relationship('Department')
 
 

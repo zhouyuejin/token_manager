@@ -1230,6 +1230,14 @@ def check_proxy_rate_limit(
 - 脱敏规则有测试。
 - 请求转发性能不会因脱敏明显下降。
 
+**执行记录（2026-09-29）：** Task 5.4 已实现。
+- 代理用量日志不保存原始请求或响应正文；新增项目级“内容审计摘要”开关，默认关闭。开启后，只从文本字段提取最多 2000 字符摘要，保存前遮盖常见 API Key、Bearer Token、身份证号、手机号和邮箱；二进制图片/音频内容不进入摘要。
+- 对路由错误、用量错误、操作详情和登录名在写入时执行脱敏；日志查询接口也对历史路由错误、操作详情、操作人和登录名做脱敏。
+- 摘要采集遍历最多 200 个节点、最多 2256 个原始字符，输出截断为 2000 字符；项目开关复用请求开始时已采集的归属信息，不新增每请求数据库查询。未做独立性能基准。
+- Docker backend 执行 `pytest -q tests/test_content_privacy.py tests/test_route_decision_log.py tests/test_proxy_protocols.py tests/test_chat_request_context.py`：**14 passed**。前端 `npm run build` 通过，Python 语法检查和 `git diff --check` 通过。
+- Alembic `20260929_1200_content_privacy` 仅应用于隔离测试库 `token_db_test`，未对业务库 `token_db` 执行迁移。
+- 首次组合测试发现 Bearer 脱敏顺序问题，已修复并在后续专项测试中通过。另行组合运行旧日志查询、登录日志和操作日志测试时，部分旧测试无法准备管理员/普通用户 Token（返回空 Token 或 API 401），因此该组合未作为通过结果；本次新增隐私测试及路由、协议回归单独通过。
+
 #### Task 5.5: 运维和灾备
 
 **实现：**

@@ -22,6 +22,7 @@ from app.schemas.log import (
     LoginLogResponse,
     LoginLogListResponse,
 )
+from app.services.content_privacy import redact_sensitive_text
 
 router = APIRouter()
 
@@ -31,7 +32,7 @@ def _safe_route_error(value):
         return value
     if re.search(r"(?i)(api[_ -]?key|access[_ -]?token|bearer\s+|sk-[a-z0-9_-]{12,}|prompt|request\s*body|messages\s*[:=])", value):
         return "上游错误包含敏感内容，已隐藏"
-    return value
+    return redact_sensitive_text(value, 500)
 
 
 @router.get("/routes")
@@ -131,14 +132,14 @@ async def list_operation_logs(
         detail = None
         if row.detail:
             try:
-                detail = json.loads(row.detail)
+                detail = json.loads(redact_sensitive_text(row.detail))
             except json.JSONDecodeError:
-                detail = row.detail
+                detail = redact_sensitive_text(row.detail)
         result_items.append(
             OperationLogResponse(
                 log_id=row.log_id,
                 operator_id=row.operator_id,
-                operator_name=row.operator_name,
+                operator_name=redact_sensitive_text(row.operator_name, 50),
                 action=row.action,
                 target_type=row.target_type,
                 target_id=row.target_id,
@@ -186,7 +187,7 @@ async def list_login_logs(
         items=[
             LoginLogResponse(
                 log_id=row.log_id,
-                username=row.username,
+                username=redact_sensitive_text(row.username, 50),
                 user_id=row.user_id,
                 ip_address=row.ip_address,
                 user_agent=row.user_agent,
