@@ -373,7 +373,6 @@ def start_scheduler():
     asyncio.create_task(check_upstream_health())
     
     try:
-        import asyncio
         loop = asyncio.get_event_loop()
         if loop.is_running():
             asyncio.ensure_future(sync_all_channels())
