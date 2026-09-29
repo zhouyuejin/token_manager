@@ -2,7 +2,7 @@
 Token中转平台 - 主应用入口
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
@@ -11,6 +11,7 @@ from app.api.v1.ws import router as ws_router
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.middleware import ProxyAuthMiddleware
+from app.services.metrics import render_metrics
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -156,8 +157,65 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
-    return {"status": "healthy", "version": "1.0.0"}
+    """依赖、上游及后台调度器健康状态。"""
+    from datetime import datetime, timedelta
+    from fastapi.responses import JSONResponse
+    from app.core.database import SessionLocal
+    from app.models.channel import Channel
+    from app.services.rate_limit_service import get_rate_limit_redis_client
+    from app.services.scheduler_service import scheduler
+    from app.tasks.daily_report import scheduler as report_scheduler
+
+    components = {}
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("SELECT 1")
+        components["mysql"] = "healthy"
+    except Exception:
+        components["mysql"] = "unhealthy"
+    try:
+        get_rate_limit_redis_client().ping()
+        components["redis"] = "healthy"
+    except Exception:
+        components["redis"] = "unhealthy"
+
+    components["background_tasks"] = (
+        "healthy" if scheduler.running and report_scheduler.running
+        and scheduler.get_job("check_upstream_health") else "degraded"
+    )
+    try:
+        with SessionLocal() as db:
+            channels = db.query(Channel).filter(Channel.status == "active").all()
+        if not channels:
+            components["upstream"] = "not_configured"
+        elif any(not channel.last_check_at or channel.last_check_at < datetime.utcnow() - timedelta(minutes=3)
+                 for channel in channels):
+            components["upstream"] = "degraded"
+        elif any(getattr(channel.health_status, "value", channel.health_status) == "unhealthy"
+                 for channel in channels):
+            components["upstream"] = "degraded"
+        elif any(getattr(channel.health_status, "value", channel.health_status) == "degraded"
+                 for channel in channels):
+            components["upstream"] = "degraded"
+        else:
+            components["upstream"] = "healthy"
+    except Exception:
+        components["upstream"] = "unknown"
+
+    status = "unhealthy" if any(components[name] == "unhealthy" for name in ("mysql", "redis")) else (
+        "degraded" if any(value == "degraded" for value in components.values()) else "healthy"
+    )
+    response_status = 503 if status == "unhealthy" else 200
+    return JSONResponse(
+        {"status": status, "version": "1.0.0", "components": components},
+        status_code=response_status,
+    )
+
+
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics():
+    body, content_type = render_metrics()
+    return Response(content=body, media_type=content_type)
 
 
 if __name__ == "__main__":

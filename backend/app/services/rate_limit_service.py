@@ -2,6 +2,7 @@ import time
 from typing import Optional, TypedDict
 
 from app.core.config import settings
+from app.services.metrics import rate_limit_rejections
 
 
 _redis_client = None
@@ -61,6 +62,7 @@ def check_proxy_rate_limit(redis_client, api_key, model: str, estimated_tokens: 
         redis_client.expire(redis_key, window_seconds + 1)
 
         if count > limit:
+            rate_limit_rejections.labels(window=window_name).inc()
             if concurrency_key:
                 redis_client.decr(concurrency_key)
             retry_after_ms = int(((bucket + 1) * window_seconds - now) * 1000)

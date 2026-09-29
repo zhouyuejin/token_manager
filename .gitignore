@@ -49,6 +49,7 @@ temp/
 logs/
 *.log
 nginx/logs/
+backups/
 
 # 编译产物
 frontend/dist/

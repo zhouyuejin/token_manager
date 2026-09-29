@@ -1250,6 +1250,12 @@ def check_proxy_rate_limit(
 - 有可执行的恢复步骤文档。
 - Grafana 能看到核心运营指标。
 
+**执行记录（2026-09-29）：**
+- `/health` 检查 MySQL、Redis、两个调度器及上游最近探测状态；上游每分钟通过渠道模型探测更新，数据库/Redis 不可用返回 503，调度器或上游异常返回 degraded。
+- `/metrics` 增加限流拒绝、预算拒绝/使用率、路由结果和渠道冷却指标；Prometheus 抓取配置及 Grafana 数据源、核心运营仪表盘改为自动加载。
+- 新增 [灾备恢复手册](灾备恢复手册.md)，覆盖 MySQL 逻辑备份、验证、恢复、迁移和 Redis/配置恢复；备份目录加入 `.gitignore`。
+- Python 编译、Grafana JSON 解析及 `git diff --check` 通过。Docker 专项回归 42 项通过；另有 5 个既有失败：1 个成本看板断言为 0，4 个预算入口在预扣对象初始化时因 `content_audit_enabled` 字段不匹配失败，与本次指标埋点无关。未重启或发布服务。
+
 ### Phase 5 前端补齐任务
 
 #### Frontend 5.1: 协议能力入口
