@@ -477,6 +477,8 @@ const UsersPage = () => {
           >
             <Select style={{ borderRadius: 10 }}>
               <Select.Option value="user">用户</Select.Option>
+              <Select.Option value="department_admin">部门管理员</Select.Option>
+              <Select.Option value="auditor">审计只读</Select.Option>
               <Select.Option value="admin">管理员</Select.Option>
             </Select>
           </Form.Item>
@@ -595,6 +597,8 @@ const UsersPage = () => {
           >
             <Select>
               <Select.Option value="user">用户</Select.Option>
+              <Select.Option value="department_admin">部门管理员</Select.Option>
+              <Select.Option value="auditor">审计只读</Select.Option>
               <Select.Option value="admin">管理员</Select.Option>
             </Select>
           </Form.Item>

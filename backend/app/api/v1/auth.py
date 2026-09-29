@@ -2,9 +2,13 @@
 认证接口
 """
 import secrets
+import hashlib
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode, urljoin
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from loguru import logger
 from sqlalchemy.orm import Session
@@ -21,7 +25,9 @@ from app.core.security import (
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole, UserStatus
 from app.models.login_log import LoginLog
+from app.models.role_permission import RolePermission
 from app.utils.request import extract_client_ip, extract_user_agent
+from jose import JWTError, jwt
 
 router = APIRouter()
 
@@ -65,6 +71,8 @@ class UserInfo(BaseModel):
 @router.post("/register", response_model=UserInfo)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """用户注册 - 密码已在前端进行 SHA256 哈希"""
+    if not settings.PASSWORD_LOGIN_ENABLED:
+        raise HTTPException(status_code=403, detail="账号密码登录已关闭")
     # 检查用户名
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -141,6 +149,8 @@ async def login(request: Request, db: Session = Depends(get_db)):
     1. JSON: {"username": "xxx", "password": "xxx"}
     2. Form: username=xxx&password=xxx
     """
+    if not settings.PASSWORD_LOGIN_ENABLED:
+        raise HTTPException(status_code=403, detail="账号密码登录已关闭")
     # 手动解析请求体，支持 JSON 和 form-urlencoded
     content_type = request.headers.get("Content-Type", "")
     username = ""
@@ -241,6 +251,154 @@ async def login(request: Request, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="服务器内部错误"
         )
+
+
+def oidc_enabled() -> bool:
+    return bool(settings.OIDC_ISSUER_URL and settings.OIDC_CLIENT_ID and
+                settings.OIDC_CLIENT_SECRET and settings.OIDC_REDIRECT_URI and
+                settings.OIDC_FRONTEND_URL)
+
+
+async def oidc_metadata(client: httpx.AsyncClient) -> dict:
+    issuer = settings.OIDC_ISSUER_URL.rstrip("/")
+    response = await client.get(f"{issuer}/.well-known/openid-configuration")
+    response.raise_for_status()
+    metadata = response.json()
+    if metadata.get("issuer", "").rstrip("/") != issuer:
+        raise ValueError("OIDC issuer mismatch")
+    return metadata
+
+
+@router.get("/oidc/config")
+async def oidc_config():
+    return {"oidc_enabled": oidc_enabled(), "password_login_enabled": settings.PASSWORD_LOGIN_ENABLED}
+
+
+@router.get("/oidc/login")
+async def oidc_login():
+    if not oidc_enabled():
+        raise HTTPException(status_code=404, detail="企业登录未配置")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            metadata = await oidc_metadata(client)
+    except Exception:
+        logger.exception("读取 OIDC 配置失败")
+        raise HTTPException(status_code=502, detail="企业登录服务暂不可用")
+
+    nonce = secrets.token_urlsafe(24)
+    state = jwt.encode({"sub": "oidc", "nonce": nonce}, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    query = urlencode({
+        "client_id": settings.OIDC_CLIENT_ID,
+        "redirect_uri": settings.OIDC_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "nonce": nonce,
+    })
+    response = RedirectResponse(f"{metadata['authorization_endpoint']}?{query}")
+    response.set_cookie(
+        "oidc_state", state, max_age=300, httponly=True,
+        secure=settings.OIDC_REDIRECT_URI.startswith("https://"),
+        samesite="lax", path="/api/v1/auth/oidc",
+    )
+    return response
+
+
+def _oidc_user(db: Session, claims: dict) -> User:
+    subject = f"{settings.OIDC_ISSUER_URL.rstrip('/')}|{claims['sub']}"
+    user = db.query(User).filter(User.oidc_subject == subject).first()
+    if user:
+        return user
+
+    email = claims.get("email", "").strip().lower()
+    if not email or claims.get("email_verified") is not True:
+        raise HTTPException(status_code=403, detail="企业账号未提供已验证邮箱")
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        user.oidc_subject = subject
+        db.commit()
+        return user
+
+    base = (claims.get("preferred_username") or email.split("@", 1)[0]).strip()[:50] or "oidc-user"
+    username = base
+    suffix = 1
+    while db.query(User.user_id).filter(User.username == username).first():
+        suffix += 1
+        username = f"{base[:45]}-{suffix}"
+    from app.models.model_group import get_unique_default_group
+    default_group = get_unique_default_group(db)
+    import json
+    user = User(
+        user_id=generate_user_id(), username=username, email=email,
+        password=hashlib.sha256(secrets.token_bytes(32)).hexdigest(),
+        role=UserRole.user, status=UserStatus.active,
+        model_group_ids=json.dumps([default_group.group_id]) if default_group else "[]",
+        quota=settings.DEFAULT_NEW_USER_QUOTA, oidc_subject=subject,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.get("/oidc/callback")
+async def oidc_callback(request: Request, code: str, state: str, db: Session = Depends(get_db)):
+    if not oidc_enabled():
+        raise HTTPException(status_code=404, detail="企业登录未配置")
+    if not state or state != request.cookies.get("oidc_state"):
+        raise HTTPException(status_code=400, detail="OIDC state 无效")
+    try:
+        state_claims = jwt.decode(state, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if state_claims.get("sub") != "oidc":
+            raise JWTError("invalid state")
+        async with httpx.AsyncClient(timeout=10) as client:
+            metadata = await oidc_metadata(client)
+            token_response = await client.post(
+                metadata["token_endpoint"],
+                data={"grant_type": "authorization_code", "code": code,
+                      "redirect_uri": settings.OIDC_REDIRECT_URI, "client_id": settings.OIDC_CLIENT_ID},
+                auth=(settings.OIDC_CLIENT_ID, settings.OIDC_CLIENT_SECRET),
+            )
+            token_response.raise_for_status()
+            id_token = token_response.json()["id_token"]
+            header = jwt.get_unverified_header(id_token)
+            if header.get("alg") != "RS256":
+                raise JWTError("unsupported signing algorithm")
+            jwks_response = await client.get(metadata["jwks_uri"])
+            jwks_response.raise_for_status()
+            signing_key = next((key for key in jwks_response.json()["keys"]
+                                if key.get("kid") == header.get("kid")), None)
+            if signing_key is None:
+                raise JWTError("signing key not found")
+            claims = jwt.decode(
+                id_token, signing_key, algorithms=["RS256"],
+                audience=settings.OIDC_CLIENT_ID, issuer=metadata["issuer"],
+            )
+        if claims.get("nonce") != state_claims.get("nonce"):
+            raise JWTError("nonce mismatch")
+        user = _oidc_user(db, claims)
+        if user.status == UserStatus.disabled:
+            raise HTTPException(status_code=403, detail="账户已被禁用")
+
+        ip_address = extract_client_ip(request)
+        user_agent = extract_user_agent(request)
+        _create_login_log(db, user.username, user.user_id, ip_address, user_agent, "success")
+        access_token = create_access_token(data={"sub": user.user_id, "username": user.username})
+        plain, token_hash, token_id = generate_refresh_token()
+        db.add(RefreshToken(
+            token_id=token_id, user_id=user.user_id, token_hash=token_hash,
+            expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        ))
+        db.commit()
+        fragment = urlencode({"access_token": access_token, "refresh_token": plain})
+        response = RedirectResponse(f"{settings.OIDC_FRONTEND_URL.rstrip('/')}/login#{fragment}")
+        response.delete_cookie("oidc_state", path="/api/v1/auth/oidc")
+        return response
+    except HTTPException:
+        raise
+    except (JWTError, KeyError, StopIteration, httpx.HTTPError, ValueError):
+        logger.exception("OIDC 登录校验失败")
+        raise HTTPException(status_code=401, detail="企业登录验证失败")
 
 
 @router.get("/me", response_model=UserInfo)

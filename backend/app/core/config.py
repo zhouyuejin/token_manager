@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     DEFAULT_NEW_USER_QUOTA: int = 0        # 新注册用户默认额度
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # OIDC
+    OIDC_ISSUER_URL: str = ""
+    OIDC_CLIENT_ID: str = ""
+    OIDC_CLIENT_SECRET: str = ""
+    OIDC_REDIRECT_URI: str = ""
+    OIDC_FRONTEND_URL: str = ""
+    PASSWORD_LOGIN_ENABLED: bool = True
     
     # 日志
     LOG_LEVEL: str = "INFO"

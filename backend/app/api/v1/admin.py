@@ -89,7 +89,7 @@ def _apply_role_transition(user: "User", new_role_value: str, changed: dict) -> 
         changed["quota"] = -1
         changed["model_group_ids"] = []
         changed["auto"] = "promoted_to_admin"
-    else:
+    elif user.role == UserRole.admin:
         user.quota = 0
         user.model_group_ids = "[]"
         changed["quota"] = 0
@@ -434,10 +434,9 @@ async def create_user(data: AdminUserCreate, db: Session = Depends(get_db), admi
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
     
-    from app.core.security import get_password_hash
     user = User(
         user_id=f"u_{secrets.token_hex(8)}", username=data.username, email=data.email,
-        password_hash=get_password_hash(data.password), role=UserRole(data.role),
+        password=data.password, role=UserRole(data.role),
         quota=data.quota, model_group_ids=json.dumps(data.model_group_ids)
     )
     db.add(user)

@@ -1210,6 +1210,14 @@ def check_proxy_rate_limit(
 - 权限控制不再只有 admin/user 二分。
 - 审计只读角色不能修改配置。
 
+**执行记录（2026-09-29）：** Task 5.3 已实现。
+- 后端通过 OIDC Discovery、授权码回调和 RS256 ID Token 校验完成登录；验证 issuer、audience、签名、nonce 和已验证邮箱。首次登录创建普通用户，已存在且邮箱已验证的账号按邮箱绑定 OIDC subject。
+- 配置项：`OIDC_ISSUER_URL`、`OIDC_CLIENT_ID`、`OIDC_CLIENT_SECRET`、`OIDC_REDIRECT_URI`、`OIDC_FRONTEND_URL`；`PASSWORD_LOGIN_ENABLED` 控制账号密码登录和注册 fallback，默认开启。未配置完整 OIDC 参数时隐藏企业登录入口。
+- `users` 增加唯一 `oidc_subject`；新增 `role_permissions` 并扩展角色为 `admin`、`department_admin`、`auditor`、`user`。管理员可读写管理接口；审计员只读；部门管理员只能管理自己负责部门下的部门和项目。用户管理页可创建、修改这四种角色。
+- Docker backend 执行 `tests/test_oidc_rbac.py tests/test_auth_refresh.py`：**16 passed**；前端 `npm run build` 通过。OIDC 未配置实际身份提供商，因此未做外部 IdP 端到端登录验证。
+- Docker `test_project_attribution.py` 的历史用例为 **6 passed、11 failed**，失败集中在既有 API Key 响应缺少 `key_id` 及项目删除行为与测试预期不一致；未由本任务改动这些接口。
+- Alembic `20260929_1100_oidc_rbac` 已应用到 `token_db` 和隔离测试库 `token_db_test`。初次 Docker 迁移使用了 `alembic.ini` 默认连接，目标为 `token_db`；变更只增加 OIDC 字段、角色权限记录并扩展角色枚举，未删除既有数据。测试库在确认已有结构对应前一迁移后标记版本并升级。
+
 #### Task 5.4: 数据脱敏和内容审计策略
 
 **实现：**

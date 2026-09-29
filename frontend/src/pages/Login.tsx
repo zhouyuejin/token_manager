@@ -4,6 +4,7 @@ import { Form, Button } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
+import { getCurrentUser, getLoginOptions, LoginOptions } from '../api/auth'
 import { useMessage } from '../utils/message'
 import gsap from 'gsap'
 
@@ -354,8 +355,9 @@ const StarField = () => {
 const Login = () => {
   const { token } = useThemeToken()
   const navigate = useNavigate()
-  const { login, isLoading } = useAuthStore()
+  const { login, isLoading, setAuth } = useAuthStore()
   const message = useMessage()
+  const [loginOptions, setLoginOptions] = useState<LoginOptions>({ oidc_enabled: false, password_login_enabled: true })
   
   const [username, setUsername] = useState(isDev ? 'admin' : '')
   const [password, setPassword] = useState(isDev ? 'admin123' : '')
@@ -376,6 +378,20 @@ const Login = () => {
       { opacity: 1, y: 0, duration: 0.4, delay: 0.6, ease: 'power2.out' }
     )
   }, [])
+
+  useEffect(() => {
+    getLoginOptions().then(setLoginOptions).catch(() => {})
+    const fragment = new URLSearchParams(window.location.hash.slice(1))
+    const accessToken = fragment.get('access_token')
+    const refreshToken = fragment.get('refresh_token')
+    if (!accessToken || !refreshToken) return
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    setAuth(accessToken, refreshToken)
+    getCurrentUser().then(user => {
+      useAuthStore.setState({ user })
+      navigate(user.role === 'admin' ? '/admin/dashboard' : '/stats')
+    }).catch(() => message.error('企业登录成功，但无法读取用户信息'))
+  }, [navigate, message, setAuth])
 
   const onFinish = async () => {
     if (!username || !password) {
@@ -477,7 +493,15 @@ const Login = () => {
           </p>
         </div>
         
-        <Form onFinish={onFinish} layout="vertical">
+        {loginOptions.oidc_enabled && <Button block style={{ height: 48, marginBottom: 20 }} onClick={() => { window.location.href = '/api/v1/auth/oidc/login' }}>
+          企业账号登录
+        </Button>}
+
+        {loginOptions.oidc_enabled && loginOptions.password_login_enabled && <div style={{ textAlign: 'center', color: token.colorTextSecondary, marginBottom: 16, fontSize: 13 }}>
+          或使用账号密码登录
+        </div>}
+
+        {loginOptions.password_login_enabled && <Form onFinish={onFinish} layout="vertical">
           <div className="login-input-wrap" style={{ marginBottom: 20 }}>
             <CustomInput
               prefix={<UserOutlined />}
@@ -539,7 +563,7 @@ const Login = () => {
               立即注册
             </Link>
           </div>
-        </Form>
+        </Form>}
       </div>
 
       <style>{`* { box-sizing: border-box; } body { margin: 0; padding: 0; }`}</style>
