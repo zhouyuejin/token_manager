@@ -1,10 +1,12 @@
 from logging.config import fileConfig
 
 from sqlalchemy import inspect
+from sqlalchemy import text
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from alembic.script import ScriptDirectory
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -18,8 +20,10 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.core.database import Base
+from app.core.config import settings
 from app.models import *  # noqa
 target_metadata = Base.metadata
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -65,6 +69,38 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        inspector = inspect(connection)
+        tables = set(inspector.get_table_names())
+        app_tables = tables - {"alembic_version"}
+        has_version_table = inspector.has_table("alembic_version")
+        has_version = has_version_table and connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).first()
+        if not has_version:
+            if not app_tables:
+                Base.metadata.create_all(bind=connection)
+            else:
+                missing_tables = {table.name for table in Base.metadata.sorted_tables} - tables
+                missing_columns = {
+                    table.name: {column.name for column in table.columns} -
+                    {column["name"] for column in inspect(connection).get_columns(table.name)}
+                    for table in Base.metadata.sorted_tables
+                    if table.name in tables
+                }
+                missing_columns = {name: columns for name, columns in missing_columns.items() if columns}
+                if missing_tables or missing_columns:
+                    raise RuntimeError(
+                        "Existing database has no Alembic version and does not match the current schema; "
+                        "back up and adopt it explicitly before starting the service."
+                    )
+            if not has_version_table:
+                connection.exec_driver_sql(
+                    "CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL PRIMARY KEY)"
+                )
+            head = ScriptDirectory.from_config(config).get_current_head()
+            connection.execute(text("INSERT INTO alembic_version (version_num) VALUES (:version)"), {"version": head})
+            connection.commit()
+
         if connection.dialect.name == "mysql":
             inspector = inspect(connection)
             if not inspector.has_table("alembic_version"):
