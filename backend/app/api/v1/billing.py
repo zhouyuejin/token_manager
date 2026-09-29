@@ -13,7 +13,9 @@ from app.core.database import get_db
 from app.dependencies import require_admin
 from app.models.budget import Budget
 from app.models.billing_reconcile import BillingReconcileItem, BillingReconcileReport
+from app.models.quota_record import QuotaRecord
 from app.models.quota_reservation import QuotaReservation
+from app.models.usage_log import UsageLog
 from app.models.user import User
 from app.services.budget_service import BudgetService, current_month, month_bounds
 from app.services.billing_reconcile_service import (
@@ -124,7 +126,36 @@ async def list_reconcile_items(report_id: str, page: int = Query(1, ge=1), page_
     rows = query.order_by(BillingReconcileItem.created_at, BillingReconcileItem.item_id).offset((page - 1) * page_size).limit(page_size).all()
     fields = ('item_id', 'anomaly_type', 'reservation_id', 'usage_log_id', 'quota_record_id', 'user_id',
               'expected_value', 'actual_value', 'detail', 'created_at')
-    return {'total': total, 'items': [{field: getattr(row, field) for field in fields} for row in rows]}
+    reservation_ids = {row.reservation_id for row in rows if row.reservation_id}
+    usage_ids = {row.usage_log_id for row in rows if row.usage_log_id}
+    quota_ids = {row.quota_record_id for row in rows if row.quota_record_id}
+    reservations = {row.reservation_id: row for row in db.query(QuotaReservation).filter(
+        QuotaReservation.reservation_id.in_(reservation_ids)).all()} if reservation_ids else {}
+    usages = {row.id: row for row in db.query(UsageLog).filter(UsageLog.id.in_(usage_ids)).all()} if usage_ids else {}
+    quota_records = {row.record_id: row for row in db.query(QuotaRecord).filter(
+        QuotaRecord.record_id.in_(quota_ids)).all()} if quota_ids else {}
+
+    def source_fields(record, names):
+        if record is None:
+            return None
+        return {name: getattr(record, name).value if hasattr(getattr(record, name), 'value') else getattr(record, name)
+                for name in names}
+
+    items = []
+    for row in rows:
+        item = {field: getattr(row, field) for field in fields}
+        item['sources'] = {
+            'reservation': source_fields(reservations.get(row.reservation_id), (
+                'reservation_id', 'user_id', 'key_id', 'project_id', 'department_id', 'model', 'status',
+                'estimated_tokens', 'actual_tokens', 'estimated_cost_usd', 'actual_cost_usd')),
+            'usage': source_fields(usages.get(row.usage_log_id), (
+                'id', 'log_id', 'reservation_id', 'user_id', 'key_id', 'channel_id', 'model', 'api_type',
+                'cost_usd', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'status_code')),
+            'quota_record': source_fields(quota_records.get(row.quota_record_id), (
+                'record_id', 'user_id', 'type', 'amount', 'balance_before', 'balance_after', 'source', 'reason')),
+        }
+        items.append(item)
+    return {'total': total, 'items': items}
 
 
 @router.post('/reconcile/run/{business_date}')

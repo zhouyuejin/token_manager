@@ -82,6 +82,11 @@ export interface ReconcileItem {
   actual_value?: string | null
   detail: string
   created_at: string
+  sources?: {
+    reservation: Record<string, string | number | null> | null
+    usage: Record<string, string | number | null> | null
+    quota_record: Record<string, string | number | null> | null
+  }
 }
 
 export const runReconcile = (businessDate: string) =>

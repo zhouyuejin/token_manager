@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, Card, DatePicker, Drawer, Form, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Card, DatePicker, Descriptions, Drawer, Form, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import { Budget, BudgetSave, ReconcileItem, ReconcileReport, ReconcileReportList, Reservation, runReconcile, saveBudget } from '../../api/billing'
@@ -131,6 +131,20 @@ const Billing = () => {
     { title: '期望值', dataIndex: 'expected_value', width: 260, ellipsis: true, render: (value: string | null) => value || '—' },
     { title: '实际值', dataIndex: 'actual_value', width: 260, ellipsis: true, render: (value: string | null) => value || '—' },
   ]
+  const sourceLabels: Record<string, string> = {
+    reservation_id: '预扣 ID', user_id: '用户 ID', key_id: 'Key ID', project_id: '项目 ID', department_id: '部门 ID',
+    model: '模型', status: '状态', estimated_tokens: '预估 Token', actual_tokens: '实际 Token',
+    estimated_cost_usd: '预估金额（USD）', actual_cost_usd: '实际金额（USD）', id: '用量序号', log_id: '用量 ID',
+    channel_id: '渠道 ID', api_type: '接口类型', cost_usd: '费用（USD）', prompt_tokens: '输入 Token',
+    completion_tokens: '输出 Token', total_tokens: '总 Token', status_code: 'HTTP 状态码', record_id: '流水 ID',
+    type: '变动类型', amount: '变动额度', balance_before: '变动前余额', balance_after: '变动后余额',
+    source: '来源', reason: '原因',
+  }
+  const sourceDetails = (source: Record<string, string | number | null> | null | undefined, title: string) => source
+    ? <Descriptions title={title} size="small" column={3} items={Object.entries(source).map(([key, value]) => ({
+      key, label: sourceLabels[key] || key, children: value ?? '—',
+    }))} />
+    : <Descriptions title={title} size="small" items={[{ key: 'missing', label: '定位结果', children: '未找到关联源记录' }]} />
   const options = kind === 'project'
     ? (projects?.items || []).map(row => ({ value: row.project_id, label: row.name }))
     : (departments?.items || []).map(row => ({ value: row.dept_id, label: row.name }))
@@ -197,7 +211,13 @@ const Billing = () => {
       extra={<Select allowClear placeholder="全部异常类型" style={{ width: 220 }} value={anomalyType} onChange={value => { setAnomalyType(value); setItemPage(1) }}
         options={Object.entries(anomalyLabels).map(([value, label]) => ({ value, label }))} />}>
       {itemError && <Alert type="error" message="异常明细加载失败" />}
+      <Typography.Text type="secondary">展开异常行可查看关联的预扣、用量和额度流水源记录。</Typography.Text>
       <Table rowKey="item_id" loading={itemsLoading} dataSource={itemData?.items || []} columns={itemColumns} scroll={{ x: 1600 }}
+        expandable={{ expandedRowRender: row => <Space direction="vertical" style={{ width: '100%' }}>
+          {sourceDetails(row.sources?.reservation, '预扣源记录')}
+          {sourceDetails(row.sources?.usage, '用量源记录')}
+          {sourceDetails(row.sources?.quota_record, '额度流水源记录')}
+        </Space> }}
         pagination={{ current: itemPage, pageSize: 20, total: itemData?.total || 0, showSizeChanger: false, onChange: setItemPage }} />
     </Drawer>
   </div>
