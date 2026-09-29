@@ -24,6 +24,8 @@ API代理/网关服务，为公司内部提供统一访问大模型API的能力�
 
 ## 快速开始
 
+阿里云 ECS（已安装 Docker、宿主机 Nginx 已配置 HTTPS）部署步骤见[阿里云 ECS 部署操作手册](docs/阿里云ECS部署操作手册.md)。
+
 ### 前置要求
 
 - Docker Desktop
