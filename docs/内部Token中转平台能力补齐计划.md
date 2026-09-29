@@ -1172,6 +1172,14 @@ def check_proxy_rate_limit(
 - 不影响现有 `/chat/completions`。
 - 统计页能区分接口类型。
 
+**执行记录（2026-09-29）：**
+- **已完成：** 新增 `/api/v1/proxy/responses`、`/embeddings`、`/images/generations`、`/images/edits`、`/images/variations` 和 `/audio/transcriptions`，支持 OpenAI-compatible 上游转发及模型映射。
+- **已完成：** 用量日志新增 `api_type` 字段，旧记录默认归为 `chat`；统计 API 支持接口类型筛选并返回分类汇总，统计页展示各类型调用次数和 Token 数。
+- **已完成：** 新增代理路由成功响应测试，覆盖 Responses、Embeddings、Images 和 Audio Transcriptions；修正 Chat/额度回归测试夹具，使其模拟生产中间件提供的 `request_id`。
+- **验证通过：** Docker backend 中运行 `pytest -q tests/test_proxy_protocols.py tests/test_quota_reservation.py`，结果 `35 passed`；前端 `npm run build`、Python 语法检查及 `git diff --check` 通过。
+- **验证准备：** 仅在隔离测试库 `token_db_test` 补齐 `usage_logs.api_type` 列以匹配新增迁移；未对业务库 `token_db` 执行迁移。
+- **后续衔接：** 本次只转发 OpenAI-compatible 上游；非兼容供应商的请求/响应转换归入 Task 5.2 的 Provider Adapter 分层。Rerank 和供应商私有接口暂未实现。
+
 #### Task 5.2: Provider Adapter 分层
 
 **实现：**
@@ -1182,6 +1190,13 @@ def check_proxy_rate_limit(
 **验收：**
 - 新增一个供应商不需要改大段 `proxy_service.py`。
 - 旧渠道配置继续可用。
+
+**执行记录（2026-09-29）：**
+- **已完成：** 新增 `backend/app/services/provider_adapters/`，按既有 `Channel.upstream_format` 选择 adapter；内聚认证 Header、URL 构造、请求/响应转换及流式行转换。
+- **已完成：** OpenAI-compatible 格式使用默认直通 adapter；Anthropic 和 Gemini adapter 支持文本 Chat 请求、响应及用量转换。`proxy_service.py` 的普通、流式和 Task 5.1 协议转发均通过 adapter 分发。
+- **兼容：** `channel_auth.py` 保留原有公开函数作为兼容入口；`auto/chat/anthropic/gemini/responses/custom` 配置继续按原规则解析，未修改数据库结构。
+- **验证通过：** Docker backend 执行 `pytest -q tests/test_provider_adapters.py tests/test_channel_auth.py tests/test_proxy_service_advanced_config.py tests/test_proxy_protocols.py tests/test_quota_reservation.py`，结果 `61 passed`。
+- **范围说明：** 本次完成文本 Chat 转换；供应商特有工具调用及其他协议的转换可在对应 adapter 中后续扩展。
 
 #### Task 5.3: 企业登录和 RBAC
 

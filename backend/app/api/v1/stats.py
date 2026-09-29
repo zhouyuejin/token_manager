@@ -35,6 +35,7 @@ async def get_usage_stats(
     key_id: Optional[str] = Query(None),
     model: Optional[str] = Query(None),
     channel_id: Optional[str] = Query(None),
+    api_type: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -57,6 +58,8 @@ async def get_usage_stats(
                           (UsageLog.model, model), (UsageLog.channel_id, channel_id)):
         if value:
             filters.append(column == value)
+    if api_type:
+        filters.append(UsageLog.api_type == api_type)
     query = db.query(UsageLog).filter(and_(*filters))
     
     # 基础统计
@@ -153,6 +156,11 @@ async def get_usage_stats(
         )
         for stat in day_stats
     ]
+
+    api_type_stats = db.query(
+        UsageLog.api_type, func.sum(UsageLog.total_tokens).label('tokens'),
+        func.count(UsageLog.id).label('requests'),
+    ).filter(and_(*filters)).group_by(UsageLog.api_type).all()
     
     return UsageStatsResponse(
         total_tokens=total_tokens,
@@ -161,7 +169,9 @@ async def get_usage_stats(
         success_rate=round(success_rate, 2),
         total_cost=round(total_cost, 8),
         by_model=by_model,
-        by_day=by_day
+        by_day=by_day,
+        by_api_type=[{"api_type": stat.api_type or "chat", "tokens": stat.tokens or 0, "requests": stat.requests}
+                     for stat in api_type_stats],
     )
 
 

@@ -17,6 +17,7 @@ class UsageLog(Base):
     key_id = Column(String(32), nullable=False, index=True, comment="API Key ID")
     channel_id = Column(String(32), nullable=True, index=True, comment="渠道ID")
     model = Column(String(50), nullable=False, index=True, comment="模型ID")
+    api_type = Column(String(32), nullable=False, default="chat", server_default="chat", comment="代理接口类型")
     
     project_id = Column(String(32), nullable=True, index=True, comment="项目快照")
     department_id = Column(String(32), nullable=True, index=True, comment="部门快照")

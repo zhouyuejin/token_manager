@@ -30,7 +30,7 @@ from app.models.route_decision_log import RouteDecisionLog
 from app.models.project import Project
 from app.services.project_service import DEFAULT_PROJECT_ID, DEFAULT_DEPARTMENT_ID
 
-from app.services.channel_auth import build_auth_headers, get_upstream_url
+from app.services.provider_adapters import get_provider_adapter
 from app.services.api_key_freeze_service import record_api_key_error, record_api_key_success
 from app.services.secret_crypto import decrypt_secret
 
@@ -600,14 +600,12 @@ class ProxyService:
     ) -> Dict[str, Any]:
         """单次转发到上游"""
         start_time = time.time()
-        
-        request_data["model"] = upstream_model
-        upstream_url = get_upstream_url(channel, model=upstream_model)
+        adapter = get_provider_adapter(channel)
+        upstream_data = adapter.transform_request(request_data, upstream_model)
+        upstream_url = adapter.build_url(channel, model=upstream_model)
 
-        headers = build_auth_headers(channel, key)
+        headers = adapter.build_headers(channel, key)
         headers["Content-Type"] = "application/json"
-        if channel.upstream_format == "anthropic" or (channel.upstream_format == "auto" and channel.type.value == "anthropic"):
-            headers.setdefault("anthropic-version", "2023-06-01")
         timeout = channel.timeout
         if self.reservation_id:
             self.db.commit()  # 上游等待期间不占数据库连接，给租约和其它请求使用。
@@ -616,7 +614,7 @@ class ProxyService:
             with self.reservation_lease(), httpx.Client(timeout=timeout) as client:
                 response = client.post(
                     upstream_url,
-                    json=request_data,
+                    json=upstream_data,
                     headers=headers
                 )
                 
@@ -626,7 +624,7 @@ class ProxyService:
                     return {
                         "success": True,
                         "status_code": 200,
-                        "data": response.json() if response.text else {},
+                        "data": adapter.transform_response(response.json()) if response.text else {},
                         "latency_ms": latency_ms,
                         "error": None,
                         "channel_id": channel.channel_id,
@@ -716,13 +714,12 @@ class ProxyService:
         self.stream_metadata.update(channel_id=ch.channel_id, status_code=502, error=None)
         start_time = time.time()
         timeout = ch.timeout
-        request_data['model'] = upstream_model
+        adapter = get_provider_adapter(ch)
+        request_data = adapter.transform_request(request_data, upstream_model)
         request_data['stream'] = True
-        upstream_url = get_upstream_url(ch, model=upstream_model)
-        headers = build_auth_headers(ch, key)
+        upstream_url = adapter.build_url(ch, model=upstream_model)
+        headers = adapter.build_headers(ch, key)
         headers['Content-Type'] = 'application/json'
-        if ch.upstream_format == 'anthropic' or (ch.upstream_format == 'auto' and ch.type.value == 'anthropic'):
-            headers.setdefault('anthropic-version', '2023-06-01')
         if '/chat/completions' in upstream_url:
             request_data['stream_options'] = {'include_usage': True}
         key_snapshot = SimpleNamespace(key_id=api_key.key_id, api_key=api_key.api_key)
@@ -761,24 +758,25 @@ class ProxyService:
                             return
 
                         record_api_key_success(key_snapshot)
-                        for chunk in response.iter_lines():
-                            if chunk:
-                                if chunk.startswith('data: ') and chunk[6:].strip() == '[DONE]':
-                                    done = True
-                                if chunk.startswith('data: ') and chunk[6:].strip() != '[DONE]':
-                                    try:
-                                        data = json.loads(chunk[6:])
-                                        if data.get('error'):
-                                            self.stream_metadata.update(status_code=502, error=str(data['error']))
-                                        if data.get('usage'):
-                                            self.stream_metadata['tokens'] = self.calculate_tokens(request_data, data)
-                                        for choice in data.get('choices', []):
-                                            completion_text += choice.get('delta', {}).get('content') or ''
-                                            if choice.get('finish_reason'):
-                                                finished = True
-                                    except (ValueError, TypeError, AttributeError):
-                                        pass
-                                yield chunk + "\n"
+                        for upstream_line in response.iter_lines():
+                            for chunk in adapter.transform_stream_line(upstream_line):
+                                if chunk:
+                                    if chunk.startswith('data: ') and chunk[6:].strip() == '[DONE]':
+                                        done = True
+                                    if chunk.startswith('data: ') and chunk[6:].strip() != '[DONE]':
+                                        try:
+                                            data = json.loads(chunk[6:])
+                                            if data.get('error'):
+                                                self.stream_metadata.update(status_code=502, error=str(data['error']))
+                                            if data.get('usage'):
+                                                self.stream_metadata['tokens'] = self.calculate_tokens(request_data, data)
+                                            for choice in data.get('choices', []):
+                                                completion_text += choice.get('delta', {}).get('content') or ''
+                                                if choice.get('finish_reason'):
+                                                    finished = True
+                                        except (ValueError, TypeError, AttributeError):
+                                            pass
+                                    yield chunk + "\n"
                         if not done and not finished:
                             raise RuntimeError('上游流式响应缺少结束标记')
                         if 'tokens' not in self.stream_metadata:
@@ -831,9 +829,9 @@ class ProxyService:
         return (Decimal(tokens.get('prompt_tokens', 0)) * Decimal(model.price_per_1k_input or 0)
                 + Decimal(tokens.get('completion_tokens', 0)) * Decimal(model.price_per_1k_output or 0)) / 1000
 
-    def _record_usage_failure(self, user_id, key_id, channel_id, model, status_code, error):
+    def _record_usage_failure(self, user_id, key_id, channel_id, model, status_code, error, api_type="chat"):
         """失败记录使用同一归因路径，费用为零。"""
-        self.record_usage(user_id, key_id, channel_id, model, {}, 0, status_code, error)
+        self.record_usage(user_id, key_id, channel_id, model, {}, 0, status_code, error, api_type=api_type)
         self.db.commit()
 
     def record_usage(
@@ -841,6 +839,7 @@ class ProxyService:
         tokens: Dict[str, int], latency_ms: int, status_code: int,
         error_message: Optional[str] = None,
         attribution: Optional[Dict[str, str]] = None,
+        api_type: str = "chat",
     ) -> None:
         """记录归因和费用快照；字段不会随项目归属或价格变化重算。"""
         usage_cost = self._usage_cost(model, channel_id, tokens, status_code)
@@ -853,6 +852,7 @@ class ProxyService:
         usage_log = UsageLog(
             log_id=f"log_{secrets.token_hex(8)}", user_id=user_id, key_id=key_id,
             channel_id=channel_id, model=model,
+            api_type=api_type,
             **(attribution or self.capture_usage_attribution(key_id)),
             cost_usd=usage_cost,
             reservation_id=self.reservation_id,
@@ -862,6 +862,65 @@ class ProxyService:
             latency_ms=latency_ms, status_code=status_code, error_message=error_message,
         )
         self.db.add(usage_log)
+
+    def forward_protocol_with_failover(self, model_id, user, api_key, api_type, path, body, content_type):
+        """原样转发 OpenAI-compatible 的非 Chat 请求。"""
+        self.capture_usage_attribution(api_key.key_id)
+        candidates = self.select_candidates(model_id, user, api_key)
+        if not candidates:
+            self._record_usage_failure(user.user_id, api_key.key_id, None, model_id, 502, "无可用渠道", api_type)
+            return {"success": False, "status_code": 502, "error": "无可用渠道", "usage_recorded": True}
+
+        last_result = None
+        for channel, model_channel, key in candidates:
+            adapter = get_provider_adapter(channel)
+            headers = adapter.build_headers(channel, key)
+            headers["Content-Type"] = content_type
+            started = time.time()
+            try:
+                with self.reservation_lease(), httpx.Client(timeout=channel.timeout) as client:
+                    if isinstance(body, dict):
+                        upstream_body = adapter.transform_protocol_request(body, model_channel.upstream_model)
+                        response = client.post(adapter.build_protocol_url(channel, path), json=upstream_body, headers=headers)
+                    else:
+                        fields, files = body
+                        upstream_fields = adapter.transform_protocol_request(fields, model_channel.upstream_model)
+                        response = client.post(adapter.build_protocol_url(channel, path), data=upstream_fields, files=files,
+                                               headers={k: v for k, v in headers.items() if k.lower() != "content-type"})
+                response_body = response.content
+                if "json" in response.headers.get("content-type", ""):
+                    try:
+                        response_data = response.json()
+                        transformed = adapter.transform_protocol_response(response_data)
+                        if transformed is not response_data:
+                            response_body = json.dumps(transformed, ensure_ascii=False).encode("utf-8")
+                    except (ValueError, TypeError):
+                        pass
+                result = {"success": 200 <= response.status_code < 300, "status_code": response.status_code,
+                          "body": response_body, "content_type": response.headers.get("content-type", "application/json"),
+                          "latency_ms": int((time.time() - started) * 1000), "channel_id": channel.channel_id,
+                          "upstream_model": model_channel.upstream_model}
+                if result["success"]:
+                    record_api_key_success(api_key)
+                    return result
+                try:
+                    error_body = response.json()
+                    result["error"] = error_body.get("error", {}).get("message") or error_body.get("message") or f"HTTP {response.status_code}"
+                except (ValueError, AttributeError):
+                    result["error"] = f"HTTP {response.status_code}"
+                last_result = result
+                if 400 <= response.status_code < 500:
+                    record_api_key_error(self.db, api_key, "upstream_4xx")
+                if response.status_code not in {400, 401, 403, 404, 429, 500, 502, 503, 504}:
+                    break
+                if response.status_code in {429, 500, 502, 503, 504}:
+                    self.bump_key_failure(channel, key)
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+                last_result = {"success": False, "status_code": 504, "error": str(exc), "channel_id": channel.channel_id,
+                               "latency_ms": int((time.time() - started) * 1000)}
+
+        last_result = last_result or {"success": False, "status_code": 502, "error": "上游请求失败"}
+        return last_result
 
     def calculate_tokens(self, request_data: Dict[str, Any], response_data: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
         """计算Token数量（估算）"""

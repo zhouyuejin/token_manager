@@ -28,11 +28,18 @@ class DailyUsage(BaseModel):
     requests: int
 
 
+class ApiTypeUsage(BaseModel):
+    api_type: str
+    tokens: int
+    requests: int
+
+
 class UsageStatsResponse(UsageStats):
     """完整用量统计响应"""
     total_cost: float = 0.0
     by_model: List[ModelUsage] = []
     by_day: List[DailyUsage] = []
+    by_api_type: List[ApiTypeUsage] = []
 
 
 class UsageQuery(BaseModel):
