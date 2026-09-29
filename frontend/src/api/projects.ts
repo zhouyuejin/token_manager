@@ -14,6 +14,7 @@ export interface Project {
   department_name: string
   owner_user_id?: string | null
   status: 'active' | 'disabled'
+  content_audit_enabled: boolean
 }
 
 export type DepartmentSave = Omit<Department, 'dept_id'>

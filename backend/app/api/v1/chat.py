@@ -372,7 +372,8 @@ async def send_message(
             db.add(assistant_msg)
             proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=result.get("channel_id"),
                                        model=model, tokens=tokens, latency_ms=result.get("latency_ms", 0), status_code=result.get("status_code", 200),
-                                       error_message=result.get("error"))
+                                       error_message=result.get("error"), request_content=request_data,
+                                       response_content=result.get("data"))
             await proxy_service.deduct_quota(current_user, api_key, tokens)
             return ChatSendMessageResponse(conversation_id=conversation_id, message_id=assistant_msg.message_id, role="assistant", content=content, model=model, tokens=tokens.get("total_tokens", 0))
         finally:
@@ -405,7 +406,7 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
         if metadata.get("status_code") != 200 or not metadata.get('completed'):
             if not metadata.get("recorded"):
                 code = metadata.get('status_code', 502)
-                proxy_service.record_usage(current_user.user_id, api_key.key_id, metadata.get("channel_id"), model_id, {}, metadata.get("latency_ms", 0), 499 if code == 200 else code, metadata.get("error") or '流式请求未完成')
+                proxy_service.record_usage(current_user.user_id, api_key.key_id, metadata.get("channel_id"), model_id, {}, metadata.get("latency_ms", 0), 499 if code == 200 else code, metadata.get("error") or '流式请求未完成', request_content=request_data)
                 db.commit()
             yield 'data: [DONE]\n\n'
             return
@@ -413,7 +414,9 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
         db.add(assistant_msg)
         tokens = metadata.get("tokens") or proxy_service.calculate_tokens(request_data, {"choices": [{"message": {"content": content}}]})
         proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=metadata.get("channel_id"), model=model_id,
-                                   tokens=tokens, latency_ms=metadata.get("latency_ms", 0), status_code=200, error_message=None)
+                                   tokens=tokens, latency_ms=metadata.get("latency_ms", 0), status_code=200, error_message=None,
+                                   request_content=request_data,
+                                   response_content={"choices": [{"message": {"content": content}}]})
         await proxy_service.deduct_quota(current_user, api_key, tokens)
         db.commit()
         yield 'data: [DONE]\n\n'

@@ -219,7 +219,9 @@ async def chat_completions(
                             latency_ms=metadata.get("latency_ms", 0),
                             status_code=200 if succeeded else (metadata.get("status_code") if metadata.get("status_code") != 200 else 499),
                             error_message=metadata.get("error") or (None if succeeded else "流式请求未完成"),
-                            attribution=proxy_service.usage_attribution[_key_id]
+                            attribution=proxy_service.usage_attribution[_key_id],
+                            request_content=request_data,
+                            response_content={"choices": [{"message": {"content": completion_text}}]},
                         )
                         import asyncio
                         user_obj = db.query(User).filter(User.user_id == _user_id).first()
@@ -265,7 +267,9 @@ async def chat_completions(
                     tokens=tokens,
                     latency_ms=result.get("latency_ms", 0),
                     status_code=result.get("status_code", 200),
-                    error_message=result.get("error")
+                    error_message=result.get("error"),
+                    request_content=request_data,
+                    response_content=result.get("data") if result.get("success") else None,
                 )
                 await proxy_service.deduct_quota(user, api_key, tokens)
                 return result.get("data", {})
@@ -279,7 +283,8 @@ async def chat_completions(
                         tokens=tokens,
                         latency_ms=result.get("latency_ms", 0),
                         status_code=result.get("status_code", 500),
-                        error_message=result.get("error")
+                        error_message=result.get("error"),
+                        request_content=request_data,
                     )
                 db.commit()
                 raise HTTPException(
@@ -315,6 +320,7 @@ async def _proxy_protocol(request: Request, db: Session, path: str, api_type: st
                 fields[key] = str(value)
         model = fields.get("model")
         body = (fields, files)
+        audit_request = fields
         request_data = {"max_tokens": 1024}
     else:
         try:
@@ -324,6 +330,7 @@ async def _proxy_protocol(request: Request, db: Session, path: str, api_type: st
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象")
         model = body.get("model")
+        audit_request = body
         request_data = {**body, "max_tokens": body.get("max_tokens") or 1024}
     if not isinstance(model, str) or not model:
         raise HTTPException(status_code=422, detail="缺少 model")
@@ -370,6 +377,8 @@ async def _proxy_protocol(request: Request, db: Session, path: str, api_type: st
             user.user_id, api_key.key_id, result.get("channel_id"), model, tokens,
             result.get("latency_ms", 0), status_code, result.get("error"),
             api_type=api_type,
+            request_content=audit_request,
+            response_content=response_data if result.get("success") else None,
         )
         if result.get("success"):
             await service.deduct_quota(user, api_key, tokens)

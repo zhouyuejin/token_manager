@@ -35,6 +35,8 @@ class UsageLog(Base):
     # 状态
     status_code = Column(Integer, nullable=False, comment="HTTP状态码")
     error_message = Column(Text, nullable=True, comment="错误信息")
+    request_summary = Column(Text, nullable=True, comment="脱敏后的请求摘要")
+    response_summary = Column(Text, nullable=True, comment="脱敏后的响应摘要")
     
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     __table_args__ = (Index('ix_usage_project_month', 'project_id', 'created_at'),

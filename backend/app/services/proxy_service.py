@@ -33,6 +33,7 @@ from app.services.project_service import DEFAULT_PROJECT_ID, DEFAULT_DEPARTMENT_
 from app.services.provider_adapters import get_provider_adapter
 from app.services.api_key_freeze_service import record_api_key_error, record_api_key_success
 from app.services.secret_crypto import decrypt_secret
+from app.services.content_privacy import content_summary, redact_sensitive_text
 
 
 # 进程级 round_robin 计数器（重启归零）
@@ -65,7 +66,7 @@ class ProxyService:
             retry_path=json.dumps(retry_path, ensure_ascii=False),
             status_code=status_code,
             success=success,
-            error_message=error_message,
+            error_message=redact_sensitive_text(error_message, 500),
         ))
         self.db.commit()
 
@@ -811,6 +812,7 @@ class ProxyService:
             self.usage_attribution[key_id] = {
                 "project_id": project_id,
                 "department_id": project.dept_id if project else DEFAULT_DEPARTMENT_ID,
+                "content_audit_enabled": bool(project and project.content_audit_enabled),
             }
         return self.usage_attribution[key_id]
 
@@ -840,8 +842,11 @@ class ProxyService:
         error_message: Optional[str] = None,
         attribution: Optional[Dict[str, str]] = None,
         api_type: str = "chat",
+        request_content=None,
+        response_content=None,
     ) -> None:
         """记录归因和费用快照；字段不会随项目归属或价格变化重算。"""
+        request_attribution = self.usage_attribution.get(key_id) or self.capture_usage_attribution(key_id)
         usage_cost = self._usage_cost(model, channel_id, tokens, status_code)
         if self.reservation_id:
             from app.models.quota_reservation import QuotaReservation
@@ -849,6 +854,7 @@ class ProxyService:
             reservation = self.db.get(QuotaReservation, self.reservation_id)
             usage_cost = cost(reservation, tokens) if status_code == 200 else Decimal('0')
             attribution = {'project_id': reservation.project_id, 'department_id': reservation.department_id}
+        audit_enabled = request_attribution.get("content_audit_enabled", False)
         usage_log = UsageLog(
             log_id=f"log_{secrets.token_hex(8)}", user_id=user_id, key_id=key_id,
             channel_id=channel_id, model=model,
@@ -859,7 +865,10 @@ class ProxyService:
             prompt_tokens=tokens.get("prompt_tokens", 0),
             completion_tokens=tokens.get("completion_tokens", 0),
             total_tokens=tokens.get("total_tokens", 0),
-            latency_ms=latency_ms, status_code=status_code, error_message=error_message,
+            latency_ms=latency_ms, status_code=status_code,
+            error_message=redact_sensitive_text(error_message, 500),
+            request_summary=content_summary(request_content) if audit_enabled else None,
+            response_summary=content_summary(response_content) if audit_enabled else None,
         )
         self.db.add(usage_log)
 

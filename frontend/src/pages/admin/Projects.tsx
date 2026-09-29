@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from 'antd'
+import { Alert, Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag } from 'antd'
 import { Department, Project, saveDepartment, saveProject, getProjectUsers, setProjectUsers, deleteDepartment, deleteProject } from '../../api/projects'
 import { User } from '../../api/users'
 import { ApiKey } from '../../api/apiKeys'
@@ -47,7 +47,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     setEditing(row)
     setSearch('')
     form.resetFields()
-    form.setFieldsValue(row || { status: 'active' })
+    form.setFieldsValue(row || { status: 'active', content_audit_enabled: false })
     setVisible(true)
   }
 
@@ -129,6 +129,10 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
           <Select showSearch allowClear filterOption={false} onSearch={setSearch} loading={usersLoading} options={userOptions} placeholder="搜索用户名或邮箱" />
         </Form.Item>
         <Form.Item name="status" label="状态" rules={[{ required: true }]}><Select options={[{ value: 'active', label: '启用' }, { value: 'disabled', label: '停用' }]} /></Form.Item>
+        {!departmentsOnly && <Form.Item name="content_audit_enabled" label="内容审计摘要" valuePropName="checked">
+          <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+        </Form.Item>}
+        {!departmentsOnly && <Alert type="info" message="开启后仅保存脱敏并截断的文本摘要（最多 2000 字符）；原始请求和响应正文不会写入日志。" style={{ marginBottom: 16 }} />}
         <Alert type="info" message="停用后，该部门或项目将不再出现在新建和编辑 Key 的可用项目中。历史用量归因保持不变。" />
       </Form>
     </Modal>

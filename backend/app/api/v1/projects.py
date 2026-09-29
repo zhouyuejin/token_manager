@@ -35,6 +35,7 @@ class DepartmentSave(BaseModel):
 
 class ProjectSave(DepartmentSave):
     dept_id: str = Field(min_length=1, max_length=32)
+    content_audit_enabled: bool = False
 
 
 class ProjectUsers(BaseModel):
@@ -46,7 +47,7 @@ def department_response(row):
 
 
 def project_response(row):
-    return {**{field: getattr(row, field) for field in ('project_id', 'dept_id', 'name', 'owner_user_id', 'status')},
+    return {**{field: getattr(row, field) for field in ('project_id', 'dept_id', 'name', 'owner_user_id', 'status', 'content_audit_enabled')},
             'department_name': row.department.name}
 
 

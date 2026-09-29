@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.models.operation_log import OperationLog
 from app.models.user import User
+from app.services.content_privacy import redact_sensitive_text
 
 
 def record_operation(
@@ -30,11 +31,11 @@ def record_operation(
         log_entry = OperationLog(
             log_id=f"log_{secrets.token_hex(12)}",
             operator_id=operator.user_id,
-            operator_name=operator.username,
+            operator_name=redact_sensitive_text(operator.username, 50),
             action=action,
             target_type=target_type,
             target_id=target_id,
-            detail=json.dumps(detail, ensure_ascii=False) if detail is not None else None,
+            detail=redact_sensitive_text(json.dumps(detail, ensure_ascii=False)) if detail is not None else None,
             ip_address=ip_address,
         )
         db.add(log_entry)
