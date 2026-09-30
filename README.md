@@ -24,60 +24,7 @@ API代理/网关服务，为公司内部提供统一访问大模型API的能力�
 
 ## 快速开始
 
-阿里云 ECS（已安装 Docker、宿主机 Nginx 已配置 HTTPS）部署步骤见[阿里云 ECS 部署操作手册](docs/阿里云ECS部署操作手册.md)。
-
-### 前置要求
-
-- Docker Desktop
-- Docker Compose
-
-### 1. 克隆项目
-
-```bash
-git clone <repository-url>
-cd token-manager
-```
-
-### 2. 配置环境变量
-
-```bash
-# 复制环境变量文件
-cp .env.example .env
-
-# 编辑配置（可选）
-vim .env
-```
-
-### 3. 启动服务
-
-```bash
-# 启动所有服务
-docker-compose up -d
-
-# 查看服务状态
-docker-compose ps
-
-# 查看日志
-docker-compose logs -f backend
-```
-
-### 4. 访问服务
-
-| 服务 | 地址 |
-|------|------|
-| API | http://localhost:8000 |
-| API Docs | http://localhost:8000/docs |
-| Grafana | http://localhost:3000 |
-
-### 5. 初始化数据
-
-```bash
-# 进入后端容器
-docker-compose exec backend bash
-
-# 初始化或升级数据库
-alembic upgrade head
-```
+阿里云 ECS 镜像部署步骤见[ACR 部署操作手册](docs/阿里云ACR部署.md)。
 
 ## 管理员注意
 
