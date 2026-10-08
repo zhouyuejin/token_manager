@@ -4,12 +4,15 @@ import { Card, Form, Input, Button, Switch } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, BellOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
 import { useMessage } from '../utils/message'
-import { changePassword, getNotificationSettings, updateNotificationSettings } from '../api/users'
+import { changePassword, getNotificationSettings, updateNotificationSettings, updateProfile } from '../api/users'
+import { mutate } from 'swr'
 import { getRequestErrorMessage } from '../utils/security'
 
 const SettingsPage = () => {
   const { user } = useAuthStore()
   const [passwordForm] = Form.useForm()
+  const [profileForm] = Form.useForm()
+  const [profileLoading, setProfileLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const message = useMessage()
@@ -19,6 +22,23 @@ const SettingsPage = () => {
     quota_change_alert: true,
     daily_report: false,
   })
+
+  useEffect(() => {
+    profileForm.setFieldsValue({ nickname: user?.nickname || '' })
+  }, [profileForm, user?.nickname])
+
+  const onProfileChange = async (values: { nickname?: string }) => {
+    setProfileLoading(true)
+    try {
+      await updateProfile({ nickname: values.nickname?.trim() || null })
+      await mutate('/users/me')
+      message.success('昵称已更新')
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setProfileLoading(false)
+    }
+  }
 
   // 页面加载时获取通知设置
   useEffect(() => {
@@ -104,7 +124,10 @@ const SettingsPage = () => {
         }
         style={cardStyle}
       >
-        <Form layout="vertical">
+        <Form form={profileForm} layout="vertical" onFinish={onProfileChange}>
+          <Form.Item name="nickname" label={<span style={{ color: token.colorTextSecondary }}>昵称</span>} rules={[{ max: 50, message: '昵称最多50个字符' }]}>
+            <Input maxLength={50} placeholder="选填，未填写时显示用户名" />
+          </Form.Item>
           <Form.Item 
             label={<span style={{ color: token.colorTextSecondary }}>用户名</span>}
           >
@@ -163,6 +186,9 @@ const SettingsPage = () => {
                 color: token.colorText,
               }}
             />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={profileLoading}>保存昵称</Button>
           </Form.Item>
         </Form>
       </Card>

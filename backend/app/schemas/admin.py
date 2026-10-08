@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator, computed_field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
+from app.schemas.user import Nickname
 
 
 # ========== 用户管理 ==========
@@ -12,6 +13,7 @@ from app.schemas._datetime import UtcDateTime
 class AdminUserCreate(BaseModel):
     """管理员创建用户请求"""
     username: str
+    nickname: Nickname = None
     email: EmailStr
     password: str = Field(..., min_length=8)
     role: str = "user"
@@ -26,6 +28,7 @@ class AdminUserCreate(BaseModel):
 class AdminUserUpdate(BaseModel):
     """更新用户请求"""
     username: Optional[str] = None
+    nickname: Nickname = None
     email: Optional[EmailStr] = None
     role: Optional[str] = None
     status: Optional[str] = None
@@ -46,6 +49,7 @@ class AdminUserResponse(BaseModel):
     """用户响应"""
     user_id: str
     username: str
+    nickname: Nickname = None
     email: str
     role: str
     status: str
@@ -420,6 +424,7 @@ class UserUsage(BaseModel):
     """用户用量统计"""
     user_id: str
     username: str
+    nickname: Nickname = None
     tokens: int
     requests: int = 0
 

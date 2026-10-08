@@ -14,6 +14,7 @@ export interface UsageReportParams {
 export interface AdminUserUsage {
   user_id: string
   username: string
+  nickname?: string | null
   tokens: number
   requests: number
 }

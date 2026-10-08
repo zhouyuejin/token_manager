@@ -1,3 +1,4 @@
+import { userDisplayName } from "../../utils/userDisplayName.mjs";
 import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Tour,
@@ -310,7 +311,7 @@ const MainLayout = () => {
               flexShrink: 0,
             }}
           >
-            {user?.username?.charAt(0).toUpperCase() || "U"}
+            {userDisplayName(user).charAt(0).toUpperCase() || "U"}
           </Avatar>
           <div style={{ minWidth: 0 }}>
             <div
@@ -321,7 +322,7 @@ const MainLayout = () => {
                 whiteSpace: "nowrap",
               }}
             >
-              {user?.username}
+              {userDisplayName(user)}
             </div>
             <div
               style={{
@@ -684,7 +685,7 @@ const MainLayout = () => {
                       flexShrink: 0,
                     }}
                   >
-                    {user?.username?.charAt(0).toUpperCase() || "U"}
+                    {userDisplayName(user).charAt(0).toUpperCase() || "U"}
                   </Avatar>
                   <div
                     style={{
@@ -707,7 +708,7 @@ const MainLayout = () => {
                         textOverflow: "ellipsis",
                       }}
                     >
-                      {user?.username || "未登录"}
+                      {userDisplayName(user) || "未登录"}
                     </span>
                     {userRoleText && (
                       <span

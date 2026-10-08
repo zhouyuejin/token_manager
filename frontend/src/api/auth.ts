@@ -58,6 +58,7 @@ export async function register(data: RegisterParams): Promise<void> {
 export interface UserInfo {
   user_id: string
   username: string
+  nickname?: string | null
   email: string
   role: string
   status: string

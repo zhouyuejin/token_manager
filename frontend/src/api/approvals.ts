@@ -44,7 +44,7 @@ export const getAssignedApprovals = (filters?: ApprovalFilters) =>
   get<ApprovalRequest[]>('/approvals/review', { params: filters })
 
 export const getApprovalRequesters = () =>
-  get<{ user_id: string; username: string }[]>('/approvals/review/requesters')
+  get<{ user_id: string; username: string; nickname?: string | null }[]>('/approvals/review/requesters')
 
 export const getProjectAccessOptions = () =>
   get<ProjectAccessOption[]>('/approvals/project-access/options')

@@ -4,6 +4,7 @@ import { hashPassword } from '../utils/crypto'
 export interface User {
   user_id: string
   username: string
+  nickname?: string | null
   email: string
   role: string
   status: string
@@ -20,6 +21,7 @@ export interface User {
 
 export interface CreateUserParams {
   username: string
+  nickname?: string | null
   email: string
   password: string
   role?: string
@@ -57,6 +59,7 @@ export async function createUser(data: CreateUserParams): Promise<void> {
 }
 
 export const updateUser = (userId: string, data: {
+  nickname?: string | null
   username?: string
   email?: string
   quota?: number
@@ -100,3 +103,6 @@ export const getNotificationSettings = () =>
 
 export const updateNotificationSettings = (settings: NotificationSettings) =>
   put<NotificationSettings>('/users/me/notification-settings', settings)
+
+export const updateProfile = (data: { nickname: string | null }) =>
+  put('/users/me/profile', data)

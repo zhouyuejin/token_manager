@@ -149,8 +149,8 @@ def test_reviewer_scope_filters_and_requester_can_cancel(db):
     assert approvals.list_review_applications(db, other) == []
     assert len(approvals.list_review_applications(db, admin, requester_user_id=requester.user_id)) == 1
     assert approvals.list_review_requesters(db, owner) == [
-        {'user_id': another_requester.user_id, 'username': another_requester.username},
-        {'user_id': requester.user_id, 'username': requester.username},
+        {'user_id': another_requester.user_id, 'username': another_requester.username, 'nickname': None},
+        {'user_id': requester.user_id, 'username': requester.username, 'nickname': None},
     ]
     assert len(approvals.list_review_requesters(db, admin)) == 2
 

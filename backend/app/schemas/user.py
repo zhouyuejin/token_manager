@@ -1,15 +1,26 @@
 """
 用户相关Schema
 """
-from pydantic import BaseModel, EmailStr, Field, computed_field
-from typing import Optional, List
+from pydantic import BaseModel, EmailStr, Field, computed_field, BeforeValidator
+from typing import Optional, List, Annotated
 from datetime import datetime
 from app.schemas._datetime import UtcDateTime
+
+
+Nickname = Annotated[Optional[str], Field(max_length=50), BeforeValidator(
+    lambda value: (value.strip() or None) if isinstance(value, str) else value
+)]
+
+
+class UserProfileUpdate(BaseModel):
+    """用户仅可维护自己的昵称。"""
+    nickname: Nickname
 
 
 class UserBase(BaseModel):
     """用户基础字段"""
     username: str
+    nickname: Nickname = None
     email: EmailStr
 
 
@@ -22,6 +33,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     """更新用户请求"""
+    nickname: Nickname = None
     email: Optional[EmailStr] = None
     role: Optional[str] = None
     model_group_ids: Optional[List[str]] = None
@@ -52,6 +64,7 @@ class UserInfo(BaseModel):
     """当前用户信息"""
     user_id: str
     username: str
+    nickname: Nickname = None
     email: str
     role: str
     status: str

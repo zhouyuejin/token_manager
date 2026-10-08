@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.security import verify_password
 from app.models.user import User
 from app.dependencies import get_current_user, get_effective_permissions
-from app.schemas.user import UserInfo, PasswordChange, NotificationSettings
+from app.schemas.user import UserInfo, PasswordChange, NotificationSettings, UserProfileUpdate
 from app.services.operation_log_service import record_operation
 from app.utils.request import extract_client_ip
 
@@ -23,6 +23,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user), 
     return UserInfo(
         user_id=current_user.user_id,
         username=current_user.username,
+        nickname=current_user.nickname,
         email=current_user.email,
         role=current_user.role.value,
         status=current_user.status.value,
@@ -32,6 +33,23 @@ async def get_current_user_info(current_user: User = Depends(get_current_user), 
         created_at=current_user.created_at.strftime("%Y-%m-%d %H:%M:%S"),
         permissions=get_effective_permissions(db, current_user),
     )
+
+
+@router.put("/me/profile")
+async def update_current_user_profile(
+    request: Request,
+    profile: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.nickname = profile.nickname
+    db.commit()
+    record_operation(
+        db=db, operator=current_user, action="update", target_type="user",
+        target_id=current_user.user_id, detail={"nickname": profile.nickname},
+        ip_address=extract_client_ip(request),
+    )
+    return {"message": "昵称更新成功"}
 
 
 @router.put("/me/password")
@@ -143,6 +161,7 @@ async def get_user_by_id(
     return UserInfo(
         user_id=user.user_id,
         username=user.username,
+        nickname=user.nickname,
         email=user.email,
         role=user.role.value,
         status=user.status.value,

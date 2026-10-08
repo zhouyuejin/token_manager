@@ -200,8 +200,8 @@ async def delete_project(project_id: str, request: Request, admin: User = Depend
 async def get_project_users(project_id: str, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     project = get_project(db, project_id)
     check_department_access(db, admin, project.dept_id)
-    rows = db.query(User.user_id, User.username).join(UserProject, UserProject.user_id == User.user_id).filter(UserProject.project_id == project_id).all()
-    return {'user_ids': [row.user_id for row in rows], 'items': [{'user_id': row.user_id, 'username': row.username} for row in rows]}
+    rows = db.query(User.user_id, User.username, User.nickname).join(UserProject, UserProject.user_id == User.user_id).filter(UserProject.project_id == project_id).all()
+    return {'user_ids': [row.user_id for row in rows], 'items': [{'user_id': row.user_id, 'username': row.username, 'nickname': row.nickname} for row in rows]}
 
 
 @router.put('/admin/{project_id}/users')

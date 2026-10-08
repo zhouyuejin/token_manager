@@ -194,12 +194,12 @@ def list_review_applications(
 def list_review_requesters(
     db: Session = Depends(get_db), reviewer: User = Depends(get_current_user),
 ):
-    query = db.query(User.user_id, User.username).join(
+    query = db.query(User.user_id, User.username, User.nickname).join(
         ApprovalRequest, ApprovalRequest.requester_user_id == User.user_id,
     )
     if reviewer.role.value != 'admin':
         query = query.filter(ApprovalRequest.approver_user_id == reviewer.user_id)
-    return [{'user_id': user_id, 'username': username} for user_id, username in
+    return [{'user_id': user_id, 'username': username, 'nickname': nickname} for user_id, username, nickname in
             query.distinct().order_by(User.username).all()]
 
 

@@ -1,3 +1,4 @@
+import { userDisplayName } from '../../utils/userDisplayName.mjs'
 import { useState } from 'react'
 import { Alert, Card, Descriptions, Select, Space, Table, Tag, Typography } from 'antd'
 import { ApprovalRequest, ApprovalStatus, ApprovalType, decideApproval } from '../../api/approvals'
@@ -36,7 +37,7 @@ const Approvals = () => {
     ...(projectId ? { project_id: projectId } : {}),
   }
   const { data, error, isLoading, mutate } = useSwrDataWithParams<ApprovalRequest[]>('/approvals/review', params)
-  const { data: requesters } = useSwrData<{ user_id: string; username: string }[]>('/approvals/review/requesters')
+  const { data: requesters } = useSwrData<{ user_id: string; username: string; nickname?: string | null }[]>('/approvals/review/requesters')
   const { data: projects } = useSwrData<{ items: Project[] }>('/projects/admin')
   const { data: groups } = useSwrData<{ items: ModelGroup[] }>('/admin/model-groups')
 
@@ -58,7 +59,7 @@ const Approvals = () => {
   }
 
   const columns = [
-    { title: '申请人', dataIndex: 'requester_user_id', render: (id: string) => requesters?.find(user => user.user_id === id)?.username || id },
+    { title: '申请人', dataIndex: 'requester_user_id', render: (id: string) => userDisplayName(requesters?.find(user => user.user_id === id)) || id },
     { title: '类型', dataIndex: 'request_type', render: (value: ApprovalType) => typeLabels[value] },
     { title: '业务影响', render: (_: unknown, record: ApprovalRequest) => requestSummary(record) },
     { title: '状态', dataIndex: 'status', render: (value: ApprovalStatus) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag> },
@@ -84,7 +85,7 @@ const Approvals = () => {
           <Select
             allowClear showSearch optionFilterProp="label" placeholder="全部申请人" value={requesterId}
             onChange={setRequesterId} style={{ width: 220 }}
-            options={(requesters || []).map(user => ({ value: user.user_id, label: user.username }))}
+            options={(requesters || []).map(user => ({ value: user.user_id, label: userDisplayName(user) }))}
           />
           <Select
             allowClear showSearch optionFilterProp="label" placeholder="全部项目" value={projectId}

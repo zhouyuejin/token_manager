@@ -1,3 +1,4 @@
+import { userDisplayName } from '../../utils/userDisplayName.mjs'
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
@@ -218,6 +219,7 @@ const UsersPage = () => {
       key: 'username',
       render: (text: string) => <span style={{ color: token.colorText, fontWeight: 500 }}>{text}</span>
     },
+    { title: '昵称', key: 'nickname', render: (_: unknown, user: User) => userDisplayName(user) },
     { 
       title: '邮箱', 
       dataIndex: 'email', 
@@ -412,7 +414,7 @@ const UsersPage = () => {
       />
 
       <WriteOnly><Modal
-        title={`重置密码 - ${passwordUser?.username || ''}`}
+        title={`重置密码 - ${userDisplayName(passwordUser)}`}
         open={!!passwordUser}
         onCancel={() => {
           setPasswordUser(null)
@@ -458,7 +460,7 @@ const UsersPage = () => {
       </Modal></WriteOnly>
 
       <WriteOnly><Modal
-        title={`分配可用项目 - ${projectUser?.username || ''}`}
+        title={`分配可用项目 - ${userDisplayName(projectUser)}`}
         open={!!projectUser}
         onCancel={() => setProjectUser(null)}
         onOk={saveUserProjects}
@@ -512,6 +514,9 @@ const UsersPage = () => {
               placeholder="请输入用户名"
               style={{ height: 40, borderRadius: 10 }}
             />
+          </Form.Item>
+          <Form.Item name="nickname" label={<span style={{ color: token.colorTextSecondary }}>昵称</span>} rules={[{ max: 50, message: '昵称最多50个字符' }]}>
+            <Input maxLength={50} placeholder="选填，未填写时显示用户名" style={{ height: 40, borderRadius: 10 }} />
           </Form.Item>
           <Form.Item
             name="email"
@@ -655,6 +660,9 @@ const UsersPage = () => {
               style={{ height: 40, borderRadius: 10 }}
             />
           </Form.Item>
+          <Form.Item name="nickname" label={<span style={{ color: token.colorTextSecondary }}>昵称</span>} rules={[{ max: 50, message: '昵称最多50个字符' }]}>
+            <Input maxLength={50} placeholder="选填，未填写时显示用户名" style={{ height: 40, borderRadius: 10 }} />
+          </Form.Item>
           <Form.Item
             name="email"
             label={<span style={{ color: token.colorTextSecondary }}>邮箱</span>}
@@ -748,7 +756,7 @@ const UsersPage = () => {
             fontFamily: "'Space Grotesk', sans-serif",
             color: token.colorText,
           }}>
-            调整用户额度 - {quotaUser?.username}
+            调整用户额度 - {userDisplayName(quotaUser)}
           </span>
         }
         open={quotaModalVisible}

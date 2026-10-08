@@ -1,3 +1,4 @@
+import { userDisplayName } from '../../utils/userDisplayName.mjs'
 import { useState } from 'react'
 import { Alert, Button, Card, Descriptions, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag } from 'antd'
 import { Department, Project, saveDepartment, saveProject, getProjectUsers, setProjectUsers, deleteDepartment, deleteProject } from '../../api/projects'
@@ -36,14 +37,14 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   )
   const { data: keysData, error: keysError, isLoading: keysLoading } = useSwrData<{ items: ApiKey[] }>(membersProject && hasPermission(permissions, 'admin:read') ? '/api-keys/admin' : null)
   const projectKeys = (keysData?.items || []).filter(key => key.project_id === membersProject?.project_id)
-  const userOptions = (users?.items || []).map(user => ({ value: user.user_id, label: `${user.username} (${user.user_id})` }))
+  const userOptions = (users?.items || []).map(user => ({ value: user.user_id, label: `${userDisplayName(user)} (${user.user_id})` }))
   if (editing?.owner_user_id && !userOptions.some(option => option.value === editing.owner_user_id)) {
     userOptions.push({ value: editing.owner_user_id, label: editing.owner_user_id })
   }
   const allMemberOptions = [...memberOptions]
   for (const user of memberUsers?.items || []) {
     if (!allMemberOptions.some(option => option.value === user.user_id)) {
-      allMemberOptions.push({ value: user.user_id, label: `${user.username} (${user.user_id})` })
+      allMemberOptions.push({ value: user.user_id, label: `${userDisplayName(user)} (${user.user_id})` })
     }
   }
 
@@ -80,7 +81,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     try {
       const response = await getProjectUsers(project.project_id)
       setMembers(response.user_ids)
-      setMemberOptions(response.items.map(user => ({ value: user.user_id, label: `${user.username} (${user.user_id})` })))
+      setMemberOptions(response.items.map(user => ({ value: user.user_id, label: `${userDisplayName(user)} (${user.user_id})` })))
     } catch { setMembersError(true) }
     finally { setMembersLoading(false) }
   }

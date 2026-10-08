@@ -1,3 +1,4 @@
+import { userDisplayName } from '../utils/userDisplayName.mjs'
 import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Row, Col, Card, Statistic, DatePicker, Typography, Empty, Tooltip, Select, Alert, Button, Space } from 'antd'
@@ -57,7 +58,7 @@ const AdminDashboard: React.FC = () => {
   const message = useMessage()
   const { data: projectsData, error: projectsError, mutate: mutateProjects } = useSwrData<{ items: Project[] }>("/projects/admin")
   const { data: departmentsData } = useSwrData<{ items: Department[] }>("/projects/admin/departments")
-  const { data: usersData } = useSwrData<{ items: { user_id: string; username: string }[] }>("/admin/users?page_size=100")
+  const { data: usersData } = useSwrData<{ items: { user_id: string; username: string; nickname?: string | null }[] }>("/admin/users?page_size=100")
   const { data: channelsData } = useSwrData<{ items: { channel_id: string; name: string }[] }>("/admin/channels")
   const { data: keysData } = useSwrData<{ items: { key_id: string; name: string; user_id: string; project_id?: string | null }[] }>("/api-keys/admin")
 
@@ -141,7 +142,7 @@ const AdminDashboard: React.FC = () => {
     const rest = sorted.slice(TOP_USERS_DISPLAY)
     const restTokens = rest.reduce((sum, u) => sum + u.tokens, 0)
 
-    const labels: string[] = head.map(u => u.username || u.user_id)
+    const labels: string[] = head.map(u => userDisplayName(u))
     const tokens: number[] = head.map(u => u.tokens)
     if (rest.length > 0) {
       labels.push(`其他（${rest.length} 人）`)
@@ -576,7 +577,7 @@ const AdminDashboard: React.FC = () => {
         <Space wrap>
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部部门" value={departmentId} onChange={value => { setDepartmentId(value); if (value && !projectsData?.items.find(project => project.project_id === projectId && project.dept_id === value)) setProjectId(undefined) }} style={{ width: 140 }} options={(departmentsData?.items || []).map(row => ({ value: row.dept_id, label: row.name }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目" value={projectId} onChange={value => { setProjectId(value); setKeyId(undefined) }} style={{ width: 200 }} options={(projectsData?.items || []).filter(project => !departmentId || project.dept_id === departmentId).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
-        <Select allowClear showSearch optionFilterProp="label" placeholder="全部用户" value={userId} onChange={value => { setUserId(value); setKeyId(undefined) }} style={{ width: 140 }} options={(usersData?.items || []).map(row => ({ value: row.user_id, label: row.username }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部用户" value={userId} onChange={value => { setUserId(value); setKeyId(undefined) }} style={{ width: 140 }} options={(usersData?.items || []).map(row => ({ value: row.user_id, label: userDisplayName(row) }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部 Key" value={keyId} onChange={setKeyId} style={{ width: 160 }} options={(keysData?.items || []).filter(row => (!userId || row.user_id === userId) && (!projectId || row.project_id === projectId)).map(row => ({ value: row.key_id, label: row.name || row.key_id }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: row.display_name || row.model }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部渠道" value={channelId} onChange={setChannelId} style={{ width: 140 }} options={(channelsData?.items || []).map(row => ({ value: row.channel_id, label: row.name }))} />

@@ -1,3 +1,4 @@
+import { userDisplayName } from '../utils/userDisplayName.mjs'
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Alert, Card, Row, Col, Statistic, DatePicker, Table, Button, Space, Tag, Select } from 'antd'
@@ -223,7 +224,7 @@ const StatsPage = () => {
   // 管理员用 - 按用户统计列
   const userColumns = [
     { title: '用户', dataIndex: 'username', key: 'username',
-      render: (text: string, record: any) => <span style={{ color: token.colorText, fontWeight: 500 }}>{text || record.user_id}</span> },
+      render: (text: string, record: any) => <span style={{ color: token.colorText, fontWeight: 500 }}>{userDisplayName(record)}</span> },
     { title: 'Token数', dataIndex: 'tokens', key: 'tokens',
       render: (v: number) => <span style={{ fontFamily: "'Space Grotesk', sans-serif", color: token.colorText }}>{v?.toLocaleString()}</span> },
   ]

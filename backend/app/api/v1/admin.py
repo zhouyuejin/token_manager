@@ -260,9 +260,14 @@ async def get_admin_usage_stats(
     ).filter(base_filter).group_by(UsageLog.user_id).all()
     
     user_ids = [s.user_id for s in user_stats]
-    user_map = {u.user_id: u.username for u in db.query(User.user_id, User.username).filter(User.user_id.in_(user_ids)).all()} if user_ids else {}
+    user_map = {u.user_id: u for u in db.query(User.user_id, User.username, User.nickname).filter(User.user_id.in_(user_ids)).all()} if user_ids else {}
     
-    by_user = [{"user_id": s.user_id, "username": user_map.get(s.user_id, s.user_id), "tokens": s.tokens or 0, "requests": s.requests or 0} for s in user_stats] if user_stats else []
+    by_user = [{
+        "user_id": s.user_id,
+        "username": user_map[s.user_id].username if s.user_id in user_map else s.user_id,
+        "nickname": user_map[s.user_id].nickname if s.user_id in user_map else None,
+        "tokens": s.tokens or 0, "requests": s.requests or 0,
+    } for s in user_stats]
     
     # 按渠道统计
     channel_stats = db.query(
@@ -359,7 +364,7 @@ async def export_admin_usage(
         start_date, end_date, department_id, project_id, user_id, model, channel_id, key_id
     )
 
-    users = {row.user_id: row.username for row in db.query(User.user_id, User.username).all()}
+    users = {row.user_id: row.nickname or row.username for row in db.query(User.user_id, User.username, User.nickname).all()}
     departments = {row.dept_id: row.name for row in db.query(Department.dept_id, Department.name).all()}
     projects = {row.project_id: row.name for row in db.query(Project.project_id, Project.name).all()}
     channels = {row.channel_id: row.name for row in db.query(Channel.channel_id, Channel.name).all()}
@@ -424,7 +429,7 @@ async def list_users(
     """用户列表"""
     query = db.query(User)
     if keyword:
-        query = query.filter(User.username.contains(keyword) | User.email.contains(keyword))
+        query = query.filter(User.username.contains(keyword) | User.nickname.contains(keyword) | User.email.contains(keyword))
     if role:
         query = query.filter(User.role == role)
     if status:
@@ -434,7 +439,7 @@ async def list_users(
     users = query.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     
     return UserListResponse(total=total, items=[AdminUserResponse(
-        user_id=u.user_id, username=u.username, email=u.email, role=u.role.value if hasattr(u.role, 'value') else str(u.role),
+        user_id=u.user_id, username=u.username, nickname=u.nickname, email=u.email, role=u.role.value if hasattr(u.role, 'value') else str(u.role),
         status=u.status.value if hasattr(u.status, 'value') else str(u.status),
         quota=u.quota, quota_used=u.quota_used, created_at=u.created_at,
         model_group_ids=json.loads(u.model_group_ids or '[]'),
@@ -451,7 +456,7 @@ async def create_user(data: AdminUserCreate, request: Request = None, db: Sessio
     
     role = UserRole(data.role)
     user = User(
-        user_id=f"u_{secrets.token_hex(8)}", username=data.username, email=data.email,
+        user_id=f"u_{secrets.token_hex(8)}", username=data.username, nickname=data.nickname, email=data.email,
         password=data.password, role=role,
         quota=-1 if role == UserRole.admin else data.quota,
         model_group_ids="[]" if role == UserRole.admin else json.dumps(data.model_group_ids),
@@ -466,7 +471,7 @@ async def create_user(data: AdminUserCreate, request: Request = None, db: Sessio
                              "quota": user.quota}, ip_address=extract_client_ip(request) if request else None)
     
     return AdminUserResponse(
-        user_id=user.user_id, username=user.username, email=user.email,
+        user_id=user.user_id, username=user.username, nickname=user.nickname, email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
         quota=user.quota, quota_used=user.quota_used, created_at=user.created_at,
@@ -484,7 +489,7 @@ async def get_user(user_id: str, db: Session = Depends(get_db), admin: User = De
         raise HTTPException(status_code=404, detail="用户不存在")
     
     return AdminUserResponse(
-        user_id=user.user_id, username=user.username, email=user.email,
+        user_id=user.user_id, username=user.username, nickname=user.nickname, email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
         quota=user.quota, quota_used=user.quota_used, created_at=user.created_at,

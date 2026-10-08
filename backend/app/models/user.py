@@ -29,6 +29,7 @@ class User(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(String(32), unique=True, nullable=False, index=True, comment="业务主键")
     username = Column(String(50), unique=True, nullable=False, index=True)
+    nickname = Column(String(50), nullable=True, comment="用户昵称")
     password = Column(String(255), nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.user, nullable=False)

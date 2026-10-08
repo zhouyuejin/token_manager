@@ -41,6 +41,7 @@ export interface AdminStats {
   by_user: {
     user_id: string
     username: string
+    nickname?: string | null
     tokens: number
   }[]
   by_provider: {

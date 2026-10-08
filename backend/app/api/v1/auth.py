@@ -26,6 +26,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole, UserStatus
 from app.models.login_log import LoginLog
 from app.models.role_permission import RolePermission
+from app.schemas.user import Nickname
 from app.utils.request import extract_client_ip, extract_user_agent
 from app.services.content_privacy import redact_sensitive_text
 from jose import JWTError, jwt
@@ -65,6 +66,7 @@ class LogoutRequest(BaseModel):
 class UserInfo(BaseModel):
     user_id: str
     username: str
+    nickname: Nickname = None
     email: str
     role: str
 
@@ -117,6 +119,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     return UserInfo(
         user_id=user.user_id,
         username=user.username,
+        nickname=user.nickname,
         email=user.email,
         role=user.role.value
     )
@@ -420,6 +423,7 @@ async def get_current_user_info(db: Session = Depends(get_db), token: str = Depe
     return UserInfo(
         user_id=user.user_id,
         username=user.username,
+        nickname=user.nickname,
         email=user.email,
         role=user.role.value
     )

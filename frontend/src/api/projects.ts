@@ -27,7 +27,7 @@ export const saveProject = (data: ProjectSave, projectId?: string) =>
   projectId ? put<Project>(`/projects/admin/${projectId}`, data) : post<Project>('/projects/admin', data)
 
 export const getProjectUsers = (projectId: string) =>
-  get<{ user_ids: string[]; items: { user_id: string; username: string }[] }>(`/projects/admin/${projectId}/users`)
+  get<{ user_ids: string[]; items: { user_id: string; username: string; nickname?: string | null }[] }>(`/projects/admin/${projectId}/users`)
 
 export const setProjectUsers = (projectId: string, userIds: string[]) =>
   put(`/projects/admin/${projectId}/users`, { user_ids: userIds })
