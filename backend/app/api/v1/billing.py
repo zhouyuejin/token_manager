@@ -88,6 +88,7 @@ async def list_budgets(month: str = Query(default=None), admin: User = Depends(r
 
 @router.get('/reservations')
 async def list_reservations(month: str = Query(default=None), status: str = Query(default=None),
+                            page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100),
                             admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     month = validate_month(month or current_month())
     start, end = month_bounds(month)
@@ -98,8 +99,9 @@ async def list_reservations(month: str = Query(default=None), status: str = Quer
         if status not in {'reserved', 'committed', 'released', 'expired'}:
             raise HTTPException(422, '预扣状态无效')
         query = query.filter(QuotaReservation.status == status)
-    rows = query.order_by(QuotaReservation.created_at.desc()).limit(200).all()
-    return {'month': month, 'items': [{**{field: getattr(row, field) for field in (
+    total = query.count()
+    rows = query.order_by(QuotaReservation.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return {'month': month, 'total': total, 'items': [{**{field: getattr(row, field) for field in (
         'reservation_id', 'user_id', 'key_id', 'project_id', 'department_id', 'model',
         'estimated_tokens', 'actual_tokens', 'estimated_cost_usd', 'actual_cost_usd',
         'status', 'created_at', 'updated_at', 'expires_at')},

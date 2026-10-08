@@ -332,9 +332,10 @@ const UsersPage = () => {
     {
       title: '操作',
       key: 'action',
+      width: 440,
       fixed: 'right' as const,
       render: (_: any, record: User) => (
-        <WriteOnly><Space>
+        <WriteOnly><Space style={{ whiteSpace: 'nowrap' }}>
           <Button
             type="text"
             icon={<EditOutlined />}

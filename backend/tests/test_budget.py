@@ -88,7 +88,7 @@ def test_frontend_billing_views_only_expose_user_reservations(db, scope):
     assert mine['budgets'][0]['reserved_usd'] > 0
     assert [row['reservation_id'] for row in mine['reservations']] == [rid]
 
-    admin_rows = run_async(list_reservations(month=None, status='reserved', admin=db.query(User).filter_by(user_id='admin').one(), db=db))
+    admin_rows = run_async(list_reservations(month=None, status='reserved', page=1, page_size=10, admin=db.query(User).filter_by(user_id='admin').one(), db=db))
     assert admin_rows['items'][0]['reservation_id'] == rid
     assert admin_rows['items'][0]['key_id'] == 'owner'
 

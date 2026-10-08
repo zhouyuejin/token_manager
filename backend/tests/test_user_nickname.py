@@ -166,6 +166,28 @@ def test_reservation_user_display_prefers_nickname_and_preserves_old_records(ctx
     assert rows["historical"]["nickname"] is None
 
 
+def test_admin_reservations_default_to_ten_per_page(ctx):
+    from app.models.quota_reservation import QuotaReservation
+
+    db, client, owner = ctx
+    db.add_all(QuotaReservation(
+        reservation_id=f"reservation-{i:02d}", user_id=owner.user_id, key_id="key", model="model",
+        estimated_tokens=100, estimated_cost_usd=1, price_type="token",
+        input_price=0, output_price=0, request_price=0, status="reserved",
+        created_at=datetime(2026, 10, 8, 0, i), updated_at=datetime(2026, 10, 8, 0, i),
+        expires_at=datetime(2026, 10, 9),
+    ) for i in range(12))
+    db.commit()
+
+    first = client.get("/admin/billing/reservations", params={"month": "2026-10"})
+    second = client.get("/admin/billing/reservations", params={"month": "2026-10", "page": 2})
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["total"] == second.json()["total"] == 12
+    assert len(first.json()["items"]) == 10
+    assert [row["reservation_id"] for row in second.json()["items"]] == ["reservation-01", "reservation-00"]
+
+
 def test_approval_requesters_include_nickname_and_keep_visibility(ctx):
     from app.models.approval import ApprovalRequest
 

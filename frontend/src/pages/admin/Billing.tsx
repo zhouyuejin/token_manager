@@ -17,8 +17,9 @@ const Billing = () => {
   }).format(new Date()))
   const { data, error, isLoading, mutate } = useSwrDataWithParams<{ items: Budget[] }>('/admin/billing/budgets', { month })
   const [reservationStatus, setReservationStatus] = useState<string>()
+  const [reservationPage, setReservationPage] = useState(1)
   const { data: reservationData, error: reservationError, isLoading: reservationsLoading, mutate: mutateReservations } =
-    useSwrDataWithParams<{ items: Reservation[] }>('/admin/billing/reservations', { month, ...(reservationStatus ? { status: reservationStatus } : {}) })
+    useSwrDataWithParams<{ total: number; items: Reservation[] }>('/admin/billing/reservations', { month, page: reservationPage, page_size: 10, ...(reservationStatus ? { status: reservationStatus } : {}) })
   const { data: projects, error: projectsError } = useSwrData<{ items: Project[] }>('/projects/admin')
   const { data: departments, error: departmentsError } = useSwrData<{ items: Department[] }>('/projects/admin/departments')
   const { data: channels } = useSwrData<{ items: Channel[] }>('/admin/channels')
@@ -31,7 +32,7 @@ const Billing = () => {
   const [anomalyType, setAnomalyType] = useState<string>()
   const [rerunning, setRerunning] = useState<string>()
   const { data: reportData, error: reportError, isLoading: reportsLoading, mutate: mutateReports } =
-    useSwrDataWithParams<ReconcileReportList>('/admin/billing/reconcile/reports', { page: reportPage, page_size: 20 })
+    useSwrDataWithParams<ReconcileReportList>('/admin/billing/reconcile/reports', { page: reportPage, page_size: 10 })
   const { data: itemData, error: itemError, isLoading: itemsLoading } = useSwrDataWithParams<{ total: number; items: ReconcileItem[] }>(
     selectedReport ? `/admin/billing/reconcile/reports/${selectedReport.report_id}/items` : null,
     selectedReport ? { page: itemPage, page_size: 20, ...(anomalyType ? { anomaly_type: anomalyType } : {}) } : null,
@@ -161,7 +162,7 @@ const Billing = () => {
   return <div style={{ padding: 24 }}>
     <Card title="预算管理" extra={<Space wrap>
       <DatePicker picker="month" allowClear={false} value={dayjs(`${month}-01`)} onChange={value => {
-        if (value) setMonth(value.format('YYYY-MM'))
+        if (value) { setMonth(value.format('YYYY-MM')); setReservationPage(1) }
       }} />
       <Button onClick={() => { mutate(); mutateReservations() }}>刷新</Button>
       <WriteOnly><Button type="primary" onClick={() => open(null)}>配置月预算</Button></WriteOnly>
@@ -170,12 +171,12 @@ const Billing = () => {
       {error && <Alert type="error" message="预算加载失败" action={<Button onClick={() => mutate()}>重试</Button>} />}
       <Table rowKey="budget_id" loading={isLoading} dataSource={data?.items || []} columns={columns} scroll={{ x: 1500 }} />
     </Card>
-    <Card title="预扣记录" style={{ marginTop: 16 }} extra={<Select allowClear placeholder="全部状态" style={{ width: 140 }} value={reservationStatus} onChange={setReservationStatus} options={[
+    <Card title="预扣记录" style={{ marginTop: 16 }} extra={<Select allowClear placeholder="全部状态" style={{ width: 140 }} value={reservationStatus} onChange={value => { setReservationStatus(value); setReservationPage(1) }} options={[
       { value: 'reserved', label: '预扣中' }, { value: 'committed', label: '已结算' },
       { value: 'released', label: '已释放' }, { value: 'expired', label: '已过期' }
     ]} />}>
       {reservationError && <Alert type="error" message="预扣记录加载失败" action={<Button onClick={() => mutateReservations()}>重试</Button>} />}
-      <Table rowKey="reservation_id" loading={reservationsLoading} dataSource={reservationData?.items || []} columns={reservationColumns} scroll={{ x: 1450 }} pagination={{ pageSize: 20 }} />
+      <Table rowKey="reservation_id" loading={reservationsLoading} dataSource={reservationData?.items || []} columns={reservationColumns} scroll={{ x: 1450 }} pagination={{ current: reservationPage, pageSize: 10, total: reservationData?.total || 0, showSizeChanger: false, onChange: setReservationPage }} />
     </Card>
     <Card title="对账报告" style={{ marginTop: 16 }} extra={<Space>
       <Button onClick={() => mutateReports()}>刷新</Button>
@@ -186,7 +187,7 @@ const Billing = () => {
       } />}
       {reportError && <Alert type="error" message="对账报告加载失败" action={<Button onClick={() => mutateReports()}>重试</Button>} />}
       <Table rowKey="report_id" loading={reportsLoading} dataSource={reportData?.items || []} columns={reportColumns} scroll={{ x: 1050 }}
-        pagination={{ current: reportPage, pageSize: 20, total: reportData?.total || 0, showSizeChanger: false, onChange: setReportPage }} />
+        pagination={{ current: reportPage, pageSize: 10, total: reportData?.total || 0, showSizeChanger: false, onChange: setReportPage }} />
       <Typography.Text type="secondary">用量报表导出会沿用管理驾驶舱的日期、部门、项目、用户、Key、模型和渠道筛选，导出期间不阻塞本页操作。</Typography.Text>
     </Card>
     <WriteOnly><Modal title={`${month} 月预算配置`} open={visible} onCancel={() => setVisible(false)} onOk={() => form.submit()} confirmLoading={saving}>
