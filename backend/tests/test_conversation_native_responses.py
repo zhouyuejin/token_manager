@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.services import conversation_gateway as gateway
 
@@ -13,7 +14,8 @@ from app.services import conversation_gateway as gateway
     {'type': 'custom', 'name': 'apply_patch', 'format': {'type': 'text'}},
     {'type': 'web_search'},
 ])
-def test_native_responses_preserves_non_function_tools(monkeypatch, tool):
+@pytest.mark.parametrize('status', [200, 400])
+def test_native_responses_preserves_non_function_tools(monkeypatch, tool, status, caplog):
     body = {'model': 'm', 'input': 'hello', 'tools': [tool], 'max_output_tokens': 2048}
     reserved = []
     forwarded = []
@@ -44,6 +46,8 @@ def test_native_responses_preserves_non_function_tools(monkeypatch, tool):
 
     def upstream(request):
         forwarded.append(json.loads(request.content))
+        if status == 400:
+            return httpx.Response(400, json={'error': {'message': 'invalid tool sk-secret123456'}})
         return httpx.Response(200, json={'id': 'r', 'output': [], 'usage': {'input_tokens': 2, 'output_tokens': 3}})
 
     client = httpx.Client
@@ -54,6 +58,17 @@ def test_native_responses_preserves_non_function_tools(monkeypatch, tool):
 
     request = SimpleNamespace(json=request_json, headers={}, state=SimpleNamespace(
         user=SimpleNamespace(user_id='u'), api_key=SimpleNamespace(key_id='k'), request_id='r'))
+    if status == 400:
+        monkeypatch.setattr('app.services.rate_limit_service.release_proxy_concurrency', lambda *args: None)
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(gateway.proxy_conversation(request, None, 'responses'))
+        assert exc.value.status_code == 502
+        assert 'request_id=r' in caplog.text
+        assert 'channel=c' in caplog.text
+        assert 'status=400' in caplog.text
+        assert 'invalid tool' in caplog.text
+        assert 'sk-secret123456' not in caplog.text
+        return
     response = asyncio.run(gateway.proxy_conversation(request, None, 'responses'))
     assert response.status_code == 200
     assert forwarded == [{**body, 'model': 'upstream'}]

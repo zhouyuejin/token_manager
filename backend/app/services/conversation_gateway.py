@@ -11,6 +11,7 @@ from app.models.api_key import ApiKey
 from app.models.user import User
 from app.services.provider_adapters import get_provider_adapter, resolve_upstream_format
 from app.services.protocol_conversion import convert_request, convert_response
+from app.services.content_privacy import redact_sensitive_text
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,10 @@ async def proxy_conversation(request, db, source):
                     upstream_body = adapter.transform_request(convert_request(body, source, "chat"), model_channel.upstream_model)
                 else:
                     upstream_body = convert_request(body, source, upstream_format, model_channel.upstream_model)
-            except ValueError:
+            except ValueError as exc:
+                logger.warning("conversation conversion failed request_id=%s channel=%s source=%s target=%s error=%s",
+                               request.state.request_id, channel.channel_id, source, upstream_format,
+                               redact_sensitive_text(str(exc), 500))
                 continue
             if streaming and upstream_format in {"chat", "custom"}:
                 upstream_body["stream_options"] = {**upstream_body.get("stream_options", {}), "include_usage": True}
@@ -134,12 +138,18 @@ async def proxy_conversation(request, db, source):
                     upstream_response = upstream_client.send(upstream_request, stream=True)
                 else:
                     upstream_response = upstream_client.send(upstream_request)
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError):
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+                logger.warning("conversation connection failed request_id=%s channel=%s error_type=%s",
+                               request.state.request_id, channel.channel_id, type(exc).__name__)
                 upstream_client.close()
                 upstream_client = None
                 continue
             selected = (channel, model_channel, adapter, upstream_format)
             if upstream_response.status_code >= 400:
+                upstream_response.read()
+                logger.warning("conversation upstream rejected request_id=%s channel=%s status=%s error=%s",
+                               request.state.request_id, channel.channel_id, upstream_response.status_code,
+                               redact_sensitive_text(upstream_response.text, 500))
                 if upstream_response.status_code in {429, 500, 502, 503, 504}:
                     service.bump_key_failure(channel, key)
                 upstream_response.close()
