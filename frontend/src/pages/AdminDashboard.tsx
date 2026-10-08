@@ -1,4 +1,5 @@
 import { userDisplayName } from '../utils/userDisplayName.mjs'
+import { formatTokenCount } from '../utils/formatTokenCount.mjs'
 import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Row, Col, Card, Statistic, DatePicker, Typography, Empty, Tooltip, Select, Alert, Button, Space } from 'antd'
@@ -188,7 +189,7 @@ const AdminDashboard: React.FC = () => {
         axisLabel: {
           color: token.colorTextSecondary,
           fontFamily: "'Space Grotesk', sans-serif",
-          formatter: (value: number) => value.toLocaleString()
+          formatter: formatTokenCount
         },
         splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
       },
@@ -346,7 +347,7 @@ const AdminDashboard: React.FC = () => {
           name: 'Token数',
           nameTextStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
           axisLine: { show: false },
-          axisLabel: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
+          axisLabel: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif", formatter: formatTokenCount },
           splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
         },
         {
@@ -454,7 +455,7 @@ const AdminDashboard: React.FC = () => {
         axisLabel: {
           color: token.colorTextSecondary,
           fontFamily: "'Space Grotesk', sans-serif",
-          formatter: (value: number) => value.toLocaleString()
+          formatter: formatTokenCount
         },
         splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
       },
@@ -618,12 +619,15 @@ const AdminDashboard: React.FC = () => {
               borderRadius: 16,
             }}
           >
-            <Statistic
-              title={<span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>总Token数</span>}
-              value={stats?.total_tokens || 0}
-              valueStyle={{ color: '#3B82F6', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
-              prefix={<ApiOutlined style={{ color: '#3B82F6' }} />}
-            />
+            <Tooltip title={`${(stats?.total_tokens || 0).toLocaleString()} Token`}>
+              <Statistic
+                title={<span style={{ color: 'rgba(148, 163, 184, 0.8)' }}>总Token数</span>}
+                value={stats?.total_tokens || 0}
+                formatter={(value) => formatTokenCount(Number(value))}
+                valueStyle={{ color: '#3B82F6', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
+                prefix={<ApiOutlined style={{ color: '#3B82F6' }} />}
+              />
+            </Tooltip>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
