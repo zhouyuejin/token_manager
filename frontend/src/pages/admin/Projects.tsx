@@ -112,10 +112,12 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, row: Department | Project) => <Space>
       <WriteOnly permission="department:write">
-        <Button onClick={() => openForm(row)}>编辑</Button>
-        <Popconfirm title={`确认删除此${title}？已有关联数据时将拒绝删除。`} onConfirm={() => remove(row)}>
-          <Button danger>删除</Button>
-        </Popconfirm>
+        <Space>
+          <Button onClick={() => openForm(row)}>编辑</Button>
+          <Popconfirm title={`确认删除此${title}？已有关联数据时将拒绝删除。`} onConfirm={() => remove(row)}>
+            <Button danger>删除</Button>
+          </Popconfirm>
+        </Space>
       </WriteOnly>
       {!departmentsOnly && <WriteOnly><Button onClick={() => openMembers(row as Project)}>归因详情</Button></WriteOnly>}
     </Space> }

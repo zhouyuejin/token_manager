@@ -458,6 +458,10 @@ const MainLayout = () => {
               background: "transparent",
               borderRight: "none",
               marginTop: 8,
+              // 预留 Logo、顶部间距和底部折叠按钮（36 + 16 * 2 + 1）的高度
+              maxHeight: `calc(100% - ${HEADER_HEIGHT + 8 + 69}px)`,
+              overflowY: "auto",
+              overflowX: "hidden",
             }}
           />
 
