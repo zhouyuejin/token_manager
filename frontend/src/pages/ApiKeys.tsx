@@ -213,13 +213,17 @@ const ApiKeysPage = () => {
       dataIndex: 'api_key', 
       key: 'api_key',
       render: (key: string) => (
-        <span style={{ 
+        <button type="button" onClick={() => copyKey(key)} title="点击复制 Key" style={{
           fontFamily: "'Space Grotesk', sans-serif", 
           color: token.colorTextSecondary,
           fontSize: 13,
+          cursor: 'pointer',
+          background: 'none',
+          border: 0,
+          padding: 0,
         }}>
-          {maskKey(key)}
-        </span>
+          {key}
+        </button>
       )
     },
     { 
@@ -504,7 +508,7 @@ const ApiKeysPage = () => {
                 alignItems: 'center',
                 gap: 8,
               }}>
-                ⚠️ 请立即复制并保存！此Key只显示一次，后续无法查看。
+                请复制并妥善保存此 Key。
               </p>
             </div>
             <Space.Compact block>

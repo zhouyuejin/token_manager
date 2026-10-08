@@ -68,7 +68,7 @@ def _api_key_response(key: ApiKey, admin: bool = False):
         **_project_fields(key),
         key_id=key.key_id,
         user_id=key.user_id,
-        api_key="tmk_***" + key.api_key[-6:],
+        api_key=key.api_key,
         name=key.key_name,
         status=key.status.value,
         created_at=key.created_at,
