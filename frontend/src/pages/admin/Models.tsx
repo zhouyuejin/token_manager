@@ -652,7 +652,7 @@ const ModelsPage = () => {
           ]}
           rowKey="model_id"
           loading={loading}
-          scroll={{ x: 'max-content', y: 'calc(100vh - 280px)' }}
+          scroll={{ x: 'max-content' }}
           pagination={{
             showSizeChanger: true,
             showQuickJumper: true,
