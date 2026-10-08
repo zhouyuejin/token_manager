@@ -347,17 +347,6 @@ const StatsPage = () => {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorder}`, borderRadius: 16 }}>
-            <Statistic
-              title={<span style={{ color: token.colorTextSecondary }}>筛选成本</span>}
-              value={stats?.total_cost || 0}
-              precision={4}
-              prefix="$"
-              valueStyle={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
           <Card 
             style={{ 
               background: token.colorBgContainer,
