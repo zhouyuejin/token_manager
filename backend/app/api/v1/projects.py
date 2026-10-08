@@ -85,10 +85,13 @@ async def list_available_projects(current_user: User = Depends(get_current_user)
 
 @router.get('/admin/departments')
 async def list_departments(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    query = db.query(Department)
+    query = db.query(Department, User.nickname, User.username).outerjoin(User, Department.owner_user_id == User.user_id)
     if admin.role == UserRole.department_admin:
         query = query.filter(Department.owner_user_id == admin.user_id)
-    return {'items': [department_response(row) for row in query.all()]}
+    return {'items': [
+        {**department_response(row), 'owner_name': nickname or username or row.owner_user_id}
+        for row, nickname, username in query.all()
+    ]}
 
 
 @router.post('/admin/departments')

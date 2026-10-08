@@ -109,7 +109,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const columns = [
     { title: `${title}名称`, dataIndex: 'name' },
     ...(!departmentsOnly ? [{ title: '所属部门', dataIndex: 'department_name' }] : []),
-    { title: '负责人', dataIndex: 'owner_user_id', render: (value: string) => value || '未设置' },
+    { title: '负责人', dataIndex: 'owner_user_id', render: (value: string, row: Department | Project) => (departmentsOnly ? (row as Department).owner_name : value) || value || '未设置' },
     { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, row: Department | Project) => <Space>
       <WriteOnly permission="department:write">

@@ -93,6 +93,27 @@ def test_project_members_include_nickname(ctx):
     assert client.get(url).json()["items"] == [{"user_id": owner.user_id, "username": "account", "nickname": "项目成员"}]
 
 
+def test_department_owner_display_prefers_nickname_and_falls_back(ctx):
+    db, client, owner = ctx
+    department = client.post("/projects/admin/departments", json={
+        "name": "研发部", "owner_user_id": owner.user_id,
+    }).json()
+    client.post("/projects/admin/departments", json={"name": "未分配部门"})
+
+    def departments():
+        response = client.get("/projects/admin/departments")
+        assert response.status_code == 200, response.text
+        return {row["dept_id"]: row for row in response.json()["items"]}
+
+    assert departments()[department["dept_id"]]["owner_name"] == "account"
+    owner.nickname = "部门负责人"
+    db.commit()
+    rows = departments()
+    assert rows[department["dept_id"]]["owner_name"] == "部门负责人"
+    assert rows[department["dept_id"]]["owner_user_id"] == owner.user_id
+    assert next(row for row in rows.values() if row["name"] == "未分配部门")["owner_name"] is None
+
+
 def test_approval_requesters_include_nickname_and_keep_visibility(ctx):
     from app.models.approval import ApprovalRequest
 

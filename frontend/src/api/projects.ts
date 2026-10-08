@@ -4,6 +4,7 @@ export interface Department {
   dept_id: string
   name: string
   owner_user_id?: string | null
+  owner_name?: string | null
   status: 'active' | 'disabled'
 }
 
@@ -17,7 +18,7 @@ export interface Project {
   content_audit_enabled: boolean
 }
 
-export type DepartmentSave = Omit<Department, 'dept_id'>
+export type DepartmentSave = Omit<Department, 'dept_id' | 'owner_name'>
 export type ProjectSave = Omit<Project, 'project_id' | 'department_name'>
 
 export const saveDepartment = (data: DepartmentSave, deptId?: string) =>
