@@ -247,7 +247,7 @@ const Approvals = () => {
         onCancel={() => setSupplementTarget(null)} onOk={submitSupplement}
       >
         <Typography.Paragraph>审批人要求：{supplementTarget?.decision_comment || '请补充申请说明'}</Typography.Paragraph>
-        <Input.TextArea value={supplementText} onChange={event => setSupplementText(event.target.value)} rows={4} maxLength={1000} showCount />
+        <Input.TextArea value={supplementText} onChange={event => setSupplementText(event.target.value)} rows={4} maxLength={1000} showCount style={{ marginBottom: 24 }} />
       </Modal>
       <Modal open={!!secret} title="新 API Key（仅展示一次）" onCancel={() => setSecret(null)} footer={[
         <Button key="copy" type="primary" onClick={async () => {
