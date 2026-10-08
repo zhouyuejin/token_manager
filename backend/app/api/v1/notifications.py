@@ -1,7 +1,6 @@
 """
 通知接口
 """
-import json
 import secrets
 from datetime import datetime
 from typing import Optional
@@ -34,7 +33,7 @@ def notification_to_response(notification: Notification) -> NotificationResponse
         title=notification.title,
         content=notification.content,
         is_read=bool(notification.is_read),
-        metadata=json.loads(notification.extra_data) if notification.extra_data else None,
+        metadata=notification.metadata_dict,
         created_at=notification.created_at,
         read_at=notification.read_at,
     )

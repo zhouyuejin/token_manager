@@ -2,11 +2,24 @@
 通知模型
 """
 import enum
+import json
+import math
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Index
 from datetime import timezone
 from sqlalchemy.sql import func
 
 from app.core.database import Base
+
+
+def normalize_notification_metadata(value):
+    """通知元数据中的非有限浮点数使用 JSON null 表示。"""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: normalize_notification_metadata(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [normalize_notification_metadata(item) for item in value]
+    return value
 
 
 class NotificationType(enum.Enum):
@@ -41,8 +54,11 @@ class Notification(Base):
         Index('idx_user_created', 'user_id', 'created_at'),
     )
     
+    @property
+    def metadata_dict(self):
+        return normalize_notification_metadata(json.loads(self.extra_data)) if self.extra_data else None
+
     def to_dict(self):
-        import json
         return {
             "notif_id": self.notif_id,
             "user_id": self.user_id,
@@ -50,7 +66,7 @@ class Notification(Base):
             "title": self.title,
             "content": self.content,
             "is_read": bool(self.is_read),
-            "metadata": json.loads(self.extra_data) if self.extra_data else None,
+            "metadata": self.metadata_dict,
             "created_at": self.created_at.replace(tzinfo=timezone.utc).isoformat() if self.created_at else None,
             "read_at": self.read_at.replace(tzinfo=timezone.utc).isoformat() if self.read_at else None,
         }

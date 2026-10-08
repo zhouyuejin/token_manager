@@ -8,7 +8,7 @@ from typing import Optional, List
 from loguru import logger
 
 from sqlalchemy.orm import Session
-from app.models.notification import Notification, NotificationType
+from app.models.notification import Notification, NotificationType, normalize_notification_metadata
 from app.models.user import User, UserRole
 
 # 全局 manager 实例（从 ws_manager 导入）
@@ -31,7 +31,7 @@ async def create_notification(
         type=notif_type,
         title=title,
         content=content,
-        extra_data=json.dumps(metadata) if metadata else None,
+        extra_data=json.dumps(normalize_notification_metadata(metadata), allow_nan=False) if metadata else None,
         is_read=0,
     )
     db.add(notif)
