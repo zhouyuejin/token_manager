@@ -149,9 +149,13 @@ def _messages(body, source):
                     if parts or calls:
                         messages.append({"role": role, "content": parts or None, **({"tool_calls": calls} if calls else {})})
                         parts, calls = [], []
+                    tool_content = _parts(block.get("content", ""), source)
                     if block.get("is_error"):
-                        raise ValueError("Error tool results require native Anthropic protocol")
-                    messages.append({"role": "tool", "tool_call_id": block["tool_use_id"], "content": _parts(block.get("content", ""), source)})
+                        # Chat/Responses have no is_error field; preserve failure in the output.
+                        marker = "Tool execution failed:"
+                        tool_content = (marker + "\n" + tool_content if isinstance(tool_content, str)
+                                        else [{"type": "text", "text": marker}, *(tool_content or [])])
+                    messages.append({"role": "tool", "tool_call_id": block["tool_use_id"], "content": tool_content})
                 else:
                     parts.extend(_parts([block], source))
             if parts or calls:
