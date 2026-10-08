@@ -653,7 +653,19 @@ const ApiKeysPage = () => {
           setEditingKey(null)
           editForm.resetFields()
         }}
-        footer={null}
+        footer={[
+          <Button key="cancel" onClick={() => setEditModalVisible(false)} style={{ borderRadius: 10, border: `1px solid ${token.colorBorder}` }}>
+            取消
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            onClick={() => editForm.submit()}
+            style={{ background: token.colorPrimary, border: 'none', borderRadius: 10, fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            保存
+          </Button>,
+        ]}
         centered
         styles={{ body: { maxHeight: 'min(600px, calc(100vh - 200px))', overflowY: 'auto' } }}
       >
@@ -734,31 +746,6 @@ const ApiKeysPage = () => {
               <InputNumber min={0} precision={0} style={{ width: 120 }} />
             </Form.Item>
           </Space>
-          <Form.Item style={{ marginTop: 24 }}>
-            <Space>
-              <Button
-                onClick={() => setEditModalVisible(false)}
-                style={{
-                  borderRadius: 10,
-                  border: `1px solid ${token.colorBorder}`,
-                }}
-              >
-                取消
-              </Button>
-              <Button 
-                type="primary" 
-                htmlType="submit"
-                style={{
-                  background: token.colorPrimary,
-                  border: 'none',
-                  borderRadius: 10,
-                  fontFamily: "'Space Grotesk', sans-serif",
-                }}
-              >
-                保存
-              </Button>
-            </Space>
-          </Form.Item>
         </Form>
       </Modal>
     </div>
