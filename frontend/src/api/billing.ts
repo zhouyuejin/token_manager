@@ -25,6 +25,8 @@ export const saveBudget = (kind: Budget['scope_type'], scopeId: string, month: s
 export interface Reservation {
   reservation_id: string
   user_id?: string
+  username?: string | null
+  nickname?: string | null
   key_id: string
   project_id?: string | null
   department_id?: string | null

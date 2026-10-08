@@ -7,6 +7,7 @@ import { Department, Project } from '../../api/projects'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
 import { WriteOnly } from '../../components/WriteOnly'
+import { userDisplayName } from '../../utils/userDisplayName.mjs'
 
 const Billing = () => {
   const navigate = useNavigate()
@@ -88,7 +89,7 @@ const Billing = () => {
   ]
   const reservationColumns = [
     { title: '状态', dataIndex: 'status', width: 90, render: (value: Reservation['status']) => <Tag color={value === 'reserved' ? 'blue' : value === 'committed' ? 'green' : 'default'}>{{ reserved: '预扣中', committed: '已结算', released: '已释放', expired: '已过期' }[value]}</Tag> },
-    { title: '用户', dataIndex: 'user_id', width: 150 },
+    { title: '用户', dataIndex: 'user_id', width: 150, render: (_: string, row: Reservation) => userDisplayName(row) },
     { title: 'API Key', dataIndex: 'key_id', width: 150 },
     { title: '项目', dataIndex: 'project_id', width: 150, render: (value: string | null) => value || '未归因' },
     { title: '模型', dataIndex: 'model', width: 150 },

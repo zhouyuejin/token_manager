@@ -498,6 +498,8 @@ const UsersPage = () => {
           </span>
         }
         open={modalVisible}
+        centered
+        styles={{ body: { height: 'min(600px, calc(100vh - 160px))', overflowY: 'auto' } }}
         onCancel={() => {
           setModalVisible(false)
           form.resetFields()
@@ -638,6 +640,8 @@ const UsersPage = () => {
           </span>
         }
         open={!!editUser}
+        centered
+        styles={{ body: { height: 'min(600px, calc(100vh - 160px))', overflowY: 'auto' } }}
         onCancel={() => {
           setEditUser(null)
           form.resetFields()

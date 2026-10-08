@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models
-from app.api.v1 import admin, users, projects, approvals, auth
+from app.api.v1 import admin, users, projects, approvals, auth, billing
 from app.core.database import Base, get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.user import User, UserRole
@@ -40,6 +40,7 @@ def ctx():
     app.include_router(projects.router, prefix="/projects")
     app.include_router(approvals.router, prefix="/approvals")
     app.include_router(auth.router, prefix="/auth")
+    app.include_router(billing.router, prefix="/admin/billing")
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_current_user] = lambda: owner
     app.dependency_overrides[require_admin] = lambda: administrator
@@ -134,6 +135,35 @@ def test_project_owner_display_prefers_nickname_and_falls_back(ctx):
     assert rows[project["project_id"]]["owner_name"] == "项目负责人"
     assert rows[project["project_id"]]["owner_user_id"] == owner.user_id
     assert next(row for row in rows.values() if row["name"] == "未分配项目")["owner_name"] is None
+
+
+def test_reservation_user_display_prefers_nickname_and_preserves_old_records(ctx):
+    from app.models.quota_reservation import QuotaReservation
+
+    db, client, owner = ctx
+    for reservation_id, user_id in (("active", owner.user_id), ("historical", "removed-user")):
+        db.add(QuotaReservation(
+            reservation_id=reservation_id, user_id=user_id, key_id="key", model="model",
+            estimated_tokens=100, estimated_cost_usd=1, price_type="token",
+            input_price=0, output_price=0, request_price=0, status="reserved",
+            created_at=datetime(2026, 10, 8), updated_at=datetime(2026, 10, 8),
+            expires_at=datetime(2026, 10, 9),
+        ))
+    db.commit()
+
+    def reservations():
+        response = client.get("/admin/billing/reservations", params={"month": "2026-10"})
+        assert response.status_code == 200, response.text
+        return {row["reservation_id"]: row for row in response.json()["items"]}
+
+    assert reservations()["active"]["username"] == "account"
+    owner.nickname = "预算用户"
+    db.commit()
+    rows = reservations()
+    assert rows["active"]["nickname"] == "预算用户"
+    assert rows["active"]["user_id"] == owner.user_id
+    assert rows["historical"]["username"] is None
+    assert rows["historical"]["nickname"] is None
 
 
 def test_approval_requesters_include_nickname_and_keep_visibility(ctx):
