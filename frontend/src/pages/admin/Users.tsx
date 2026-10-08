@@ -264,6 +264,7 @@ const UsersPage = () => {
       title: '额度', 
       dataIndex: 'quota', 
       key: 'quota',
+      width: 250,
       render: (quota: number, record: User) => (
         <Space>
           {record.role === 'admin' ? (
@@ -304,6 +305,7 @@ const UsersPage = () => {
       title: '模型分组',
       dataIndex: 'model_group_ids',
       key: 'model_group_ids',
+      width: 180,
       render: (groupIds: string[], record: User) => (
         <Tag
           color={record.role === 'admin' ? 'gold' : (groupIds && groupIds.length > 0 ? 'blue' : 'default')}
