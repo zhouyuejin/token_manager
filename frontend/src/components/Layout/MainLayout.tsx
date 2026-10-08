@@ -1,3 +1,4 @@
+import defaultAvatar from "../../assets/default-avatar.webp";
 import { userDisplayName } from "../../utils/userDisplayName.mjs";
 import { useState, useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -301,7 +302,7 @@ const MainLayout = () => {
             padding: "4px 0",
           }}
         >
-          <Avatar src={user?.avatar_url}
+          <Avatar src={user?.avatar_url || defaultAvatar}
             size={36}
             style={{
               background:
@@ -675,7 +676,7 @@ const MainLayout = () => {
                     (e.currentTarget.style.background = "transparent")
                   }
                 >
-                  <Avatar src={user?.avatar_url}
+                  <Avatar src={user?.avatar_url || defaultAvatar}
                     size={32}
                     style={{
                       background:

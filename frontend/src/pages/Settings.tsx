@@ -1,3 +1,4 @@
+import defaultAvatar from '../assets/default-avatar.webp'
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Card, Form, Input, Button, Switch, Avatar, Upload, Space } from 'antd'
@@ -140,7 +141,7 @@ const SettingsPage = () => {
       >
         <div style={{ marginBottom: 24 }}>
           <Space size="middle" wrap>
-            <Avatar size={64} src={user?.avatar_url}>{userDisplayName(user).charAt(0).toUpperCase() || 'U'}</Avatar>
+            <Avatar size={64} src={user?.avatar_url || defaultAvatar}>{userDisplayName(user).charAt(0).toUpperCase() || 'U'}</Avatar>
             <Upload
               accept="image/png,image/jpeg,image/webp"
               showUploadList={false}

@@ -1,3 +1,4 @@
+import defaultAvatar from '../../assets/default-avatar.webp'
 import { useEffect, useRef } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Spin, Empty, Avatar } from 'antd'
@@ -6,6 +7,7 @@ import { XMarkdown } from '@ant-design/x-markdown'
 import { ChatMessage } from '../../api/chat'
 import { stripThinkTags } from '../../utils/thinkTag'
 import dayjs from 'dayjs'
+import { useAuthStore } from '../../store/auth'
 
 interface MessageListProps {
   messages: ChatMessage[]
@@ -21,6 +23,7 @@ const MessageList: React.FC<MessageListProps> = ({
   onRegenerate,
 }) => {
   const { token, isDark } = useThemeToken()
+  const avatarUrl = useAuthStore(state => state.user?.avatar_url)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 自动滚动到底部
@@ -87,6 +90,7 @@ const MessageList: React.FC<MessageListProps> = ({
           >
             {/* 头像 */}
             <Avatar
+              src={isUser ? avatarUrl || defaultAvatar : undefined}
               icon={isUser ? <UserOutlined /> : <RobotOutlined />}
               style={{
                 background: isUser ? '#3B82F6' : '#10B981',
