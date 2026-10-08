@@ -13,6 +13,7 @@ import { hasPermission } from '../../utils/adminPermissions.mjs'
 const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }) => {
   const permissions = useAuthStore((state) => state.user?.permissions || [])
   const title = departmentsOnly ? '部门' : '项目'
+  const keyStatusLabels: Record<string, string> = { active: '启用', disabled: '禁用', revoked: '已吊销' }
   const { data, error, isLoading, mutate } = useSwrData<{ items: (Department | Project)[] }>(
     departmentsOnly ? '/projects/admin/departments' : '/projects/admin'
   )
@@ -175,7 +176,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
         columns={[
           { title: 'Key 名称', dataIndex: 'name' },
           { title: '所属用户', dataIndex: 'user_id', render: (value: string) => userDisplayName(projectUsers.find(user => user.user_id === value) || memberUsers?.items.find(user => user.user_id === value)) || value },
-          { title: '状态', dataIndex: 'status', render: value => <Tag>{value}</Tag> },
+          { title: '状态', dataIndex: 'status', render: (value: string) => <Tag>{keyStatusLabels[value] || value}</Tag> },
         ]}
       />
     </Modal>
