@@ -13,9 +13,12 @@ import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhit
 import dayjs from 'dayjs'
 import { getApiKeyStatus, maskKey } from '../utils/security'
 import { Project } from '../api/projects'
+import { User } from '../api/users'
+import { userDisplayName } from '../utils/userDisplayName.mjs'
 
 const ApiKeysPage = () => {
-  const isAdmin = useAuthStore(state => state.user?.role === 'admin')
+  const user = useAuthStore(state => state.user)
+  const isAdmin = user?.role === 'admin'
   const [adminView, setAdminView] = useState(false)
   // 使用 SWR 获取 API Keys
   const { data: keysData, isLoading, error: keysError, mutate: mutateKeys } = useSwrData<{total: number; items: ApiKey[]}>(adminView && isAdmin ? '/api-keys/admin' : '/api-keys', { refreshInterval: 30000, revalidateOnFocus: true })
@@ -26,6 +29,9 @@ const ApiKeysPage = () => {
   const keysList = allKeys.filter(key => !(adminView && isAdmin) ||
     ((!userFilter || key.user_id === userFilter) && (!statusFilter || getApiKeyStatus(key) === statusFilter)))
   const detailKey = allKeys.find(key => key.key_id === detailKeyId)
+  const { data: detailOwner } = useSwrData<Pick<User, 'user_id' | 'username' | 'nickname'>>(
+    detailKey && isAdmin && detailKey.user_id !== user?.user_id ? `/users/${detailKey.user_id}` : null
+  )
   const statusLabels: Record<string, string> = { active: '启用', disabled: '禁用', frozen: '自动冻结', revoked: '已吊销', expired: '已过期' }
   const formatTime = (value?: string | null) => value ? dayjs.utc(value).local().format('YYYY-MM-DD HH:mm:ss') : '—'
 
@@ -430,7 +436,7 @@ const ApiKeysPage = () => {
             <Descriptions.Item label="Key">{maskKey(detailKey.api_key)}</Descriptions.Item>
             <Descriptions.Item label="所属项目">{detailKey.project_name || detailKey.project_id || "未归因"}</Descriptions.Item>
             <Descriptions.Item label="所属部门">{detailKey.department_name || detailKey.department_id || "—"}</Descriptions.Item>
-            <Descriptions.Item label="所属用户">{detailKey.user_id}</Descriptions.Item>
+            <Descriptions.Item label="所属用户">{userDisplayName(detailKey.user_id === user?.user_id ? user : detailOwner) || detailKey.user_id}</Descriptions.Item>
             <Descriptions.Item label="状态">{statusLabels[getLifecycleStatus(detailKey)] || detailKey.status}</Descriptions.Item>
             <Descriptions.Item label="IP 白名单">{formatApiKeyWhitelist(detailKey.ip_whitelist) || '不限制'}</Descriptions.Item>
             <Descriptions.Item label="过期时间">{detailKey.expires_at ? formatTime(detailKey.expires_at) : '永不过期'}</Descriptions.Item>
