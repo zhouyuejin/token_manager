@@ -62,11 +62,18 @@ async def proxy_conversation(request, db, source):
     access = service.check_model_group_access(api_key, user, model)
     if not access["allowed"]:
         raise HTTPException(403, access["message"])
-    try:
-        chat_request = convert_request(body, source, "chat")
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    estimate_data = {**chat_request, "max_tokens": chat_request.get("max_tokens", chat_request.get("max_output_tokens", 1024))}
+    if source == "responses":
+        # Admission estimates must not require a lossy conversion of native tools/history.
+        estimate_data = {
+            "messages": [{"role": "user", "content": json.dumps(body, ensure_ascii=False)}],
+            "max_tokens": body.get("max_output_tokens", 1024),
+        }
+    else:
+        try:
+            chat_request = convert_request(body, source, "chat")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        estimate_data = {**chat_request, "max_tokens": chat_request.get("max_tokens", chat_request.get("max_output_tokens", 1024))}
     estimated = sum(estimate_request(estimate_data))
     redis = get_rate_limit_redis_client()
     limit = check_proxy_rate_limit(redis, api_key, user, model, estimated)
@@ -102,7 +109,7 @@ async def proxy_conversation(request, db, source):
                 continue
             try:
                 if upstream_format in {"gemini", "custom"}:
-                    upstream_body = adapter.transform_request(chat_request, model_channel.upstream_model)
+                    upstream_body = adapter.transform_request(convert_request(body, source, "chat"), model_channel.upstream_model)
                 else:
                     upstream_body = convert_request(body, source, upstream_format, model_channel.upstream_model)
             except ValueError:
