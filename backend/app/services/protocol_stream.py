@@ -24,6 +24,35 @@ class ProtocolStream:
         self._source_response = {}
         self._sequence = 0
         self._chat_usage = None
+        self._think_states = {}
+        self._native_indices = {}
+
+    def _filter_think_delta(self, text, key):
+        hidden, pending = self._think_states.get(key, (False, ''))
+        data, pending = pending + text, ''
+        output = []
+        while data:
+            tag = '</think>' if hidden else '<think>'
+            position = data.find(tag)
+            if position >= 0:
+                if not hidden:
+                    output.append(data[:position])
+                data = data[position + len(tag):]
+                hidden = not hidden
+                continue
+            keep = next((size for size in range(min(len(data), len(tag) - 1), 0, -1)
+                         if tag.startswith(data[-size:])), 0)
+            if not hidden:
+                output.append(data[:-keep] if keep else data)
+            pending = data[-keep:] if keep else ''
+            break
+        # Incomplete tags/reasoning are withheld, including at end of stream.
+        self._think_states[key] = (hidden, pending)
+        return ''.join(output)
+
+    def _text_piece(self, key, text):
+        visible = self._filter_think_delta(text, key=key)
+        return self._piece(key, 'text', visible) if visible else []
 
     @staticmethod
     def _frame(event, data):
@@ -154,12 +183,66 @@ class ProtocolStream:
         except (KeyError, TypeError, IndexError, AttributeError) as exc:
             raise ValueError('Malformed ' + self.source + ' stream event') from exc
         if self.source == self.target:
-            frame = self._frame(event_name, data)
+            body = self._clean_native_event(event, body)
+            if body is None:
+                return []
+            frame = self._frame(event_name, body)
             if terminal or self._terminal:
                 self._terminal.append(frame)
                 return []
             return [frame]
         return out
+
+    def _clean_native_event(self, event, body):
+        from app.services.protocol_conversion import _clean_response, _strip_think_text
+
+        body = copy.deepcopy(body)
+        if self.source == 'chat':
+            for choice in body['choices']:
+                delta = choice['delta']
+                for field in ('reasoning_content', 'reasoning', 'thinking'):
+                    delta.pop(field, None)
+                if isinstance(delta.get('content'), str):
+                    delta['content'] = self._filter_think_delta(delta['content'], key=('text', choice.get('index', 0)))
+        elif self.source == 'anthropic':
+            if event == 'message_start':
+                body['message'] = _clean_response(body['message'], 'anthropic')
+            if 'index' in body:
+                index = body['index']
+                block = self._source_blocks[index]
+                if block.get('type') in ('thinking', 'redacted_thinking'):
+                    return None
+                if index not in self._native_indices:
+                    self._native_indices[index] = len(self._native_indices)
+                body['index'] = self._native_indices[index]
+                if event == 'content_block_start' and block.get('type') == 'text':
+                    body['content_block']['text'] = self._filter_think_delta(body['content_block'].get('text', ''), key=index)
+                elif event == 'content_block_delta' and body['delta'].get('type') == 'text_delta':
+                    body['delta']['text'] = self._filter_think_delta(body['delta']['text'], key=index)
+        else:
+            if event.startswith(('response.reasoning_', 'response.reasoning.')):
+                return None
+            if 'response' in body:
+                body['response'] = _clean_response(body['response'], 'responses')
+            if 'output_index' in body:
+                index = body['output_index']
+                if self._source_blocks.get(index, {}).get('type') == 'reasoning':
+                    return None
+                if index not in self._native_indices:
+                    self._native_indices[index] = len(self._native_indices)
+                body['output_index'] = self._native_indices[index]
+                key = ('text', index, body.get('content_index', 0))
+                if event == 'response.output_text.delta':
+                    body['delta'] = self._filter_think_delta(body['delta'], key=key)
+                elif event == 'response.content_part.added' and body['part'].get('type') == 'output_text':
+                    body['part']['text'] = self._filter_think_delta(body['part'].get('text', ''), key=key)
+                elif event == 'response.output_text.done':
+                    body['text'] = _strip_think_text(body['text'])
+                elif event == 'response.content_part.done':
+                    body['part'] = _strip_think_text([body['part']])[0]
+                elif event in ('response.output_item.added', 'response.output_item.done'):
+                    body['item'] = _clean_response({'output': [body['item']]}, 'responses')['output'][0]
+        return body
 
     def _read_chat(self, body):
         if 'choices' not in body or not isinstance(body['choices'], list):
@@ -177,13 +260,13 @@ class ProtocolStream:
                 raise ValueError('Chat stream choice requires delta')
             text = delta.get('content')
             if text is not None:
+                if not isinstance(text, str):
+                    raise ValueError('Chat text delta must be a string')
                 block = self._source_blocks.setdefault(('text', 0), {'type': 'text', 'text': ''})
                 block['text'] += text
                 if self.source != self.target:
-                    out += self._piece(('text', 0), 'text', text)
+                    out += self._text_piece(('text', 0), text)
             if delta.get('reasoning_content'):
-                if self.source != self.target:
-                    raise ValueError('Cross-protocol reasoning streams are unsupported')
                 self._source_response['reasoning_content'] = self._source_response.get('reasoning_content', '') + delta['reasoning_content']
             for call in delta.get('tool_calls') or []:
                 key = ('tool', call['index'])
@@ -220,10 +303,10 @@ class ProtocolStream:
                 block['_arguments'] = ''
             if self.source != self.target:
                 if kind == 'text':
-                    out += self._piece(index, 'text', block.get('text', ''))
+                    out += self._text_piece(index, block.get('text', ''))
                 elif kind == 'tool_use':
                     out += self._piece(index, 'tool', '', block['id'], block['name'])
-                else:
+                elif kind not in ('thinking', 'redacted_thinking'):
                     raise ValueError('Unsupported cross-protocol content block: ' + str(kind))
         elif event == 'content_block_delta':
             index, delta = body['index'], body['delta']
@@ -234,7 +317,7 @@ class ProtocolStream:
             if kind == 'text_delta':
                 block['text'] += delta['text']
                 if self.source != self.target:
-                    out += self._piece(index, 'text', delta['text'])
+                    out += self._text_piece(index, delta['text'])
             elif kind == 'input_json_delta':
                 block['_arguments'] += delta['partial_json']
                 if self.source != self.target:
@@ -242,8 +325,6 @@ class ProtocolStream:
             elif kind in ('thinking_delta', 'signature_delta'):
                 field = 'thinking' if kind == 'thinking_delta' else 'signature'
                 block[field] = block.get(field, '') + delta[field]
-                if self.source != self.target:
-                    raise ValueError('Cross-protocol thinking streams are unsupported')
             elif self.source != self.target:
                 raise ValueError('Unsupported cross-protocol content delta: ' + str(kind))
         elif event == 'content_block_stop':
@@ -280,7 +361,7 @@ class ProtocolStream:
             self._source_blocks[index] = item
             if item['type'] == 'function_call' and self.source != self.target:
                 out += self._piece(('tool', index), 'tool', item.get('arguments', ''), item.get('call_id', item['id']), item['name'])
-            elif item['type'] not in ('message', 'function_call') and self.source != self.target:
+            elif item['type'] not in ('message', 'function_call', 'reasoning') and self.source != self.target:
                 raise ValueError('Unsupported cross-protocol output item: ' + str(item['type']))
         elif event == 'response.content_part.added':
             item = self._source_blocks[body['output_index']]
@@ -293,14 +374,14 @@ class ProtocolStream:
             if self.source != self.target:
                 if part['type'] != 'output_text':
                     raise ValueError('Unsupported response content part: ' + str(part['type']))
-                out += self._piece(('text', body['output_index'], index), 'text', part.get('text', ''))
+                out += self._text_piece(('text', body['output_index'], index), part.get('text', ''))
         elif event == 'response.output_text.delta':
             index, content_index = body['output_index'], body['content_index']
             item = self._source_blocks[index]
             part = item['content'][content_index]
             part['text'] += body['delta']
             if self.source != self.target:
-                out += self._piece(('text', index, content_index), 'text', body['delta'])
+                out += self._text_piece(('text', index, content_index), body['delta'])
         elif event == 'response.function_call_arguments.delta':
             index = body['output_index']
             item = self._source_blocks[index]
@@ -323,6 +404,8 @@ class ProtocolStream:
             if response.get('usage') is not None:
                 self._set_usage(response['usage'])
             self.completed, terminal = True, True
+        elif event.startswith(('response.reasoning_', 'response.reasoning.')):
+            pass
         elif self.source != self.target:
             raise ValueError('Unsupported Responses stream event: ' + str(event))
         return out, terminal

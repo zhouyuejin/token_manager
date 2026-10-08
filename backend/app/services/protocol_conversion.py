@@ -1,10 +1,49 @@
 """Stateless conversation conversion, with Chat Completions as the common form."""
 import copy
 import json
+import re
 import time
 
 
 _PROTOCOLS = {"chat", "anthropic", "responses"}
+_THINK_BLOCK = re.compile(r"<think>[\s\S]*?(?:</think>|$)")
+_PARTIAL_THINK_TAG = re.compile(r"<(?:t|th|thi|thin|think)?$")
+
+
+def _strip_think_text(content):
+    if isinstance(content, str):
+        return _PARTIAL_THINK_TAG.sub("", _THINK_BLOCK.sub("", content))
+    if isinstance(content, list):
+        result = copy.deepcopy(content)
+        for part in result:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                part["text"] = _strip_think_text(part["text"])
+        return result
+    return content
+
+
+def _clean_response(body, protocol):
+    """Filter output fields only; tool payloads and measured usage stay intact."""
+    result = copy.deepcopy(body)
+    if protocol == "chat":
+        for choice in result.get("choices", []):
+            message = choice.get("message", {})
+            for field in ("reasoning_content", "reasoning", "thinking"):
+                message.pop(field, None)
+            if "content" in message:
+                message["content"] = _strip_think_text(message["content"])
+    elif protocol == "anthropic":
+        result["content"] = [block for block in result.get("content", [])
+                             if block.get("type") not in ("thinking", "redacted_thinking")]
+        for block in result["content"]:
+            if block.get("type") == "text":
+                block["text"] = _strip_think_text(block.get("text", ""))
+    else:
+        result["output"] = [item for item in result.get("output", []) if item.get("type") != "reasoning"]
+        for item in result["output"]:
+            if item.get("type") == "message":
+                item["content"] = _strip_think_text(item.get("content", []))
+    return result
 
 
 def _check(source, target):
@@ -290,8 +329,9 @@ def _render_usage(usage, target):
 def convert_response(body, source, target, model=None):
     """Convert completed responses, preserving measured usage and tool call IDs."""
     _check(source, target)
+    body = _clean_response(body, source)
     if source == target:
-        result = copy.deepcopy(body)
+        result = body
         if model is not None:
             result["model"] = model
         return result
