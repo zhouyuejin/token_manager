@@ -26,7 +26,7 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
     ]
     
     async def dispatch(self, request: Request, call_next):
-        is_proxy_request = request.url.path.startswith(("/api/v1/proxy/", "/api/v1/chats/"))
+        is_proxy_request = request.url.path.startswith(("/api/v1/proxy/", "/v1/", "/api/v1/chats/"))
         if is_proxy_request:
             request.state.request_id = request.headers.get("X-Request-ID") or f"req_{secrets.token_hex(16)}"
         # 检查是否需要认证
@@ -34,7 +34,7 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         
         # 检查是否是代理请求（排除管理接口）
-        if not request.url.path.startswith("/api/v1/proxy/"):
+        if not request.url.path.startswith(("/api/v1/proxy/", "/v1/")):
             return await call_next(request)
         
         # 获取API Key
@@ -93,6 +93,6 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
             db.close()
         
         response = await call_next(request)
-        if request.url.path.startswith("/api/v1/proxy/"):
+        if request.url.path.startswith(("/api/v1/proxy/", "/v1/")):
             response.headers["X-Request-ID"] = request.state.request_id
         return response

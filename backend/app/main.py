@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from app.api.v1 import api_router
+from app.api.v1.proxy import v1_router
 from app.api.v1.ws import router as ws_router
 from app.core.config import settings
 from app.core.database import engine
@@ -150,6 +151,7 @@ app.include_router(ws_router)
 
 # 注册API路由
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(v1_router, prefix="/v1", tags=["代理"])
 
 
 @app.get("/health")
