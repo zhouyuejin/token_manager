@@ -217,11 +217,11 @@ const ModelGroupForm: React.FC = () => {
                   setSelectedModelIds(nextTargetKeys as string[])
                   form.setFieldsValue({ model_ids: nextTargetKeys })
                 }}
-                render={item => `${item.title} (${item.description})`}
+                render={item => item.description ? `${item.title} (${item.description})` : item.title}
                 showSearch
                 filterOption={(input, item) =>
                   (item.title as string).toLowerCase().includes(input.toLowerCase()) ||
-                  (item.description as string).toLowerCase().includes(input.toLowerCase())
+                  (item.description as string | undefined)?.toLowerCase().includes(input.toLowerCase()) || false
                 }
                 pagination={{ pageSize: 20 }}
                 listStyle={{ width: '45%', height: 360 }}

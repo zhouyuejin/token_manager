@@ -4,6 +4,7 @@ import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import { Budget, BudgetSave, ReconcileItem, ReconcileReport, ReconcileReportList, Reservation, runReconcile, saveBudget } from '../../api/billing'
 import { Department, Project } from '../../api/projects'
+import { Channel } from '../../api/channels'
 import { useSwrData, useSwrDataWithParams } from '../../hooks/useSwr'
 import { useMessage } from '../../utils/message'
 import { WriteOnly } from '../../components/WriteOnly'
@@ -20,6 +21,7 @@ const Billing = () => {
     useSwrDataWithParams<{ items: Reservation[] }>('/admin/billing/reservations', { month, ...(reservationStatus ? { status: reservationStatus } : {}) })
   const { data: projects, error: projectsError } = useSwrData<{ items: Project[] }>('/projects/admin')
   const { data: departments, error: departmentsError } = useSwrData<{ items: Department[] }>('/projects/admin/departments')
+  const { data: channels } = useSwrData<{ items: Channel[] }>('/admin/channels')
   const [visible, setVisible] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
   const [saving, setSaving] = useState(false)
@@ -91,13 +93,16 @@ const Billing = () => {
     { title: '状态', dataIndex: 'status', width: 90, render: (value: Reservation['status']) => <Tag color={value === 'reserved' ? 'blue' : value === 'committed' ? 'green' : 'default'}>{{ reserved: '预扣中', committed: '已结算', released: '已释放', expired: '已过期' }[value]}</Tag> },
     { title: '用户', dataIndex: 'user_id', width: 150, render: (_: string, row: Reservation) => userDisplayName(row) },
     { title: 'API Key', dataIndex: 'key_id', width: 150 },
-    { title: '项目', dataIndex: 'project_id', width: 150, render: (value: string | null) => value || '未归因' },
-    { title: '模型', dataIndex: 'model', width: 150 },
+    { title: '项目', dataIndex: 'project_id', width: 150, render: (value: string | null) => value ? projects?.items.find(project => project.project_id === value)?.name || value : '未归因' },
+    { title: '模型', dataIndex: 'model', width: 150, render: (value: string) => {
+      const channelType = channels?.items.find(channel => value.startsWith(`${channel.type}-`))?.type
+      return channelType ? value.slice(channelType.length + 1) : value
+    } },
     { title: '预估 Token', dataIndex: 'estimated_tokens', width: 120, render: (value: number) => value.toLocaleString() },
     { title: '实际 Token', dataIndex: 'actual_tokens', width: 120, render: (value: number | null) => value == null ? '—' : value.toLocaleString() },
     { title: '预扣金额', dataIndex: 'estimated_cost_usd', width: 120, render: money },
     { title: '实际金额', dataIndex: 'actual_cost_usd', width: 120, render: (value: number | null) => value == null ? '—' : money(value) },
-    { title: '创建时间', dataIndex: 'created_at', width: 180, render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm:ss') }
+    { title: '创建时间', dataIndex: 'created_at', width: 180, render: (value: string) => dayjs.utc(value).utcOffset(8).format('YYYY-MM-DD HH:mm:ss') }
   ]
   const statusMeta = {
     running: { color: 'blue', label: '待处理' }, normal: { color: 'green', label: '正常' },

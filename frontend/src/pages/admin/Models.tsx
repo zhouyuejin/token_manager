@@ -560,12 +560,15 @@ const ModelsPage = () => {
               dataIndex: 'model_id', 
               key: 'model_id',
               width: 280,
-              render: (_: any, record: ModelMapping) => (
-                <div>
-                  
-                  <div style={{ color: token.colorText, fontWeight: 500 }}>{record.display_name}</div>
-                </div>
-              )
+              render: (_: any, record: ModelMapping) => {
+                const channelType = channelsList.find(channel =>
+                  record.model_id.startsWith(`${channel.type}-`) && record.display_name?.startsWith(`${channel.type}-`)
+                )?.type
+                const displayName = channelType
+                  ? record.display_name?.slice(channelType.length + 1)
+                  : record.display_name
+                return <div><div style={{ color: token.colorText, fontWeight: 500 }}>{displayName}</div></div>
+              }
             },
             {
               title: '绑定渠道',
