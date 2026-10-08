@@ -90,6 +90,7 @@ def test_report_export_reuses_all_stats_filters_and_totals(ctx):
     assert "attachment;" in exported.headers["content-disposition"]
     rows = list(csv.reader(io.StringIO(exported.content.decode("utf-8-sig"))))
     assert rows[0] == ["时间", "部门", "项目", "用户", "API Key", "模型", "渠道", "输入Token", "输出Token", "总Token", "成本(USD)", "状态码"]
+    assert rows[1][0] == "2026-09-20 16:00:00"
     assert rows[1][1:7] == ["研发部", "平台", "Alice", "key-1", "gpt-test", "主渠道"]
     assert rows[1][9:12] == ["100", "0.25000000", "200"]
     assert rows[-1] == ["汇总", "", "", "", "", "", "", "70", "30", "100", "0.25000000", "1 次请求"]

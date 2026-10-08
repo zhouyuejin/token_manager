@@ -12,6 +12,7 @@ import io
 from decimal import Decimal
 from typing import Optional, List, Any
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from sqlalchemy import case, func, and_
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -398,7 +399,7 @@ async def export_admin_usage(
             totals["cost"] += row_cost
             totals["requests"] += 1
             yield _csv_row([
-                row.created_at.isoformat(sep=" ") if row.created_at else "",
+                row.created_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
                 departments.get(row.department_id, row.department_id or ""),
                 projects.get(row.project_id, row.project_id or ""),
                 users.get(row.user_id, row.user_id), row.key_id, row.model,

@@ -3,6 +3,7 @@ import { $message } from '../utils/message'
 import { useAuthStore } from '../store/auth'
 import { refresh as refreshApi } from './auth'
 import { getRequestErrorMessage } from '../utils/security'
+import { normalizeApiDates } from '../utils/normalizeApiDates.mjs'
 
 const request = axios.create({
   baseURL: '/api/v1',
@@ -65,7 +66,7 @@ request.interceptors.response.use(
       $message.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message || '请求失败'))
     }
-    return res.data ?? res
+    return normalizeApiDates(res.data ?? res)
   },
   async (error: AxiosError) => {
     const status = error.response?.status
