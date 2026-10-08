@@ -267,9 +267,31 @@ class GeminiAdapter(ProviderAdapter):
         return ["data: " + json.dumps(chunk)]
 
 
+class ResponsesAdapter(ProviderAdapter):
+    def transform_request(self, request_data: Dict[str, Any], upstream_model: str) -> Dict[str, Any]:
+        from app.services.protocol_conversion import convert_request
+        return convert_request(request_data, "chat", "responses", upstream_model)
+
+    def transform_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        from app.services.protocol_conversion import convert_response
+        return convert_response(response_data, "responses", "chat")
+
+    def transform_stream_line(self, line: str) -> List[str]:
+        if not line.startswith("data: ") or line[6:].strip() == "[DONE]":
+            return []
+        from app.services.protocol_stream import ProtocolStream
+        if not hasattr(self, "stream"):
+            self.stream = ProtocolStream("responses", "chat", "")
+        chunks = self.stream.feed("", line[6:])
+        if self.stream.completed:
+            chunks += self.stream.finish()
+        return [chunk.strip() for chunk in chunks]
+
+
 _ADAPTERS = {
     UpstreamFormat.anthropic: AnthropicAdapter,
     UpstreamFormat.gemini: GeminiAdapter,
+    UpstreamFormat.responses: ResponsesAdapter,
 }
 
 

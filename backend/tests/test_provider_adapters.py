@@ -109,6 +109,35 @@ def test_anthropic_adapter_converts_stream_events():
     assert adapter.transform_stream_line('data: ' + json.dumps({"type": "message_stop"})) == ["data: [DONE]"]
 
 
+def test_responses_adapter_converts_frontend_chat_request_and_stream():
+    adapter = get_provider_adapter(_channel("openai", "responses"))
+    request = adapter.transform_request({
+        "messages": [{"role": "user", "content": "Hello"}], "stream": True,
+    }, "upstream-model")
+    assert request["model"] == "upstream-model"
+    assert request["input"] == [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hello"}]}]
+    assert "messages" not in request
+
+    events = [
+        {"type": "response.created", "response": {"id": "r", "status": "in_progress", "output": []}},
+        {"type": "response.output_item.added", "output_index": 0, "item": {"type": "message", "id": "m", "role": "assistant", "content": []}},
+        {"type": "response.content_part.added", "output_index": 0, "content_index": 0, "part": {"type": "output_text", "text": ""}},
+        {"type": "response.output_text.delta", "output_index": 0, "content_index": 0, "delta": "Hi"},
+        {"type": "response.completed", "response": {"id": "r", "status": "completed", "output": [
+            {"type": "message", "id": "m", "role": "assistant", "content": [{"type": "output_text", "text": "Hi"}]}
+        ], "usage": {"input_tokens": 2, "output_tokens": 1}}},
+    ]
+    chunks = [chunk for event in events for chunk in adapter.transform_stream_line("data: " + json.dumps(event))]
+    assert any(json.loads(chunk[6:])["choices"][0]["delta"].get("content") == "Hi"
+               for chunk in chunks if chunk.startswith("data: {") )
+    assert any(json.loads(chunk[6:]).get("usage", {}).get("total_tokens") == 3
+               for chunk in chunks if chunk.startswith("data: {") )
+    assert "data: [DONE]" in chunks
+    assert adapter.transform_stream_line("data: [DONE]") == []
+    response = adapter.transform_response(events[-1]["response"])
+    assert response["choices"][0]["message"]["content"] == "Hi"
+
+
 def test_proxy_service_uses_registered_adapter_for_request_and_response(monkeypatch):
     observed = {}
 
