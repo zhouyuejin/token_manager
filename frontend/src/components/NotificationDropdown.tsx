@@ -6,6 +6,8 @@ import { BellOutlined, DeleteOutlined, InboxOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
+import { useAuthStore } from "../store/auth";
+import { isAuthSessionCurrent } from "../utils/authSession.mjs";
 import { useNotificationStore, Notification } from "../store/notification";
 import {
   getNotifications,
@@ -72,10 +74,12 @@ export default function NotificationDropdown({
   const handleOpenChange = async (isOpen: boolean) => {
     setOpen(isOpen);
     if (isOpen && notifications.length === 0) {
+      const requestToken = useAuthStore.getState().token;
       setLoading(true);
       try {
         const res = await getNotifications({ page: 1, page_size: 20 });
-        // 更新 store（这里简化处理，直接用返回数据）
+        if (!isAuthSessionCurrent(requestToken, useAuthStore.getState().token)) return;
+        // 仅将当前会话的通知写入缓存。
         useNotificationStore.setState({
           notifications: res.items,
           unreadCount: res.unread_count,
@@ -101,8 +105,10 @@ export default function NotificationDropdown({
   // 全部已读
   const handleMarkAllAsRead = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    const requestToken = useAuthStore.getState().token;
     try {
       await markAllAsRead();
+      if (!isAuthSessionCurrent(requestToken, useAuthStore.getState().token)) return;
       markAllAsReadStore();
     } catch (error) {
       console.error("标记全部已读失败:", error);
@@ -112,8 +118,10 @@ export default function NotificationDropdown({
   // 删除通知
   const handleDelete = async (notifId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const requestToken = useAuthStore.getState().token;
     try {
       await deleteNotification(notifId);
+      if (!isAuthSessionCurrent(requestToken, useAuthStore.getState().token)) return;
       removeNotification(notifId);
     } catch (error) {
       console.error("删除通知失败:", error);

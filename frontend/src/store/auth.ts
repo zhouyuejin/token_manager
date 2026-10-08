@@ -10,6 +10,7 @@ import {
 } from '../api/auth'
 import { clearModelConfigStorage } from '../utils/chatStorage'
 import { mutate } from 'swr'
+import { useNotificationStore } from './notification'
 
 interface AuthState {
   token: string | null
@@ -88,3 +89,11 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// 消息缓存属于当前账号；手动退出、认证失效和账号切换均同步清空。
+useAuthStore.subscribe((state, previous) => {
+  if ((previous.token && !state.token) ||
+      (previous.user && previous.user.user_id !== state.user?.user_id)) {
+    useNotificationStore.getState().replaceNotifications([], 0)
+  }
+})

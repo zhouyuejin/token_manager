@@ -163,7 +163,7 @@ const Approvals = () => {
     { title: '理由', dataIndex: 'reason', ellipsis: true },
     { title: '补充说明', dataIndex: 'supplement', render: (value: string | null) => value || '—', ellipsis: true },
     { title: '提交时间', dataIndex: 'created_at', render: (value: string) => new Date(value).toLocaleString() },
-    { title: '操作', render: (_: unknown, record: ApprovalRequest) => <Space>
+    { title: '操作', width: 300, fixed: 'right' as const, render: (_: unknown, record: ApprovalRequest) => <Space style={{ whiteSpace: 'nowrap' }}>
       <Button type="primary" onClick={() => setDecisionTarget({ request: record, decision: 'approved' })}>通过</Button>
       <Button danger onClick={() => setDecisionTarget({ request: record, decision: 'rejected' })}>拒绝</Button>
       <Button onClick={() => setDecisionTarget({ request: record, decision: 'needs_info' })}>要求补充</Button>
@@ -230,7 +230,7 @@ const Approvals = () => {
         { key: 'review', label: `待我审批${assigned?.length ? ` (${assigned.length})` : ''}`, children: assignedError
           ? <Alert type="error" showIcon message="待审批列表加载失败，请稍后重试。" />
           : assignedLoading ? <Spin /> : (assigned || []).length === 0 ? <Empty description="当前没有指派给您的待审批申请" />
-          : <Table rowKey="request_id" dataSource={assigned || []} columns={reviewColumns} /> },
+          : <Table rowKey="request_id" dataSource={assigned || []} columns={reviewColumns} scroll={{ x: 1300 }} /> },
       ]} />
 
       <ApprovalDecisionModal

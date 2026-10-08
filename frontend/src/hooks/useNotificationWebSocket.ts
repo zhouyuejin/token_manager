@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { App } from 'antd'
+import { isAuthSessionCurrent } from '../utils/authSession.mjs'
 import { useAuthStore } from '../store/auth'
 import { useNotificationStore } from '../store/notification'
 
@@ -36,7 +37,7 @@ export const useNotificationWebSocket = () => {
     let currentWs: WebSocket | null = null
 
     const connect = () => {
-      if (isCancelledRef.current || !token) return
+      if (isCancelledRef.current || !token || !isAuthSessionCurrent(token, useAuthStore.getState().token)) return
 
       // 关闭已有连接
       if (wsRef.current && wsRef.current !== currentWs) {
@@ -59,7 +60,7 @@ export const useNotificationWebSocket = () => {
       }
 
       ws.onmessage = (event) => {
-        if (wsRef.current !== ws) return
+        if (isCancelledRef.current || wsRef.current !== ws || !isAuthSessionCurrent(token, useAuthStore.getState().token)) return
         try {
           const data = JSON.parse(event.data)
           switch (data.type) {
@@ -85,7 +86,7 @@ export const useNotificationWebSocket = () => {
       }
 
       ws.onclose = (e) => {
-        if (wsRef.current !== ws) return
+        if (isCancelledRef.current || wsRef.current !== ws || !isAuthSessionCurrent(token, useAuthStore.getState().token)) return
         
         // 如果是正常关闭，不重连
         if (e.code === 1000) {
@@ -100,7 +101,7 @@ export const useNotificationWebSocket = () => {
 
       ws.onerror = () => {
         // WebSocket 错误由 onclose 处理
-        if (wsRef.current !== ws) return
+        if (isCancelledRef.current || wsRef.current !== ws || !isAuthSessionCurrent(token, useAuthStore.getState().token)) return
       }
     }
 

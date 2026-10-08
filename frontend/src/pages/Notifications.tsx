@@ -22,6 +22,8 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { useAuthStore } from '../store/auth'
+import { isAuthSessionCurrent } from '../utils/authSession.mjs'
 import { useNotificationStore, Notification } from '../store/notification'
 import {
   markAsRead,
@@ -56,6 +58,7 @@ const getTypeConfig = (type: string) =>
   NOTIFICATION_TYPE_CONFIG[type] ?? NOTIFICATION_TYPE_CONFIG.system
 
 const NotificationsPage = () => {
+  const sessionToken = useAuthStore(state => state.token)
   const { token, isDark } = useThemeToken()
 
   // 表格列定义
@@ -233,12 +236,12 @@ const NotificationsPage = () => {
 
   // SWR 数据变化时同步到 store
   useEffect(() => {
-    if (!swrData) return
+    if (!swrData || !sessionToken || !isAuthSessionCurrent(sessionToken, useAuthStore.getState().token)) return
     replaceNotifications(swrData.items, swrData.unread_count)
     setTotal(swrData.total)
     lastFetchedFirstIdRef.current = swrData.items[0]?.notif_id ?? null
     setBannerDismissed(false)
-  }, [swrData, replaceNotifications])
+  }, [swrData, replaceNotifications, sessionToken])
 
   // 计算自上次 fetch 后，store 头部新增了几条 WS 推送的通知
   const newSinceLastFetch = useMemo(() => {
@@ -297,6 +300,7 @@ const NotificationsPage = () => {
   const handleMarkAllAsRead = async () => {
     try {
       await markAllAsRead()
+      if (!isAuthSessionCurrent(sessionToken, useAuthStore.getState().token)) return
       markAllAsReadStore()
       message.success('已将全部通知标记为已读')
     } catch (err) {
@@ -307,6 +311,7 @@ const NotificationsPage = () => {
   const handleClearRead = async () => {
     try {
       const result = await deleteReadNotifications()
+      if (!isAuthSessionCurrent(sessionToken, useAuthStore.getState().token)) return
       clearRead()
       const removed = result.deleted ?? 0
       setTotal((prev) => Math.max(0, prev - removed))
@@ -322,6 +327,7 @@ const NotificationsPage = () => {
     e.stopPropagation()
     try {
       await deleteNotification(notif.notif_id)
+      if (!isAuthSessionCurrent(sessionToken, useAuthStore.getState().token)) return
       removeNotification(notif.notif_id)
       if (selectedNotif?.notif_id === notif.notif_id) {
         closeDrawer()
@@ -336,6 +342,7 @@ const NotificationsPage = () => {
   const handleMarkOneAsRead = async (notifId: string) => {
     try {
       await markAsRead(notifId)
+      if (!isAuthSessionCurrent(sessionToken, useAuthStore.getState().token)) return
       markAsReadStore(notifId)
     } catch (err) {
       console.error('标记已读失败:', err)
@@ -345,6 +352,7 @@ const NotificationsPage = () => {
   const handleDeleteFromDrawer = async (notifId: string) => {
     try {
       await deleteNotification(notifId)
+      if (!isAuthSessionCurrent(sessionToken, useAuthStore.getState().token)) return
       removeNotification(notifId)
       setTotal((prev) => Math.max(0, prev - 1))
     } catch (err) {
