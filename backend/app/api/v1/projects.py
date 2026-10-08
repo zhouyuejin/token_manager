@@ -144,11 +144,14 @@ async def delete_department(dept_id: str, request: Request, admin: User = Depend
 
 @router.get('/admin')
 async def list_projects(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    query = db.query(Project).options(joinedload(Project.department))
+    query = db.query(Project, User.nickname, User.username).outerjoin(User, Project.owner_user_id == User.user_id).options(joinedload(Project.department))
     if admin.role == UserRole.department_admin:
         query = query.join(Department).filter(Department.owner_user_id == admin.user_id)
     rows = query.all()
-    return {'items': [project_response(row) for row in rows]}
+    return {'items': [
+        {**project_response(row), 'owner_name': nickname or username or row.owner_user_id}
+        for row, nickname, username in rows
+    ]}
 
 
 @router.post('/admin')

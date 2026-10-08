@@ -109,7 +109,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const columns = [
     { title: `${title}名称`, dataIndex: 'name' },
     ...(!departmentsOnly ? [{ title: '所属部门', dataIndex: 'department_name' }] : []),
-    { title: '负责人', dataIndex: 'owner_user_id', render: (value: string, row: Department | Project) => (departmentsOnly ? (row as Department).owner_name : value) || value || '未设置' },
+    { title: '负责人', dataIndex: 'owner_user_id', render: (value: string, row: Department | Project) => row.owner_name || value || '未设置' },
     { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value === 'active' ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', render: (_: unknown, row: Department | Project) => <Space>
       <WriteOnly permission="department:write">
@@ -150,7 +150,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     <Modal width={760} title={`项目归因详情：${membersProject?.name || ''}`} open={!!membersProject} closable={!membersLoading} maskClosable={!membersLoading} keyboard={!membersLoading} cancelButtonProps={{ disabled: membersLoading }} onCancel={() => setMembersProject(null)} onOk={saveMembers} confirmLoading={saving} okButtonProps={{ disabled: membersLoading || membersError }} okText="保存用户分配">
       {membersProject && <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
         <Descriptions.Item label="所属部门">{membersProject.department_name}</Descriptions.Item>
-        <Descriptions.Item label="负责人">{membersProject.owner_user_id || '未设置'}</Descriptions.Item>
+        <Descriptions.Item label="负责人">{membersProject.owner_name || membersProject.owner_user_id || '未设置'}</Descriptions.Item>
         <Descriptions.Item label="状态"><Tag color={membersProject.status === 'active' ? 'green' : 'default'}>{membersProject.status === 'active' ? '启用' : '停用'}</Tag></Descriptions.Item>
         <Descriptions.Item label="关联 Key">{keysLoading ? '加载中' : `${projectKeys.length} 个`}</Descriptions.Item>
       </Descriptions>}

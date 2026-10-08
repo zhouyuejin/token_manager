@@ -14,12 +14,13 @@ export interface Project {
   name: string
   department_name: string
   owner_user_id?: string | null
+  owner_name?: string | null
   status: 'active' | 'disabled'
   content_audit_enabled: boolean
 }
 
 export type DepartmentSave = Omit<Department, 'dept_id' | 'owner_name'>
-export type ProjectSave = Omit<Project, 'project_id' | 'department_name'>
+export type ProjectSave = Omit<Project, 'project_id' | 'department_name' | 'owner_name'>
 
 export const saveDepartment = (data: DepartmentSave, deptId?: string) =>
   deptId ? put<Department>(`/projects/admin/departments/${deptId}`, data) : post<Department>('/projects/admin/departments', data)

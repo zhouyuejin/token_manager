@@ -114,6 +114,28 @@ def test_department_owner_display_prefers_nickname_and_falls_back(ctx):
     assert next(row for row in rows.values() if row["name"] == "未分配部门")["owner_name"] is None
 
 
+def test_project_owner_display_prefers_nickname_and_falls_back(ctx):
+    db, client, owner = ctx
+    department = client.post("/projects/admin/departments", json={"name": "研发部"}).json()
+    project = client.post("/projects/admin", json={
+        "name": "平台", "dept_id": department["dept_id"], "owner_user_id": owner.user_id,
+    }).json()
+    client.post("/projects/admin", json={"name": "未分配项目", "dept_id": department["dept_id"]})
+
+    def projects():
+        response = client.get("/projects/admin")
+        assert response.status_code == 200, response.text
+        return {row["project_id"]: row for row in response.json()["items"]}
+
+    assert projects()[project["project_id"]]["owner_name"] == "account"
+    owner.nickname = "项目负责人"
+    db.commit()
+    rows = projects()
+    assert rows[project["project_id"]]["owner_name"] == "项目负责人"
+    assert rows[project["project_id"]]["owner_user_id"] == owner.user_id
+    assert next(row for row in rows.values() if row["name"] == "未分配项目")["owner_name"] is None
+
+
 def test_approval_requesters_include_nickname_and_keep_visibility(ctx):
     from app.models.approval import ApprovalRequest
 
