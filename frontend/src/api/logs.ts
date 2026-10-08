@@ -57,6 +57,7 @@ export interface RouteDecisionLog {
   id: number
   request_id: string
   user_id: string | null
+  username?: string | null
   key_id: string | null
   model: string
   candidate_channels: string[]

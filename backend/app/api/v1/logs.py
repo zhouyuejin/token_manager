@@ -66,15 +66,18 @@ async def list_route_decision_logs(
         )
 
     total = query.count()
-    rows = query.order_by(RouteDecisionLog.created_at.desc(), RouteDecisionLog.id.desc()).offset(
-        (page - 1) * page_size
-    ).limit(page_size).all()
+    rows = query.outerjoin(User, User.user_id == RouteDecisionLog.user_id).with_entities(
+        RouteDecisionLog, User.username
+    ).order_by(
+        RouteDecisionLog.created_at.desc(), RouteDecisionLog.id.desc()
+    ).offset((page - 1) * page_size).limit(page_size).all()
     return {
         "total": total,
         "items": [{
             "id": row.id,
             "request_id": row.request_id,
             "user_id": row.user_id,
+            "username": username,
             "key_id": row.key_id,
             "model": row.model,
             "candidate_channels": json.loads(row.candidate_channels),
@@ -85,7 +88,7 @@ async def list_route_decision_logs(
             "success": row.success,
             "error_message": _safe_route_error(row.error_message),
             "created_at": row.created_at,
-        } for row in rows],
+        } for row, username in rows],
     }
 
 @router.get("/operations", response_model=OperationLogListResponse)

@@ -5,10 +5,13 @@ import dayjs from 'dayjs'
 import { useThemeToken } from '../../theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { getRouteDecisionLogs, RouteDecisionLog, RouteDecisionLogParams } from '../../api/logs'
+import { Channel } from '../../api/channels'
+import { useSwrData } from '../../hooks/useSwr'
 
 const RouteMonitor = () => {
   const { token } = useThemeToken()
   const message = useMessage()
+  const { data: channels } = useSwrData<{ items: Channel[] }>('/admin/channels')
   const [items, setItems] = useState<RouteDecisionLog[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -41,8 +44,11 @@ const RouteMonitor = () => {
   const columns = [
     { title: '时间', dataIndex: 'created_at', key: 'created_at', render: (value: string) => dayjs.utc(value).local().format('YYYY-MM-DD HH:mm:ss') },
     { title: 'Request ID', dataIndex: 'request_id', key: 'request_id', render: (value: string) => <Space size={4}><Typography.Text code copyable={{ text: value }}>{value}</Typography.Text><Button size="small" type="text" icon={<CopyOutlined />} onClick={() => { void navigator.clipboard.writeText(value); message.success('已复制 Request ID') }} /></Space> },
-    { title: '用户 / Key', key: 'caller', render: (_: unknown, row: RouteDecisionLog) => <span>{row.user_id || '—'} / {row.key_id || '—'}</span> },
-    { title: '模型', dataIndex: 'model', key: 'model' },
+    { title: '用户', dataIndex: 'username', key: 'username', render: (_: string | null | undefined, row: RouteDecisionLog) => row.username || row.user_id || '—' },
+    { title: '模型', dataIndex: 'model', key: 'model', render: (value: string) => {
+      const channelType = channels?.items.find(channel => value.startsWith(`${channel.type}-`))?.type
+      return channelType ? value.slice(channelType.length + 1) : value
+    } },
     { title: '状态', dataIndex: 'status_code', key: 'status_code', render: (value: number) => <Tag color={value === 200 ? 'green' : 'red'}>{value}</Tag> },
     { title: '最终渠道', dataIndex: 'selected_channel', key: 'selected_channel', render: (value: string | null) => value || '—' },
   ]
