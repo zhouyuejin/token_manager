@@ -30,12 +30,14 @@ const statusColors: Record<ApprovalStatus, string> = {
   pending: 'processing', needs_info: 'warning', approved: 'success', rejected: 'error', cancelled: 'default',
 }
 
-const summary = (request: ApprovalRequest) => {
+const summary = (request: ApprovalRequest, projects: Pick<Project, 'project_id' | 'name'>[]) => {
   const payload = request.payload
+  const projectId = payload.project_id || request.target_id
+  const projectName = projects.find(project => project.project_id === projectId)?.name || projectId || '—'
   if (request.request_type === 'quota') return `申请增加 ${payload.amount} tokens`
-  if (request.request_type === 'api_key') return `用途：${payload.name || '—'}；项目：${payload.project_id || request.target_id || '—'}`
+  if (request.request_type === 'api_key') return `用途：${payload.name || '—'}；项目：${projectName}`
   if (request.request_type === 'model_group') return `申请模型分组：${payload.group_id || request.target_id || '—'}`
-  return `申请加入项目：${payload.project_id || request.target_id || '—'}`
+  return `申请加入项目：${projectName}`
 }
 
 const effectSummary = (request: ApprovalRequest) => {
@@ -62,6 +64,7 @@ const Approvals = () => {
   const { data: projects } = useSwrData<{ items: Project[] }>('/projects')
   const { data: accessOptions, error: accessOptionsError } = useSwrData<ProjectAccessOption[]>('/approvals/project-access/options')
   const { data: groupOptions, error: groupOptionsError } = useSwrData<ModelGroupApplicationOption[]>('/approvals/model-group/options')
+  const summaryProjects = [...(projects?.items || []), ...(accessOptions || [])]
   const [submitting, setSubmitting] = useState(false)
   const [decisionTarget, setDecisionTarget] = useState<{ request: ApprovalRequest; decision: 'approved' | 'rejected' | 'needs_info' } | null>(null)
   const [supplementTarget, setSupplementTarget] = useState<ApprovalRequest | null>(null)
@@ -145,7 +148,7 @@ const Approvals = () => {
 
   const applicationColumns = [
     { title: '申请类型', dataIndex: 'request_type', render: (value: ApprovalType) => typeLabels[value] },
-    { title: '申请内容', render: (_: unknown, record: ApprovalRequest) => summary(record) },
+    { title: '申请内容', render: (_: unknown, record: ApprovalRequest) => summary(record, summaryProjects) },
     { title: '状态', dataIndex: 'status', render: (value: ApprovalStatus) => <Tag color={statusColors[value]}>{statusLabels[value]}</Tag> },
     { title: '审批意见', dataIndex: 'decision_comment', render: (value: string | null) => value || '—', ellipsis: true },
     { title: '生效结果', render: (_: unknown, record: ApprovalRequest) => effectSummary(record) },
@@ -159,7 +162,7 @@ const Approvals = () => {
   const reviewColumns = [
     { title: '申请人', dataIndex: 'requester_user_id' },
     { title: '申请类型', dataIndex: 'request_type', render: (value: ApprovalType) => typeLabels[value] },
-    { title: '业务影响', render: (_: unknown, record: ApprovalRequest) => summary(record) },
+    { title: '业务影响', render: (_: unknown, record: ApprovalRequest) => summary(record, summaryProjects) },
     { title: '理由', dataIndex: 'reason', ellipsis: true },
     { title: '补充说明', dataIndex: 'supplement', render: (value: string | null) => value || '—', ellipsis: true },
     { title: '提交时间', dataIndex: 'created_at', render: (value: string) => new Date(value).toLocaleString() },
