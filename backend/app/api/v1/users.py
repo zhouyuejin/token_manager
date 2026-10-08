@@ -1,7 +1,12 @@
 """
 用户接口
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+import base64
+import io
+import warnings
+
+from PIL import Image, ImageOps, UnidentifiedImageError
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -24,6 +29,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user), 
         user_id=current_user.user_id,
         username=current_user.username,
         nickname=current_user.nickname,
+        avatar_url=current_user.avatar_url,
         email=current_user.email,
         role=current_user.role.value,
         status=current_user.status.value,
@@ -50,6 +56,59 @@ async def update_current_user_profile(
         ip_address=extract_client_ip(request),
     )
     return {"message": "昵称更新成功"}
+
+
+@router.put("/me/avatar")
+async def upload_avatar(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    content = await file.read(2 * 1024 * 1024 + 1)
+    await file.close()
+    if len(content) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="头像不能超过 2MB")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(content)) as image:
+                if image.format not in {"PNG", "JPEG", "WEBP"}:
+                    raise ValueError("unsupported image")
+                if image.width * image.height > 16_000_000:
+                    raise ValueError("image too large")
+                avatar = ImageOps.fit(ImageOps.exif_transpose(image).convert("RGBA"), (256, 256))
+                output = io.BytesIO()
+                avatar.save(output, format="WEBP", quality=80)
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise HTTPException(status_code=400, detail="请上传有效的 PNG、JPEG 或 WebP 图片（不超过1600万像素）")
+    avatar_url = "data:image/webp;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+    if len(avatar_url) > 65535:
+        raise HTTPException(status_code=400, detail="图片内容过于复杂，请换一张图片")
+    current_user.avatar_url = avatar_url
+    db.commit()
+    record_operation(
+        db=db, operator=current_user, action="update", target_type="user",
+        target_id=current_user.user_id, detail={"avatar": "upload"},
+        ip_address=extract_client_ip(request),
+    )
+    return {"message": "头像更新成功"}
+
+
+@router.delete("/me/avatar")
+async def remove_avatar(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.avatar_url = None
+    db.commit()
+    record_operation(
+        db=db, operator=current_user, action="update", target_type="user",
+        target_id=current_user.user_id, detail={"avatar": "remove"},
+        ip_address=extract_client_ip(request),
+    )
+    return {"message": "头像已移除"}
 
 
 @router.put("/me/password")
@@ -162,6 +221,7 @@ async def get_user_by_id(
         user_id=user.user_id,
         username=user.username,
         nickname=user.nickname,
+        avatar_url=user.avatar_url,
         email=user.email,
         role=user.role.value,
         status=user.status.value,

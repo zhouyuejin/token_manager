@@ -301,7 +301,7 @@ const MainLayout = () => {
             padding: "4px 0",
           }}
         >
-          <Avatar
+          <Avatar src={user?.avatar_url}
             size={36}
             style={{
               background:
@@ -675,7 +675,7 @@ const MainLayout = () => {
                     (e.currentTarget.style.background = "transparent")
                   }
                 >
-                  <Avatar
+                  <Avatar src={user?.avatar_url}
                     size={32}
                     style={{
                       background:

@@ -65,6 +65,7 @@ class UserInfo(BaseModel):
     user_id: str
     username: str
     nickname: Nickname = None
+    avatar_url: Optional[str] = None
     email: str
     role: str
     status: str

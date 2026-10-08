@@ -106,3 +106,11 @@ export const updateNotificationSettings = (settings: NotificationSettings) =>
 
 export const updateProfile = (data: { nickname: string | null }) =>
   put('/users/me/profile', data)
+
+export const uploadAvatar = (file: File) => {
+  const data = new FormData()
+  data.append('file', file)
+  return put('/users/me/avatar', data)
+}
+
+export const removeAvatar = () => del('/users/me/avatar')

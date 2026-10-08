@@ -479,7 +479,8 @@ const ApiKeysPage = () => {
             创建
           </Button>,
         ]}
-        style={{ top: 100 }}
+        centered
+        styles={{ body: { maxHeight: 'min(600px, calc(100vh - 200px))', overflowY: 'auto' } }}
       >
         {newKey ? (
           <div>
@@ -648,7 +649,8 @@ const ApiKeysPage = () => {
           editForm.resetFields()
         }}
         footer={null}
-        style={{ top: 100 }}
+        centered
+        styles={{ body: { maxHeight: 'min(600px, calc(100vh - 200px))', overflowY: 'auto' } }}
       >
         <Form form={editForm} onFinish={handleUpdate} layout="vertical">
           {(editProjectsError || projectsError) && <Alert type="error" message="项目加载失败，请重新打开页面重试" />}

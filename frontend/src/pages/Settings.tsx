@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Card, Form, Input, Button, Switch } from 'antd'
+import { Card, Form, Input, Button, Switch, Avatar, Upload, Space } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, BellOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../store/auth'
 import { useMessage } from '../utils/message'
-import { changePassword, getNotificationSettings, updateNotificationSettings, updateProfile } from '../api/users'
+import { changePassword, getNotificationSettings, updateNotificationSettings, updateProfile, uploadAvatar, removeAvatar } from '../api/users'
 import { mutate } from 'swr'
+import { userDisplayName } from '../utils/userDisplayName.mjs'
 import { getRequestErrorMessage } from '../utils/security'
 
 const SettingsPage = () => {
   const { user } = useAuthStore()
   const [passwordForm] = Form.useForm()
   const [profileForm] = Form.useForm()
+  const [avatarLoading, setAvatarLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
@@ -37,6 +39,18 @@ const SettingsPage = () => {
       console.error(error)
     } finally {
       setProfileLoading(false)
+    }
+  }
+
+  const onAvatarChange = async (file?: File) => {
+    setAvatarLoading(true)
+    try {
+      if (file) await uploadAvatar(file)
+      else await removeAvatar()
+      await mutate('/users/me')
+      message.success(file ? '头像已更新' : '头像已移除')
+    } finally {
+      setAvatarLoading(false)
     }
   }
 
@@ -124,6 +138,30 @@ const SettingsPage = () => {
         }
         style={cardStyle}
       >
+        <div style={{ marginBottom: 24 }}>
+          <Space size="middle" wrap>
+            <Avatar size={64} src={user?.avatar_url}>{userDisplayName(user).charAt(0).toUpperCase() || 'U'}</Avatar>
+            <Upload
+              accept="image/png,image/jpeg,image/webp"
+              showUploadList={false}
+              disabled={avatarLoading}
+              beforeUpload={(file) => {
+                if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+                  message.error('请选择不超过 2MB 的 PNG、JPEG 或 WebP 图片')
+                  return Upload.LIST_IGNORE
+                }
+                return true
+              }}
+              customRequest={({ file, onSuccess, onError }) => {
+                onAvatarChange(file as File).then(() => onSuccess?.({})).catch((error) => onError?.(error))
+              }}
+            >
+              <Button loading={avatarLoading}>{user?.avatar_url ? '更换头像' : '上传头像'}</Button>
+            </Upload>
+            {user?.avatar_url && <Button disabled={avatarLoading} onClick={() => { void onAvatarChange().catch(() => {}) }}>移除头像</Button>}
+          </Space>
+          <div style={{ color: token.colorTextSecondary, marginTop: 8 }}>支持 PNG、JPEG、WebP，最大 2MB</div>
+        </div>
         <Form form={profileForm} layout="vertical" onFinish={onProfileChange}>
           <Form.Item name="nickname" label={<span style={{ color: token.colorTextSecondary }}>昵称</span>} rules={[{ max: 50, message: '昵称最多50个字符' }]}>
             <Input maxLength={50} placeholder="选填，未填写时显示用户名" />

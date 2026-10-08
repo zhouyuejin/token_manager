@@ -241,3 +241,60 @@ def test_nickname_migration_preserves_existing_accounts():
         assert "nickname" not in {column["name"] for column in inspect(connection).get_columns("users")}
         assert connection.execute(text("SELECT username FROM users")).scalar() == "old-account"
     engine.dispose()
+
+
+def test_avatar_upload_replace_delete_and_validation(ctx):
+    from PIL import Image
+    import base64
+
+    db, client, owner = ctx
+    def upload(content, name="avatar.png", mime="image/png"):
+        return client.put("/users/me/avatar", files={"file": (name, content, mime)})
+
+    assert client.get("/users/me").json().get("avatar_url") is None
+    for color in ("red", "blue"):
+        source = io.BytesIO()
+        Image.new("RGB", (600, 400), color).save(source, format="PNG")
+        response = upload(source.getvalue())
+        assert response.status_code == 200, response.text
+        url = client.get("/users/me").json()["avatar_url"]
+        assert url.startswith("data:image/webp;base64,")
+        normalized = Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1])))
+        assert normalized.size == (256, 256)
+        db.refresh(owner)
+        assert owner.avatar_url == url
+    # Rejected uploads must preserve the saved avatar and other accounts.
+    assert db.query(User).filter(User.user_id == "admin").one().avatar_url is None
+    from app.core.security import create_access_token
+    token = create_access_token({"sub": owner.user_id})
+    assert client.get("/auth/me", headers={"Authorization": "Bearer " + token}).json()["avatar_url"] == url
+    large = io.BytesIO()
+    Image.new("RGB", (4001, 4000)).save(large, format="PNG")
+    assert upload(large.getvalue()).status_code == 400
+    assert upload(b"invalid").status_code == 400
+    assert upload(b"<svg/>", "avatar.svg", "image/svg+xml").status_code == 400
+    assert upload(b"x" * (2 * 1024 * 1024 + 1)).status_code == 400
+    assert client.get("/users/me").json()["avatar_url"] == url
+    assert client.delete("/users/me/avatar").status_code == 200
+    assert client.get("/users/me").json()["avatar_url"] is None
+
+
+def test_avatar_migration_preserves_existing_accounts():
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = Path(__file__).parents[1] / "alembic/versions/20261008_1100_user_avatar.py"
+    spec = importlib.util.spec_from_file_location("avatar_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE users (user_id VARCHAR(32) PRIMARY KEY, username VARCHAR(50))"))
+        connection.execute(text("INSERT INTO users VALUES ('old-user', 'old-account')"))
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        assert connection.execute(text("SELECT username, avatar_url FROM users")).one() == ("old-account", None)
+        migration.downgrade()
+        assert "avatar_url" not in {column["name"] for column in inspect(connection).get_columns("users")}
+        assert connection.execute(text("SELECT username FROM users")).scalar() == "old-account"
+    engine.dispose()

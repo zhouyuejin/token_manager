@@ -59,6 +59,7 @@ export interface UserInfo {
   user_id: string
   username: string
   nickname?: string | null
+  avatar_url?: string | null
   email: string
   role: string
   status: string

@@ -56,6 +56,7 @@ const Approvals = () => {
   const user = useAuthStore(state => state.user)
   const message = useMessage()
   const type = Form.useWatch('request_type', form) || 'api_key'
+  const quotaApplicationBlocked = type === 'quota' && user?.quota < 0
   const { data: mine, error: mineError, isLoading: mineLoading, mutate: mutateMine } = useSwrData<ApprovalRequest[]>('/approvals/mine', { revalidateOnFocus: true })
   const { data: assigned, error: assignedError, isLoading: assignedLoading, mutate: mutateAssigned } = useSwrData<ApprovalRequest[]>('/approvals/review?status=pending')
   const { data: projects } = useSwrData<{ items: Project[] }>('/projects')
@@ -78,6 +79,10 @@ const Approvals = () => {
   }, [mine])
 
   const submitApplication = async (values: ApplicationValues) => {
+    if (values.request_type === 'quota' && user?.quota < 0) {
+      message.info('当前账号为无限额度，无需提交额度申请。')
+      return
+    }
     setSubmitting(true)
     try {
       if (values.request_type === 'api_key') {
@@ -170,12 +175,12 @@ const Approvals = () => {
       <Typography.Title level={3} style={{ margin: 0 }}>自助申请与审批</Typography.Title>
       <Alert type="info" showIcon message="申请在审批通过前不会生效；API Key 明文仅在首次查看时展示，请及时复制保存。" />
       <Card title="提交申请">
-        {user?.quota < 0 && <Alert type="info" showIcon style={{ marginBottom: 16 }} message="当前账号为无限额度，无需提交额度申请。" />}
+        {quotaApplicationBlocked && <Alert type="info" showIcon style={{ marginBottom: 16 }} message="当前账号为无限额度，无需提交额度申请。" />}
         <Form form={form} layout="vertical" initialValues={{ request_type: 'api_key' }} onFinish={submitApplication}>
           <Form.Item name="request_type" label="申请类型" rules={[{ required: true }]}>
             <Select options={[
               { value: 'api_key', label: 'API Key' },
-              ...(user?.quota >= 0 ? [{ value: 'quota', label: '额度' }] : []),
+              { value: 'quota', label: user?.quota < 0 ? '额度（当前账号为无限额度，无需申请）' : '额度', disabled: !user || user.quota < 0 },
               { value: 'model_group', label: '模型分组权限' },
               { value: 'project_access', label: '加入项目' },
             ]} />
@@ -208,7 +213,7 @@ const Approvals = () => {
           <Form.Item name="reason" label="申请理由" rules={[{ required: true, whitespace: true, message: '请填写申请理由' }]}>
             <Input.TextArea rows={3} maxLength={1000} showCount />
           </Form.Item>
-          <Button type="primary" htmlType="submit" loading={submitting}>提交申请</Button>
+          <Button type="primary" htmlType="submit" loading={submitting} disabled={quotaApplicationBlocked}>提交申请</Button>
         </Form>
       </Card>
 

@@ -67,6 +67,7 @@ class UserInfo(BaseModel):
     user_id: str
     username: str
     nickname: Nickname = None
+    avatar_url: Optional[str] = None
     email: str
     role: str
 
@@ -120,6 +121,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         user_id=user.user_id,
         username=user.username,
         nickname=user.nickname,
+        avatar_url=user.avatar_url,
         email=user.email,
         role=user.role.value
     )
@@ -424,6 +426,7 @@ async def get_current_user_info(db: Session = Depends(get_db), token: str = Depe
         user_id=user.user_id,
         username=user.username,
         nickname=user.nickname,
+        avatar_url=user.avatar_url,
         email=user.email,
         role=user.role.value
     )
