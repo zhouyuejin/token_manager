@@ -39,15 +39,18 @@ class ProxyAuthMiddleware(BaseHTTPMiddleware):
         
         # 获取API Key
         auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
+        api_key = (
+            auth_header[7:]
+            if auth_header and auth_header.startswith("Bearer ")
+            else request.headers.get("x-api-key")
+        )
+        if not api_key:
             response = JSONResponse(
                 status_code=401,
                 content={"detail": "缺少Authorization请求头"}
             )
             response.headers["X-Request-ID"] = request.state.request_id
             return response
-        
-        api_key = auth_header.replace("Bearer ", "")
         
         # 验证API Key
         db = SessionLocal()

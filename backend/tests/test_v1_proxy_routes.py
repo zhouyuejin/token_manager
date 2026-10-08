@@ -69,3 +69,33 @@ def test_responses_uses_same_auth_and_validation(proxy_client, prefix):
     })
     assert response.status_code == 422, response.text
     assert response.json()['detail'] == '缺少 model'
+
+
+@pytest.mark.parametrize('prefix', ['/v1', '/api/v1/proxy'])
+def test_responses_success_settles_with_separate_auth_session(proxy_client, db, monkeypatch, prefix):
+    import httpx
+    from app.models.quota_reservation import QuotaReservation
+
+    db.query(User).filter_by(user_id='v1_user').update({
+        'quota': 5000, 'quota_low_alert': 0, 'quota_change_alert': 0,
+    })
+    db.commit()
+    upstream_body = {
+        'id': 'resp_test', 'object': 'response', 'status': 'completed', 'output': [],
+        'usage': {'input_tokens': 2, 'output_tokens': 3, 'total_tokens': 5},
+    }
+    real_client = httpx.Client
+    monkeypatch.setattr('app.services.proxy_service.httpx.Client', lambda **kw: real_client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=upstream_body)), **kw,
+    ))
+    response = proxy_client.post(prefix + '/responses', json={
+        'model': 'visible-model', 'input': 'hello',
+    }, headers={'Authorization': 'Bearer tmk_v1_test'})
+
+    assert response.status_code == 200, response.text
+    assert response.json() == upstream_body
+    db.expire_all()
+    assert db.query(User).filter_by(user_id='v1_user').one().quota_used == 5
+    assert db.query(ApiKey).filter_by(key_id='v1_key').one().last_used_at is not None
+    row = db.query(QuotaReservation).one()
+    assert row.status == 'committed' and row.actual_tokens == 5

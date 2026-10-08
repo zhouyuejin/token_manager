@@ -521,3 +521,36 @@ def test_proxy_stream_allows_renewal_with_single_connection_pool(db, account, mo
         assert check.query(QuotaReservation).filter_by(user_id=account).one().status == 'committed'
     assert renewed == [True]
     engine.dispose()
+
+
+@pytest.mark.parametrize('reserved', [False, True])
+def test_deduct_quota_accepts_detached_auth_objects(db, account, SessionLocal, reserved):
+    """鉴权 Session 已关闭时，成功结算仍应返回并更新用户额度和 Key 使用时间。"""
+    import asyncio
+    from sqlalchemy import inspect
+    from app.models.quota_reservation import QuotaReservation
+
+    db.query(User).filter_by(user_id=account).update({
+        'quota_low_alert': 0, 'quota_change_alert': 0,
+    })
+    db.commit()
+    with SessionLocal() as auth_db:
+        user = auth_db.query(User).filter_by(user_id=account).one()
+        key = auth_db.query(ApiKey).filter_by(key_id=account).one()
+    assert inspect(user).detached and inspect(key).detached
+
+    service = ProxyService(db)
+    if reserved:
+        service.reserve_quota(user, key, 'priced', {
+            'messages': [{'role': 'user', 'content': 'hi'}], 'max_tokens': 100,
+        })
+    asyncio.run(service.deduct_quota(user, key, {
+        'prompt_tokens': 2, 'completion_tokens': 40, 'total_tokens': 42,
+    }))
+
+    db.expire_all()
+    assert db.query(User).filter_by(user_id=account).one().quota_used == 42
+    assert db.query(ApiKey).filter_by(key_id=account).one().last_used_at is not None
+    if reserved:
+        row = db.get(QuotaReservation, service.reservation_id)
+        assert row.status == 'committed' and row.actual_tokens == 42

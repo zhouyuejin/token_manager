@@ -990,9 +990,9 @@ class ProxyService:
         else:
             from sqlalchemy import update
             self.db.execute(update(User).where(User.user_id == user.user_id).values(quota_used=User.quota_used + total_tokens))
-            api_key.last_used_at = datetime.now()
+            self.db.execute(update(ApiKey).where(ApiKey.key_id == api_key.key_id).values(last_used_at=datetime.now()))
             self.db.commit()
-        self.db.refresh(user)
+        user = self.db.query(User).filter(User.user_id == user.user_id).populate_existing().one()
         
         unlimited = user.role == UserRole.admin or user.quota < 0
         quota_remain = None if unlimited else user.quota - user.quota_used

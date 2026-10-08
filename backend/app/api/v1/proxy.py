@@ -23,6 +23,7 @@ from app.models.channel import Channel, ChannelStatus
 from app.models.model_channel import ModelChannel
 from app.models.model_group import ModelGroup, ModelGroupStatus
 from app.services.proxy_service import ProxyService, create_proxy_service
+from app.services.conversation_gateway import proxy_conversation
 from app.services.api_key_freeze_service import record_api_key_error
 from app.services.rate_limit_service import (
     check_proxy_rate_limit,
@@ -401,7 +402,7 @@ async def _proxy_protocol(request: Request, db: Session, path: str, api_type: st
 
 
 async def responses(request: Request, db: Session = Depends(get_db)):
-    return await _proxy_protocol(request, db, "responses", "responses")
+    return await proxy_conversation(request, db, "responses")
 
 
 async def embeddings(request: Request, db: Session = Depends(get_db)):
@@ -444,7 +445,14 @@ async def v1_get_balance(request: Request, db: Session = Depends(get_db)):
 @v1_router.post("/chat/completions")
 async def v1_chat_completions(
     request: Request,
-    chat_request: ChatCompletionRequest,
     db: Session = Depends(get_db)
 ):
-    return await chat_completions(request, chat_request, db)
+    return await proxy_conversation(request, db, "chat")
+
+
+@v1_router.post("/messages")
+async def v1_messages(request: Request, db: Session = Depends(get_db)):
+    return await proxy_conversation(request, db, "anthropic")
+
+
+router.add_api_route("/messages", v1_messages, methods=["POST"])
