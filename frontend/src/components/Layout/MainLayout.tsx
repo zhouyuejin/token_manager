@@ -10,6 +10,10 @@ import { Tour,
   MenuProps,
   Badge,
   Tooltip,
+  Modal,
+  ColorPicker,
+  Radio,
+  Space,
 } from "antd";
 import {
   DashboardOutlined,
@@ -83,13 +87,14 @@ const roleLabel = (role?: string) => {
 
 const MainLayout = () => {
   const { token: themeToken, isDark } = useThemeToken();
-  const { theme, setTheme, themeOptions } = useTheme();
+  const { theme, setTheme, themeOptions, customColor, customMode, setCustomTheme } = useTheme();
+  const [customThemeOpen, setCustomThemeOpen] = useState(false);
   const navigate = useNavigate();
 
   // 主题菜单项 - 使用 CSS 变量
   const themeMenuItems = useMemo(
     () =>
-      themeOptions.map((option) => ({
+      [...themeOptions.map((option) => ({
         key: option.name,
         label: (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -105,7 +110,11 @@ const MainLayout = () => {
           </div>
         ),
         onClick: () => setTheme(option.name),
-      })),
+      })), {
+        key: "custom",
+        label: theme === "custom" ? "🎨 自定义主题 ✓" : "🎨 自定义主题",
+        onClick: () => { setTheme("custom"); setCustomThemeOpen(true); },
+      }],
     [theme, setTheme, themeOptions],
   );
   const location = useLocation();
@@ -118,7 +127,7 @@ const MainLayout = () => {
     useDefaultModelGroupWarning(isAdmin);
 
   // 判断是否为亮色主题
-  const isLightTheme = theme === "light";
+  const isLightTheme = !isDark;
 
   // 初始化折叠状态,优先从 localStorage 读取
   const [tourOpen, setTourOpen] = useState(false);
@@ -374,6 +383,37 @@ const MainLayout = () => {
         background: "var(--color-background)",
       }}
     >
+      <Modal
+        title="自定义主题"
+        open={customThemeOpen}
+        onCancel={() => setCustomThemeOpen(false)}
+        onOk={() => setCustomThemeOpen(false)}
+        okText="完成"
+        cancelButtonProps={{ style: { display: "none" } }}
+      >
+        <Space direction="vertical" size={20} style={{ width: "100%", padding: "16px 0" }}>
+          <Space>
+            <span>主题主色</span>
+            <ColorPicker
+              value={customColor}
+              showText
+              format="hex"
+              disabledAlpha
+              onChange={color => setCustomTheme(color.toHexString(), customMode)}
+            />
+          </Space>
+          <Space>
+            <span>背景模式</span>
+            <Radio.Group
+              value={customMode}
+              optionType="button"
+              options={[{ label: "浅色", value: "light" }, { label: "深色", value: "dark" }]}
+              onChange={event => setCustomTheme(customColor, event.target.value)}
+            />
+          </Space>
+          <span style={{ color: themeToken.colorTextSecondary }}>调整后实时生效，并自动保存到当前浏览器。</span>
+        </Space>
+      </Modal>
       <Layout style={{ minHeight: "100vh" }}>
         <Sider
           collapsible

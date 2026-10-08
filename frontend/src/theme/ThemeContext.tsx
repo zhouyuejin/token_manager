@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react'
 import { ConfigProvider, theme as antTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { ThemeName, themeMap, themeOptions, ThemeConfig } from './themes'
+import { ThemeName, themeMap, themeOptions, ThemeConfig, createCustomTheme, ThemeMode } from './themes'
 
 const THEME_STORAGE_KEY = 'token-manager-theme'
+const CUSTOM_THEME_STORAGE_KEY = 'token-manager-custom-theme'
+type SelectedTheme = ThemeName | 'custom'
 
 // CSS 变量配置 - 用于自定义组件
 const themeCSSVars: Record<ThemeName, Record<string, string>> = {
@@ -180,8 +182,11 @@ const themeCSSVars: Record<ThemeName, Record<string, string>> = {
 }
 
 interface ThemeContextValue {
-  theme: ThemeName
-  setTheme: (theme: ThemeName) => void
+  theme: SelectedTheme
+  setTheme: (theme: SelectedTheme) => void
+  customColor: string
+  customMode: ThemeMode
+  setCustomTheme: (color: string, mode: ThemeMode) => void
   themeOptions: typeof themeOptions
 }
 
@@ -206,20 +211,26 @@ interface ThemeProviderProps {
 }
 
 // 应用 CSS 变量到 document
-const applyCSSVars = (themeName: ThemeName) => {
+const applyCSSVars = (vars: Record<string, string>) => {
   const root = document.documentElement
-  const vars = themeCSSVars[themeName]
   Object.entries(vars).forEach(([key, value]) => {
     root.style.setProperty(key, value)
   })
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const [theme, setThemeState] = useState<ThemeName>(() => {
+  const [custom, setCustom] = useState<{ color: string; mode: ThemeMode }>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(CUSTOM_THEME_STORAGE_KEY) || 'null')
+      if (/^#[0-9a-f]{6}$/i.test(stored?.color) && ['light', 'dark'].includes(stored?.mode)) return stored
+    } catch { /* 使用默认自定义配色 */ }
+    return { color: '#2563EB', mode: 'dark' }
+  })
+  const [theme, setThemeState] = useState<SelectedTheme>(() => {
     try {
       const stored = localStorage.getItem(THEME_STORAGE_KEY)
-      if (stored && themeOptions.some(opt => opt.name === stored)) {
-        return stored as ThemeName
+      if (stored === 'custom' || themeOptions.some(opt => opt.name === stored)) {
+        return stored as SelectedTheme
       }
     } catch {
       // 忽略存储异常
@@ -227,10 +238,51 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     return 'dark'
   })
 
-  // 初始化时应用 CSS 变量
+  const themeConfig = useMemo(() => theme === 'custom'
+    ? createCustomTheme(custom.color, custom.mode)
+    : themeMap[theme], [theme, custom])
+
+  // 同步 Ant Design 配色与自定义组件的 CSS 变量。
   useEffect(() => {
-    applyCSSVars(theme)
-  }, [theme])
+    if (theme !== 'custom') {
+      applyCSSVars(themeCSSVars[theme])
+      return
+    }
+    const token = antTheme.getDesignToken(themeConfig)
+    applyCSSVars({
+      ...themeCSSVars[custom.mode],
+      '--color-primary': token.colorPrimary,
+      '--color-primary-hover': token.colorPrimaryHover,
+      '--color-primary-active': token.colorPrimaryActive,
+      '--color-secondary': token.colorPrimaryHover,
+      '--color-ring': token.colorPrimary,
+      '--color-info': token.colorInfo,
+      '--color-background': token.colorBgLayout,
+      '--color-foreground': token.colorText,
+      '--color-card': token.colorBgContainer,
+      '--color-card-foreground': token.colorText,
+      '--color-muted': token.colorBgElevated,
+      '--color-muted-foreground': token.colorTextSecondary,
+      '--color-border': token.colorBorder,
+      '--color-border-secondary': token.colorBorderSecondary,
+      '--color-text': token.colorText,
+      '--color-text-secondary': token.colorTextSecondary,
+      '--color-text-tertiary': token.colorTextTertiary,
+      '--color-text-quaternary': token.colorTextQuaternary,
+      '--menu-hover-bg': token.colorPrimaryBgHover,
+      '--menu-selected-bg': token.colorPrimaryBg,
+      '--header-bg': token.colorBgContainer,
+      '--sider-bg': token.colorBgContainer,
+      '--glass-bg': token.colorBgContainer,
+      '--glass-border': token.colorBorderSecondary,
+      '--shadow-glow': `0 0 20px ${token.colorPrimaryBorder}`,
+    })
+  }, [theme, custom, themeConfig])
+
+  useEffect(() => {
+    try { localStorage.setItem(CUSTOM_THEME_STORAGE_KEY, JSON.stringify(custom)) }
+    catch { /* 忽略存储异常 */ }
+  }, [custom])
 
   // 持久化主题设置
   useEffect(() => {
@@ -241,18 +293,23 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [theme])
 
-  const setTheme = useCallback((newTheme: ThemeName) => {
+  const setTheme = useCallback((newTheme: SelectedTheme) => {
     setThemeState(newTheme)
   }, [])
 
-  // 使用 useMemo 缓存主题配置
-  const themeConfig = useMemo(() => themeMap[theme], [theme])
+  const setCustomTheme = useCallback((color: string, mode: ThemeMode) => {
+    setCustom({ color, mode })
+    setThemeState('custom')
+  }, [])
 
   const contextValue = useMemo(() => ({
     theme,
     setTheme,
     themeOptions,
-  }), [theme, setTheme])
+    customColor: custom.color,
+    customMode: custom.mode,
+    setCustomTheme,
+  }), [theme, setTheme, custom, setCustomTheme])
 
   return (
     <ThemeContext.Provider value={contextValue}>

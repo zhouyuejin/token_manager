@@ -746,3 +746,34 @@ export const themeMap: Record<ThemeName, ThemeConfig> = {
 }
 
 export type { ThemeConfig }
+
+export type ThemeMode = 'light' | 'dark'
+
+export const createCustomTheme = (primaryColor: string, mode: ThemeMode): ThemeConfig => {
+  const config: ThemeConfig = {
+    algorithm: mode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    token: {
+      ...getBaseToken(primaryColor),
+      colorBgBase: mode === 'dark' ? '#0F172A' : '#F8FAFC',
+      colorTextBase: mode === 'dark' ? '#F8FAFC' : '#1E293B',
+    },
+  }
+  const token = theme.getDesignToken(config)
+  config.components = {
+    Button: buttonSizeToken,
+    Layout: { headerPadding: '0 24px', headerBg: token.colorBgContainer, siderBg: token.colorBgContainer },
+    Menu: {
+      itemMarginInline: 8,
+      itemPaddingInline: 12,
+      darkItemBg: 'transparent',
+      darkSubMenuItemBg: token.colorBgContainer,
+      darkItemSelectedBg: token.colorPrimaryBg,
+      darkItemSelectedColor: token.colorPrimaryText,
+      darkItemHoverBg: token.colorPrimaryBgHover,
+      darkItemColor: token.colorTextSecondary,
+    },
+    Card: { paddingLG: 24, borderRadiusLG: 12 },
+    Modal: { titleFontSize: 16, borderRadiusLG: 12 },
+  }
+  return config
+}
