@@ -29,7 +29,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const [membersProject, setMembersProject] = useState<Project | null>(null)
   const [members, setMembers] = useState<string[]>([])
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
-  const [projectUsers, setProjectUsersData] = useState<User[]>([])
+  const [projectUsers, setProjectUsersData] = useState<Pick<User, 'user_id' | 'username' | 'nickname'>[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [membersError, setMembersError] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
