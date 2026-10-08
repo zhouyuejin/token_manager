@@ -396,13 +396,13 @@ const NotificationsPage = () => {
             <Button
               icon={<ReloadOutlined />}
               onClick={() => refreshNow()}
-              style={{ borderRadius: 8 }}
+              style={{ borderRadius: 10 }}
             >
               刷新
             </Button>
           </Space>
           <Space wrap size={8}>
-            <Button onClick={handleMarkAllAsRead} style={{ borderRadius: 8 }}>
+            <Button onClick={handleMarkAllAsRead} style={{ borderRadius: 10 }}>
               全部已读
             </Button>
             <Popconfirm
@@ -415,7 +415,7 @@ const NotificationsPage = () => {
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
-              <Button danger style={{ borderRadius: 8 }}>
+              <Button danger style={{ borderRadius: 10 }}>
                 清空已读
               </Button>
             </Popconfirm>

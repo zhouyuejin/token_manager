@@ -299,7 +299,6 @@ const SettingsPage = () => {
               htmlType="submit" 
               loading={loading}
               style={{
-                height: 44,
                 borderRadius: 10,
                 background: token.colorPrimary,
                 border: 'none',

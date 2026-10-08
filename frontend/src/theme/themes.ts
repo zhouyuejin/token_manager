@@ -28,6 +28,18 @@ const getBaseToken = (primaryColor: string) => ({
   colorInfo: primaryColor,
 })
 
+// 常规按钮与表格小按钮使用相同尺寸，登录/注册的大按钮保留独立尺寸。
+const buttonSizeToken = {
+  controlHeight: 32,
+  controlHeightSM: 32,
+  contentFontSize: 14,
+  contentFontSizeSM: 14,
+  borderRadius: 10,
+  borderRadiusSM: 10,
+  paddingInline: 15,
+  paddingInlineSM: 15,
+}
+
 // ============================================================
 // 深色主题
 // ============================================================
@@ -94,6 +106,7 @@ export const darkTheme: ThemeConfig = {
       activeShadow: '0 0 0 2px rgba(37, 99, 235, 0.2)',
     },
     Button: {
+      ...buttonSizeToken,
       primaryShadow: '0 4px 14px 0 rgba(37, 99, 235, 0.4)',
       defaultShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
     },
@@ -258,6 +271,7 @@ export const lightTheme: ThemeConfig = {
       activeShadow: '0 0 0 2px rgba(37, 99, 235, 0.1)',
     },
     Button: {
+      ...buttonSizeToken,
       primaryShadow: '0 4px 14px 0 rgba(37, 99, 235, 0.3)',
       defaultShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
     },
@@ -402,6 +416,7 @@ export const purpleTheme: ThemeConfig = {
       activeShadow: '0 0 0 2px rgba(139, 92, 246, 0.2)',
     },
     Button: {
+      ...buttonSizeToken,
       primaryShadow: '0 4px 14px 0 rgba(139, 92, 246, 0.4)',
       defaultShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
     },
@@ -529,6 +544,7 @@ export const greenTheme: ThemeConfig = {
       activeShadow: '0 0 0 2px rgba(16, 185, 129, 0.2)',
     },
     Button: {
+      ...buttonSizeToken,
       primaryShadow: '0 4px 14px 0 rgba(16, 185, 129, 0.4)',
       defaultShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
     },
@@ -656,6 +672,7 @@ export const oceanTheme: ThemeConfig = {
       activeShadow: '0 0 0 2px rgba(14, 165, 233, 0.2)',
     },
     Button: {
+      ...buttonSizeToken,
       primaryShadow: '0 4px 14px 0 rgba(14, 165, 233, 0.4)',
       defaultShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
     },

@@ -246,10 +246,10 @@ const [loading, setLoading] = useState(false)
             onChange={(vals) => setDateRange(vals as [dayjs.Dayjs, dayjs.Dayjs] | null)}
             style={{ borderRadius: 8 }}
           />
-          <Button icon={<SearchOutlined />} onClick={handleSearch} style={{ borderRadius: 8 }}>
+          <Button icon={<SearchOutlined />} onClick={handleSearch} style={{ borderRadius: 10 }}>
             查询
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={handleReset} style={{ borderRadius: 8 }}>
+          <Button icon={<ReloadOutlined />} onClick={handleReset} style={{ borderRadius: 10 }}>
             重置
           </Button>
         </Space>

@@ -205,14 +205,14 @@ const [loading, setLoading] = useState(false)
           <Button 
             icon={<SearchOutlined />} 
             onClick={handleSearch} 
-            style={{ borderRadius: 10, height: 40 }}
+            style={{ borderRadius: 10 }}
           >
             查询
           </Button>
           <Button 
             icon={<ReloadOutlined />} 
             onClick={handleReset} 
-            style={{ borderRadius: 10, height: 40 }}
+            style={{ borderRadius: 10 }}
           >
             重置
           </Button>

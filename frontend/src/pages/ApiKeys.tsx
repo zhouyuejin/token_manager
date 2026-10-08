@@ -531,7 +531,6 @@ const ApiKeysPage = () => {
               block 
               style={{ 
                 marginTop: 20,
-                height: 40,
                 borderRadius: 10,
                 background: token.colorPrimary,
                 border: 'none',

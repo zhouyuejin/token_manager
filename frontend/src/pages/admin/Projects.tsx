@@ -29,6 +29,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
   const [membersProject, setMembersProject] = useState<Project | null>(null)
   const [members, setMembers] = useState<string[]>([])
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
+  const [projectUsers, setProjectUsersData] = useState<User[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [membersError, setMembersError] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
@@ -75,12 +76,14 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
     setMembersProject(project)
     setMembers([])
     setMemberOptions([])
+    setProjectUsersData([])
     setMemberSearch('')
     setMembersError(false)
     setMembersLoading(true)
     try {
       const response = await getProjectUsers(project.project_id)
       setMembers(response.user_ids)
+      setProjectUsersData(response.items)
       setMemberOptions(response.items.map(user => ({ value: user.user_id, label: `${userDisplayName(user)} (${user.user_id})` })))
     } catch { setMembersError(true) }
     finally { setMembersLoading(false) }
@@ -171,7 +174,7 @@ const ProjectsPage = ({ departmentsOnly = false }: { departmentsOnly?: boolean }
         pagination={false}
         columns={[
           { title: 'Key 名称', dataIndex: 'name' },
-          { title: '所属用户', dataIndex: 'user_id' },
+          { title: '所属用户', dataIndex: 'user_id', render: (value: string) => userDisplayName(projectUsers.find(user => user.user_id === value) || memberUsers?.items.find(user => user.user_id === value)) || value },
           { title: '状态', dataIndex: 'status', render: value => <Tag>{value}</Tag> },
         ]}
       />

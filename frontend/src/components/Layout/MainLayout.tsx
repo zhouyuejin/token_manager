@@ -482,7 +482,7 @@ const MainLayout = () => {
               onClick={() => setCollapsed(!collapsed)}
               style={{
                 width: "100%",
-                height: 36,
+                height: 32,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -572,8 +572,8 @@ const MainLayout = () => {
                     type="button"
                     aria-label="切换主题"
                     style={{
-                      width: 36,
-                      height: 36,
+                      width: 32,
+                      height: 32,
                       borderRadius: 8,
                       display: "flex",
                       alignItems: "center",
@@ -605,8 +605,8 @@ const MainLayout = () => {
                       type="button"
                       aria-label="通知"
                       style={{
-                        width: 36,
-                        height: 36,
+                        width: 32,
+                        height: 32,
                         borderRadius: 8,
                         display: "flex",
                         alignItems: "center",
