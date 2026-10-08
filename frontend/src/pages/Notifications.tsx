@@ -64,17 +64,11 @@ const NotificationsPage = () => {
       title: '状态',
       dataIndex: 'is_read',
       key: 'is_read',
-      width: 60,
+      width: 80,
       render: (isRead: boolean) => (
-        <div
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: isRead ? 'transparent' : token.colorPrimary,
-            boxShadow: isRead ? 'none' : '0 0 6px rgba(59, 130, 246, 0.6)',
-          }}
-        />
+        <Tag color={isRead ? 'default' : 'blue'}>
+          {isRead ? '已读' : '未读'}
+        </Tag>
       ),
     },
     {
