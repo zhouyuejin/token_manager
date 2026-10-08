@@ -88,7 +88,6 @@ const ModelsPage = () => {
   const modelsList = modelsData?.items || []
   const channelsList = channelsData?.items || []
 
-  // 平台模型 ID 规则：${channel.type}-${upstream.model_id}（与 handleBatchCreate 中生成方式一致）
   // Set 用于「存在性」快查；Map 用于在 Drawer 行内拿到完整 Model 记录（bound_channel_ids）
   const existingModelIds = useMemo(
     () => new Set(modelsList.map(m => m.model_id)),
@@ -97,10 +96,6 @@ const ModelsPage = () => {
   const existingModelsById = useMemo(
     () => new Map(modelsList.map(m => [m.model_id, m] as const)),
     [modelsList],
-  )
-  const selectedChannelType = useMemo(
-    () => channelsList.find(c => c.channel_id === selectedChannelId)?.type,
-    [channelsList, selectedChannelId],
   )
   // 当前渠道已绑定的 platformModelId 集合（驱动"已绑此渠道" 的不可勾状态）
   const alreadyBoundToCurrent = useMemo(() => {
@@ -116,13 +111,13 @@ const ModelsPage = () => {
     const q = searchText.trim().toLowerCase()
     return upstreamModels.filter(m => {
       // 「仅看可操作」: 排除已存在且已绑当前渠道的行（不可操作）
-      if (onlyNew && existingModelIds.has(`${selectedChannelType}-${m.model_id}`) && alreadyBoundToCurrent.has(`${selectedChannelType}-${m.model_id}`)) return false
+      if (onlyNew && existingModelIds.has(m.model_id) && alreadyBoundToCurrent.has(m.model_id)) return false
       if (!q) return true
       return [m.model_id, m.name, m.model_name, m.display_name, m.owned_by]
         .filter(Boolean)
         .some((s: any) => String(s).toLowerCase().includes(q))
     })
-  }, [upstreamModels, searchText, onlyNew, existingModelIds, selectedChannelType])
+  }, [upstreamModels, searchText, onlyNew, existingModelIds, alreadyBoundToCurrent])
 
   const fetchData = async () => {
     mutateModels()
@@ -385,7 +380,7 @@ const ModelsPage = () => {
     if (checked) {
       const eligible = currentPageModels
         .filter(m => {
-          const pid = `${selectedChannelType}-${m.model_id}`
+          const pid = m.model_id
           if (!existingModelIds.has(pid)) return true             // 全新
           return !alreadyBoundToCurrent.has(pid)                  // 存在但未绑当前渠道
         })
@@ -418,8 +413,7 @@ const ModelsPage = () => {
       const upstreamModel = upstreamModels.find(m => m.model_id === upstreamModelId)
       if (!upstreamModel) continue
 
-      // 平台模型 ID：以渠道类型为前缀，避免不同渠道上游模型名撞车
-      const platformModelId = `${channel.type}-${upstreamModelId}`
+      const platformModelId = upstreamModelId
 
       // 1) 确保 Model 记录存在
       let modelExists = modelsList.find(m => m.model_id === platformModelId)
@@ -472,7 +466,7 @@ const ModelsPage = () => {
     const preExisted = selectedModels.filter(id => {
       const upstreamModel = upstreamModels.find(m => m.model_id === id)
       if (!upstreamModel) return false
-      return existingModelIds.has(`${channel.type}-${id}`)
+      return existingModelIds.has(id)
     }).length
 
     setImportResult({
@@ -845,7 +839,7 @@ const ModelsPage = () => {
             </Select>
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: token.colorTextSecondary, lineHeight: 1.6 }}>
-            平台 ID 规则：<code>{'{channel.type}'}-{'{model_id}'}</code>；已存在的模型会自动标灰、不可勾选。
+            平台 ID 与上游模型 ID 相同；已存在且已绑定此渠道的模型不可勾选。
           </div>
         </div>
 
@@ -891,7 +885,7 @@ const ModelsPage = () => {
                   key: 'checkbox',
                   width: 44,
                   render: (_: any, record: UpstreamModel) => {
-                    const platformModelId = `${selectedChannelType}-${record.model_id}`
+                    const platformModelId = record.model_id
                     const existed = existingModelIds.has(platformModelId)
                     const fullySkipped = existed && alreadyBoundToCurrent.has(platformModelId)
                     return (
@@ -931,7 +925,7 @@ const ModelsPage = () => {
                   title: '名称',
                   key: 'name',
                   render: (_: any, record: UpstreamModel) => {
-                    const platformModelId = `${selectedChannelType}-${record.model_id}`
+                    const platformModelId = record.model_id
                     const existed = existingModelIds.has(platformModelId)
                     const boundToCurrent = existed && alreadyBoundToCurrent.has(platformModelId)
                     const existedModel = existed ? existingModelsById.get(platformModelId) : null
