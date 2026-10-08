@@ -73,11 +73,12 @@ class AlertService:
             UsageLog.project_id.isnot(None), UsageLog.status_code == 200, UsageLog.created_at >= baseline_start
         ).group_by(UsageLog.project_id).all()
         for project_id, total in totals:
+            project_name = self.db.query(Project.name).filter(Project.project_id == project_id).scalar() or project_id
             current = self.db.query(func.coalesce(func.sum(UsageLog.cost_usd), 0)).filter(
                 UsageLog.project_id == project_id, UsageLog.status_code == 200, UsageLog.created_at >= current_start).scalar() or 0
             current, baseline = Decimal(current), (Decimal(total or 0) - Decimal(current)) / 24
             active = current >= Decimal(str(cfg["project_growth_min_cost_usd"])) and (baseline == 0 or current >= baseline * Decimal(str(cfg["project_growth_multiplier"])))
             ratio = float(current / baseline) if baseline else (float("inf") if current else 0)
             await self._set(f"project_growth:{project_id}", "project", project_id, active, ratio,
-                "项目用量异常增长", f"项目 {project_id} 最近 1 小时消费 ${current:.8f}，约为历史小时均值的 {ratio:.1f} 倍。",
+                "项目用量异常增长", f"项目 {project_name} 最近 1 小时消费 ${current:.8f}，约为历史小时均值的 {ratio:.1f} 倍。",
                 {"kind": "project_usage_growth", "project_id": project_id, "ratio": ratio})

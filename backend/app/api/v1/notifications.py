@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.user import User
 from app.models.notification import Notification, NotificationType
+from app.models.project import Project
 from app.dependencies import get_current_user
 from app.schemas.notification import (
     NotificationCreate, NotificationResponse,
@@ -25,15 +26,22 @@ def generate_notif_id() -> str:
     return f"notif_{secrets.token_hex(8)}"
 
 
-def notification_to_response(notification: Notification) -> NotificationResponse:
+def notification_to_response(notification: Notification, project_names=None) -> NotificationResponse:
     """将Notification模型转换为响应Schema"""
+    metadata = notification.metadata_dict
+    content = notification.content
+    if metadata and metadata.get("kind") == "project_usage_growth" and project_names:
+        project_id = metadata.get("project_id")
+        name = project_names.get(project_id)
+        if name and content:
+            content = content.replace(f"项目 {project_id} ", f"项目 {name} ", 1)
     return NotificationResponse(
         notif_id=notification.notif_id,
         type=notification.type.value,
         title=notification.title,
-        content=notification.content,
+        content=content,
         is_read=bool(notification.is_read),
-        metadata=notification.metadata_dict,
+        metadata=metadata,
         created_at=notification.created_at,
         read_at=notification.read_at,
     )
@@ -74,7 +82,10 @@ async def list_notifications(
         Notification.created_at.desc()
     ).offset(offset).limit(page_size).all()
     
-    items = [notification_to_response(n) for n in notifications]
+    project_ids = {n.metadata_dict.get("project_id") for n in notifications
+                   if n.metadata_dict and n.metadata_dict.get("kind") == "project_usage_growth"}
+    project_names = dict(db.query(Project.project_id, Project.name).filter(Project.project_id.in_(project_ids)).all()) if project_ids else {}
+    items = [notification_to_response(n, project_names) for n in notifications]
     
     return NotificationListResponse(
         total=total,
@@ -126,7 +137,9 @@ async def mark_notification_read(
         db.commit()
         db.refresh(notification)
     
-    return notification_to_response(notification)
+    metadata = notification.metadata_dict
+    project = db.query(Project).filter_by(project_id=metadata["project_id"]).first() if metadata and metadata.get("kind") == "project_usage_growth" and metadata.get("project_id") else None
+    return notification_to_response(notification, {project.project_id: project.name} if project else {})
 
 
 @router.put("/read-all")

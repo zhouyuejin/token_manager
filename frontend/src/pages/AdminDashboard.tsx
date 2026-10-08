@@ -59,7 +59,7 @@ const AdminDashboard: React.FC = () => {
   const { data: projectsData, error: projectsError, mutate: mutateProjects } = useSwrData<{ items: Project[] }>("/projects/admin")
   const { data: departmentsData } = useSwrData<{ items: Department[] }>("/projects/admin/departments")
   const { data: usersData } = useSwrData<{ items: { user_id: string; username: string; nickname?: string | null }[] }>("/admin/users?page_size=100")
-  const { data: channelsData } = useSwrData<{ items: { channel_id: string; name: string }[] }>("/admin/channels")
+  const { data: channelsData } = useSwrData<{ items: { channel_id: string; name: string; type: string }[] }>("/admin/channels")
   const { data: keysData } = useSwrData<{ items: { key_id: string; name: string; user_id: string; project_id?: string | null }[] }>("/api-keys/admin")
 
   // 使用 SWR 获取统计数据
@@ -129,7 +129,11 @@ const AdminDashboard: React.FC = () => {
 
   // 获取模型显示名称
   const getModelDisplayName = (model: string, displayName?: string) => {
-    return displayName || model
+    const name = displayName || model
+    const channelType = channelsData?.items.find(channel =>
+      model.startsWith(`${channel.type}-`) && name.startsWith(`${channel.type}-`)
+    )?.type
+    return channelType ? name.slice(channelType.length + 1) : name
   }
 
   // ========== 用户分布横向条形图配置（Top N + 其他折叠） ==========
@@ -476,7 +480,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats, isDark, token])
+  }, [stats, isDark, token, channelsData])
 
   // ========== 成本统计配置 ==========
   const maxCost = stats?.by_model?.reduce((max, item) => 
@@ -559,7 +563,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats, isDark, token])
+  }, [stats, isDark, token, channelsData])
 
   return (
     <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100vh' }}>
@@ -579,7 +583,7 @@ const AdminDashboard: React.FC = () => {
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目" value={projectId} onChange={value => { setProjectId(value); setKeyId(undefined) }} style={{ width: 200 }} options={(projectsData?.items || []).filter(project => !departmentId || project.dept_id === departmentId).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部用户" value={userId} onChange={value => { setUserId(value); setKeyId(undefined) }} style={{ width: 140 }} options={(usersData?.items || []).map(row => ({ value: row.user_id, label: userDisplayName(row) }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部 Key" value={keyId} onChange={setKeyId} style={{ width: 160 }} options={(keysData?.items || []).filter(row => (!userId || row.user_id === userId) && (!projectId || row.project_id === projectId)).map(row => ({ value: row.key_id, label: row.name || row.key_id }))} />
-        <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: row.display_name || row.model }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: getModelDisplayName(row.model, row.display_name) }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部渠道" value={channelId} onChange={setChannelId} style={{ width: 140 }} options={(channelsData?.items || []).map(row => ({ value: row.channel_id, label: row.name }))} />
         <RangePicker
           value={dateRange as any}
