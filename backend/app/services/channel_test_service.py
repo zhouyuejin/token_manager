@@ -6,6 +6,7 @@
 import time
 import httpx
 from typing import Dict, Any, List, Optional
+from app.services.upstream_errors import format_upstream_response_error
 
 
 # Anthropic 使用专属 header
@@ -122,7 +123,7 @@ class ChannelTestService:
                         "success": False,
                         "status_code": response.status_code,
                         "latency_ms": int((time.time() - start) * 1000),
-                        "message": f"API 响应错误 (HTTP {response.status_code})",
+                        "message": f"API 响应错误 (HTTP {response.status_code}): {format_upstream_response_error(type_, response)}",
                         "url": url,
                     }
                 return {

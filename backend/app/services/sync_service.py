@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.channel import Channel
 from app.models.channel_quota import ChannelQuota, QuotaType, SyncStatus
 from app.services.secret_crypto import decrypt_secret
+from app.services.upstream_errors import format_upstream_response_error
 
 
 def _parse_reset_at(value: Optional[str]) -> Optional[datetime]:
@@ -220,9 +221,11 @@ class MinimaxAdapter(BaseQuotaSyncAdapter):
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.get(url, headers=headers)
                 if response.status_code != 200:
-                    raise QuotaSyncError(f"MiniMax 返回 HTTP {response.status_code}: {response.text[:200]}")
+                    raise QuotaSyncError(format_upstream_response_error(self.channel.type, response))
 
                 data = response.json()
+                if isinstance(data.get("base_resp"), dict) and data["base_resp"].get("status_code") not in (None, 0):
+                    raise QuotaSyncError(format_upstream_response_error(self.channel.type, response))
                 payload = data.get("data") if isinstance(data.get("data"), dict) else data
                 model_remains = payload.get("model_remains", [])
                 if not model_remains:

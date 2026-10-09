@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 
 from app.models.route_decision_log import RouteDecisionLog
+from app.models.channel import Channel, ChannelStatus
 from app.services.proxy_service import ProxyService
 
 
@@ -87,6 +88,32 @@ def test_route_decision_api_redacts_secrets_and_prompt_from_error(db, monkeypatc
     assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in error
     assert "private user text" not in error
     assert error == "上游错误包含敏感内容，已隐藏"
+
+
+def test_route_decision_api_translates_existing_provider_error(db):
+    from app.core.database import get_db
+    from app.dependencies import require_admin
+    from app.main import app
+
+    db.add(Channel(channel_id="ch_minimax", name="MiniMax", type="minimax", endpoint="https://example.com",
+                   api_key="test-key", status=ChannelStatus.active))
+    db.add(RouteDecisionLog(
+        request_id="req_old_error", user_id="user_1", key_id="key_1", model="m",
+        candidate_channels='["ch_minimax"]', skipped_reasons='{}', selected_channel="ch_minimax",
+        retry_path='[]', status_code=500, success=False,
+        error_message="insufficient balance (1008)",
+    ))
+    db.commit()
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[require_admin] = lambda: object()
+    try:
+        response = TestClient(app).get("/api/v1/admin/logs/routes", params={"request_id": "req_old_error"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(require_admin, None)
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["error_message"] == "MiniMax：账户余额不足，请检查余额（错误码 1008）"
 
 
 def test_route_decision_search_filters_by_request_and_routing_fields(db, monkeypatch):

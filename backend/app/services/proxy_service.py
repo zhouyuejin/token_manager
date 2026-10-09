@@ -591,7 +591,7 @@ class ProxyService:
                 request_id, user.user_id, api_key.key_id, model_id, candidate_ids, self._route_skip_reasons(retry_path),
                 attempted_channels[-1] if attempted_channels else None, retry_path,
                 last_err.get("status_code", 502) if last_err else 502, False,
-                "已尝试多个渠道，全部失败",
+                last_err.get("error") if last_err else "未知错误",
             )
         
         return {
@@ -759,6 +759,19 @@ class ProxyService:
 
                         record_api_key_success(key_snapshot)
                         for upstream_line in response.iter_lines():
+                            if upstream_line.startswith('data:'):
+                                try:
+                                    event_data = json.loads(upstream_line[5:])
+                                except ValueError:
+                                    event_data = None
+                                if isinstance(event_data, dict):
+                                    error_data = event_data.get('response') if isinstance(event_data.get('response'), dict) else event_data
+                                    if error_data.get('error'):
+                                        error_msg = format_upstream_error(ch.type, 502, error_data)
+                                        self.stream_metadata.update(status_code=502, error=error_msg)
+                                        yield 'data: ' + json.dumps({'error': error_msg}, ensure_ascii=False) + '\n\n'
+                                        yield 'data: [DONE]\n\n'
+                                        return
                             for chunk in adapter.transform_stream_line(upstream_line):
                                 if chunk:
                                     if chunk.startswith('data: ') and chunk[6:].strip() == '[DONE]':
@@ -766,8 +779,6 @@ class ProxyService:
                                     if chunk.startswith('data: ') and chunk[6:].strip() != '[DONE]':
                                         try:
                                             data = json.loads(chunk[6:])
-                                            if data.get('error'):
-                                                self.stream_metadata.update(status_code=502, error=str(data['error']))
                                             if data.get('usage'):
                                                 self.stream_metadata['tokens'] = self.calculate_tokens(request_data, data)
                                             for choice in data.get('choices', []):
@@ -915,7 +926,7 @@ class ProxyService:
                     return result
                 try:
                     error_body = response.json()
-                    result["error"] = error_body.get("error", {}).get("message") or error_body.get("message") or f"HTTP {response.status_code}"
+                    result["error"] = format_upstream_error(channel.type, response.status_code, error_body, response.text)
                 except (ValueError, AttributeError):
                     result["error"] = f"HTTP {response.status_code}"
                 last_result = result

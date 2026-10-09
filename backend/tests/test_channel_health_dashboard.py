@@ -64,6 +64,19 @@ def test_recover_channel_clears_channel_and_key_cooldowns(db):
     assert json.loads(channel.key_health)["fingerprint"] == {"failure_count": 0, "cooldown_until": None}
 
 
+def test_health_translates_old_error_without_changing_log(db):
+    channel = _channel(db)
+    channel.type = "minimax"
+    row = UsageLog(log_id="old_error", user_id="u", key_id="k", channel_id=channel.channel_id,
+                   model="m", status_code=500, error_message="insufficient balance (1008)")
+    db.add(row)
+    db.commit()
+    error = RouteHealthService(db).get_channel_health(channel.channel_id)[0]["recent_error"]
+    assert "账户余额不足" in error
+    assert "1008" in error
+    assert row.error_message == "insufficient balance (1008)"
+
+
 def test_recover_endpoint_writes_operation_log(db):
     channel = _channel(db, "ch_logged_recover")
     request = Request({

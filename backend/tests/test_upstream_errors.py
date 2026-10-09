@@ -11,6 +11,8 @@ def test_documented_provider_errors_and_unknown_fallback():
         ("google", 402, {"error": {"status": "RESOURCE_EXHAUSTED", "code": 402}}, "Gemini：预付费余额已用完（错误码 RESOURCE_EXHAUSTED）"),
         ("deepseek", 402, {"error": {"message": "Payment Required"}}, "DeepSeek：账户余额不足，请检查余额（错误码 402）"),
         ("openai", 400, {"error": {"code": "new_error", "message": "Specific cause"}}, "Specific cause（错误码 new_error）"),
+        ("minimax", 500, None, "MiniMax：账户余额不足，请检查余额（错误码 1008）"),
     ]
     for provider, status, payload, expected in cases:
-        assert format_upstream_error(provider, status, payload) == expected
+        raw_text = "insufficient balance (1008)" if payload is None else ""
+        assert format_upstream_error(provider, status, payload, raw_text) == expected

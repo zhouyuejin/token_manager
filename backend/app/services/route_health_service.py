@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from app.models.channel import Channel
 from app.models.usage_log import UsageLog
+from app.services.upstream_errors import format_upstream_error
 
 
 class RouteHealthService:
@@ -60,9 +61,10 @@ class RouteHealthService:
         result = []
         for channel in channels:
             rows = self.db.query(UsageLog).filter(UsageLog.channel_id == channel.channel_id).all()
-            recent_error = next((row.error_message for row in sorted(
+            recent_failure = next((row for row in sorted(
                 rows, key=lambda row: row.created_at or datetime.min, reverse=True
             ) if row.status_code != 200 and row.error_message), None)
+            recent_error = format_upstream_error(channel.type, recent_failure.status_code, raw_text=recent_failure.error_message) if recent_failure else None
             result.append({
                 "channel_id": channel.channel_id,
                 "name": channel.name,

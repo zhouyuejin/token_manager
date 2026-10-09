@@ -39,6 +39,17 @@ async def test_unauthorized_returns_key_error():
 
 
 @pytest.mark.asyncio
+async def test_connection_translates_provider_error():
+    result = await ChannelTestService().test_connection(
+        type_="minimax", endpoint="https://api.example.com", api_key="test",
+        transport=httpx.MockTransport(_handler(500, {"error": "insufficient balance (1008)"})),
+    )
+    assert result["success"] is False
+    assert "账户余额不足" in result["message"]
+    assert "1008" in result["message"]
+
+
+@pytest.mark.asyncio
 async def test_404_falls_back_to_alternate_path():
     """endpoint 带 /v1 时应优先尝试 {base}/models，再回退到 /v1/models。"""
     def handle(request: httpx.Request) -> httpx.Response:

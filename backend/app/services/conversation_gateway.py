@@ -12,6 +12,7 @@ from app.models.user import User
 from app.services.provider_adapters import get_provider_adapter, resolve_upstream_format
 from app.services.protocol_conversion import convert_request, convert_response
 from app.services.content_privacy import redact_sensitive_text
+from app.services.upstream_errors import format_upstream_response_error
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ async def proxy_conversation(request, db, source):
     upstream_response = None
     upstream_client = None
     selected = None
+    last_error = None
     try:
         for channel, model_channel, key in candidates:
             adapter = get_provider_adapter(channel)
@@ -147,6 +149,7 @@ async def proxy_conversation(request, db, source):
             selected = (channel, model_channel, adapter, upstream_format)
             if upstream_response.status_code >= 400:
                 upstream_response.read()
+                last_error = format_upstream_response_error(channel.type, upstream_response)
                 logger.warning("conversation upstream rejected request_id=%s channel=%s status=%s error=%s",
                                request.state.request_id, channel.channel_id, upstream_response.status_code,
                                redact_sensitive_text(upstream_response.text, 500))
@@ -158,7 +161,7 @@ async def proxy_conversation(request, db, source):
                 continue
             break
         if upstream_response is None or selected is None:
-            raise HTTPException(502, "所有上游渠道均请求失败")
+            raise HTTPException(502, f"所有上游渠道均请求失败：{last_error}" if last_error else "所有上游渠道均请求失败")
 
         channel, model_channel, adapter, upstream_format = selected
         if streaming:

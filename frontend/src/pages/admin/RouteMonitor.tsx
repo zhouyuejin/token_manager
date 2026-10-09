@@ -56,7 +56,7 @@ const RouteMonitor = () => {
   const expandedRowRender = (row: RouteDecisionLog) => (
     <Space direction="vertical" style={{ width: '100%' }}>
       <div><b>候选渠道：</b>{row.candidate_channels.join(', ') || '—'}</div>
-      <div><b>跳过原因：</b>{Object.entries(row.skipped_reasons).map(([channel, reason]) => `${channel}: ${reason}`).join('；') || '—'}</div>
+      <div><b>跳过原因：</b>{Object.entries(row.skipped_reasons).map(([channel, reason]) => `${channel}: ${reason.replace(/^upstream_(\d+)$/, '上游返回 HTTP $1')}`).join('；') || '—'}</div>
       <div><b>失败重试路径：</b>{row.retry_path.map(item => `${item.channel_id} (${item.status_code})`).join(' → ') || '—'}</div>
       {row.error_message && <Typography.Text type="danger"><b>错误摘要：</b>{row.error_message}</Typography.Text>}
     </Space>

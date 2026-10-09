@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.operation_log import OperationLog
 from app.models.login_log import LoginLog
 from app.models.route_decision_log import RouteDecisionLog
+from app.models.channel import Channel
 from app.dependencies import get_current_user, require_admin
 from app.schemas.log import (
     OperationLogResponse,
@@ -23,6 +24,7 @@ from app.schemas.log import (
     LoginLogListResponse,
 )
 from app.services.content_privacy import redact_sensitive_text
+from app.services.upstream_errors import format_upstream_error
 
 router = APIRouter()
 
@@ -71,6 +73,17 @@ async def list_route_decision_logs(
     ).order_by(
         RouteDecisionLog.created_at.desc(), RouteDecisionLog.id.desc()
     ).offset((page - 1) * page_size).limit(page_size).all()
+    channel_ids = {row.selected_channel or next((item.get("channel_id") for item in reversed(json.loads(row.retry_path))), None)
+                   for row, _ in rows}
+    channel_types = {channel.channel_id: channel.type for channel in db.query(Channel).filter(Channel.channel_id.in_(channel_ids - {None})).all()}
+
+    def display_error(row):
+        error = row.error_message
+        channel_id = row.selected_channel or next((item.get("channel_id") for item in reversed(json.loads(row.retry_path))), None)
+        if error and channel_id in channel_types:
+            error = format_upstream_error(channel_types[channel_id], row.status_code, raw_text=error)
+        return _safe_route_error(error)
+
     return {
         "total": total,
         "items": [{
@@ -86,7 +99,7 @@ async def list_route_decision_logs(
             "retry_path": json.loads(row.retry_path),
             "status_code": row.status_code,
             "success": row.success,
-            "error_message": _safe_route_error(row.error_message),
+            "error_message": display_error(row),
             "created_at": row.created_at,
         } for row, username in rows],
     }

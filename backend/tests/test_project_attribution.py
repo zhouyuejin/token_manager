@@ -213,6 +213,36 @@ def test_stream_metadata_keeps_channel_result_and_usage(ctx, monkeypatch, status
         assert service.stream_metadata['error'] == 'failed'
 
 
+@pytest.mark.parametrize('provider, upstream_format, error_body, translated', [
+    ('minimax', 'chat', {'error': {'message': 'insufficient balance (1008)'}}, '账户余额不足'),
+    ('anthropic', 'anthropic', {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}}, '服务暂时繁忙'),
+    ('google', 'gemini', {'error': {'status': 'UNAVAILABLE', 'message': 'Unavailable'}}, '服务暂时不可用'),
+])
+def test_stream_error_event_is_translated_and_never_completed(ctx, monkeypatch, provider, upstream_format, error_body, translated):
+    import json
+    import httpx
+    from app.models.channel import Channel, ChannelType
+    from app.models.route_decision_log import RouteDecisionLog
+
+    db, _ = ctx
+    service = ProxyService(db)
+    channel = Channel(channel_id='selected', name='selected', type=ChannelType(provider),
+                      endpoint='https://upstream.test', timeout=10, upstream_format=upstream_format, auth_type='bearer')
+    user = db.query(User).filter_by(user_id='owner').one()
+    key = ApiKey(key_id='key', api_key='test')
+    monkeypatch.setattr(service, 'select_channel', lambda *args: (channel, 'upstream', 'test'))
+    real_client = httpx.Client
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text=
+        'data: ' + json.dumps(error_body) + '\n\ndata: [DONE]\n\n'))
+    monkeypatch.setattr(httpx, 'Client', lambda **kw: real_client(transport=transport, **kw))
+    chunks = list(service.forward_stream('platform', user, key, {'messages': []}, request_id='stream_error'))
+    error = json.loads(chunks[0][6:])['error']
+    assert translated in error and '错误码' in error
+    assert not service.stream_metadata.get('completed')
+    assert service.stream_metadata['status_code'] == 502
+    assert db.query(RouteDecisionLog).filter_by(request_id='stream_error').one().error_message == error
+
+
 @pytest.mark.parametrize("precreated", [False, True])
 def test_migration_backfills_keys_and_preserves_old_logs(monkeypatch, precreated):
     import importlib.util

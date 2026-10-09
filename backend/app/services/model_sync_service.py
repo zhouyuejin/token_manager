@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.channel import Channel, ChannelType
 from app.services.secret_crypto import decrypt_secret
+from app.services.upstream_errors import format_upstream_response_error
 
 
 class ModelInfo:
@@ -59,7 +60,7 @@ class OpenAIModelAdapter(BaseModelSyncAdapter):
                 if response.status_code == 200:
                     data = response.json()
                     return [ModelInfo(model_id=item["id"], name=item.get("id", ""), owned_by="openai") for item in data.get("data", [])]
-                raise RuntimeError(f"HTTP {response.status_code}")
+                raise RuntimeError(format_upstream_response_error(self.channel.type, response))
         except Exception as e:
             raise RuntimeError(f"OpenAI模型同步失败: {e}") from e
 
