@@ -262,7 +262,7 @@ const ChannelsPage = () => {
       )
     },
     {
-      title: '操作', key: 'action', width: 110, fixed: 'right' as const,
+      title: '操作', key: 'action', width: 192, fixed: 'right' as const,
       render: (_: any, record: Channel) => (
         <WriteOnly><Space>
           <Tooltip title="编辑"><Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/channels/${record.channel_id}/edit`)} /></Tooltip>
