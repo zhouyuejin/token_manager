@@ -20,7 +20,7 @@ export interface AdminUserUsage {
 }
 
 export interface AdminProviderUsage {
-  provider: string
+  channel: string
   tokens: number
   requests: number
 }

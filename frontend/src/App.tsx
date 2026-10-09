@@ -27,6 +27,7 @@ const Billing = lazy(() => import('./pages/admin/Billing'))
 const AdminChannels = lazy(() => import('./pages/admin/Channels'))
 const ChannelForm = lazy(() => import('./pages/admin/ChannelForm'))
 const ChannelBindings = lazy(() => import('./pages/admin/ChannelBindings'))
+const ChannelQuota = lazy(() => import('./pages/admin/ChannelQuota'))
 const AdminModels = lazy(() => import('./pages/admin/Models'))
 const AdminModelGroups = lazy(() => import('./pages/admin/ModelGroups'))
 const ModelGroupForm = lazy(() => import('./pages/admin/ModelGroupForm'))
@@ -120,6 +121,7 @@ function App() {
               <Route path="channels/new" element={<ChannelForm />} />
               <Route path="channels/:channelId/edit" element={<ChannelForm />} />
               <Route path="channels/:channelId/bindings" element={<ChannelBindings />} />
+              <Route path="channels/:channelId/quota" element={<ChannelQuota />} />
               <Route path="providers" element={<Navigate to="/admin/channels" replace />} />
               <Route path="models" element={<AdminModels />} />
               <Route path="model-groups" element={<AdminModelGroups />} />

@@ -258,6 +258,47 @@ class MinimaxAdapter(BaseQuotaSyncAdapter):
             raise QuotaSyncError(f"MiniMax 用量同步失败: {e}") from e
 
 
+class DeepSeekAdapter(BaseQuotaSyncAdapter):
+    """DeepSeek 账户余额查询（金额原样保留，不转换为整数配额）。"""
+
+    def get_channel_type(self) -> str:
+        return "deepseek"
+
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        base_url = (self.channel.endpoint or "https://api.deepseek.com").rstrip("/")
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        headers = {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(f"{base_url}/user/balance", headers=headers)
+                if response.status_code != 200:
+                    raise QuotaSyncError(format_upstream_response_error("deepseek", response))
+                data = response.json()
+                balances = data.get("balance_infos")
+                if not isinstance(balances, list) or not balances or any(
+                    not isinstance(balance, dict) or any(balance.get(field) is None for field in (
+                        "currency", "total_balance", "granted_balance", "topped_up_balance"
+                    )) for balance in balances
+                ):
+                    raise QuotaSyncError("DeepSeek 响应缺少有效的 balance_infos")
+                return {
+                    "windows": [{"type": "custom", "label": "账户余额", "raw_data": data}],
+                    "raw_data": data,
+                }
+        except Exception as e:
+            raise QuotaSyncError(f"DeepSeek 余额同步失败: {e}") from e
+
+
+class ScriptQuotaAdapter(BaseQuotaSyncAdapter):
+    def get_channel_type(self) -> str:
+        return "script"
+
+    async def fetch_quota(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        from app.services.quota_script import execute_quota_script
+        return await execute_quota_script((config or {}).get("script"), self.channel.endpoint, self.api_key)
+
+
 class QuotaSyncService:
     """用量同步服务"""
     
@@ -267,12 +308,15 @@ class QuotaSyncService:
         "anthropic": AnthropicAdapter,
         "azure": AzureAdapter,
         "minimax": MinimaxAdapter,
+        "deepseek": DeepSeekAdapter,
     }
     
     def __init__(self, db: Session):
         self.db = db
     
-    def get_adapter(self, channel: Channel) -> Optional[BaseQuotaSyncAdapter]:
+    def get_adapter(self, channel: Channel, config: Optional[Dict[str, Any]] = None) -> Optional[BaseQuotaSyncAdapter]:
+        if config and config.get("query_mode") == "script":
+            return ScriptQuotaAdapter(channel)
         adapter_class = self.ADAPTERS.get(channel.type.value)
         if adapter_class:
             return adapter_class(channel)
@@ -282,7 +326,7 @@ class QuotaSyncService:
         """同步单个渠道的配额"""
         channel_name = channel.name
         config = json.loads(channel.quota_config) if channel.quota_config else None
-        adapter = self.get_adapter(channel)
+        adapter = self.get_adapter(channel, config)
         if not adapter and not (config and config.get("query_mode") == "manual"):
             print(f"不支持的渠道类型: {channel.type.value}")
             return False
@@ -301,6 +345,11 @@ class QuotaSyncService:
                 {"type": "weekly", "label": "本周", **quota_data.get("weekly", {})},
             ])
             raw_data = quota_data.get("raw_data")
+            if quota_data.get("provider") == "script":
+                self.db.query(ChannelQuota).filter(
+                    ChannelQuota.channel_id == channel.channel_id,
+                    ChannelQuota.quota_type.notin_([window["type"] for window in windows]),
+                ).delete(synchronize_session=False)
             
             for window in windows:
                 quota_type = window["type"]
@@ -319,6 +368,7 @@ class QuotaSyncService:
                 quota.quota_percent = window["percent"]
                 quota.sync_at = datetime.now()
                 quota.sync_status = SyncStatus.success
+                quota.sync_error = None
                 quota.raw_data = json.dumps({
                     "window": window,
                     "provider": quota_data.get("provider") or channel.type.value,
@@ -335,7 +385,12 @@ class QuotaSyncService:
             return False
 
     def _mark_sync_failed(self, channel: Channel, error: str) -> None:
-        for quota_type in (QuotaType.hourly, QuotaType.weekly):
+        quota_types = (QuotaType.hourly, QuotaType.weekly)
+        config = json.loads(channel.quota_config) if channel.quota_config else {}
+        if config.get("query_mode") == "script":
+            existing = self.db.query(ChannelQuota).filter(ChannelQuota.channel_id == channel.channel_id).all()
+            quota_types = [quota.quota_type for quota in existing] or [QuotaType.custom]
+        for quota_type in quota_types:
             quota = self.db.query(ChannelQuota).filter(
                 ChannelQuota.channel_id == channel.channel_id,
                 ChannelQuota.quota_type == quota_type

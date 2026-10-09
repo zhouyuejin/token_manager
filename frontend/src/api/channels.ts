@@ -23,6 +23,9 @@ export interface Channel {
   sync_interval: number
   last_sync_at?: string
   quota_config?: {
+    query_mode?: string
+    script?: string
+    windows?: Array<Record<string, unknown>>
     model_name?: string
     custom_api_path?: string
     extra_params?: Record<string, string>
@@ -77,6 +80,9 @@ export const getAllChannelQuotas = () =>
 
 export const syncChannelQuota = (channelId: string) =>
   post(`/admin/channels/${channelId}/quota/sync`)
+
+export const testChannelQuotaScript = (channelId: string, script: string) =>
+  post(`/admin/channels/${channelId}/quota/test`, { query_mode: 'script', script })
 
 export const updateChannelQuota = (channelId: string, data: {
   quota_hourly?: number

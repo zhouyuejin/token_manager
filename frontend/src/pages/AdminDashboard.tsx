@@ -42,8 +42,8 @@ const CHART_COLORS = [
   '#06B6D4', '#84CC16', '#F97316', '#6366F1', '#14B8A6'
 ]
 
-// 用户分布只取前 N 名，剩余折叠为"其他"——避免用户多了之后图例/切片不可读
-const TOP_USERS_DISPLAY = 10
+// 用户分布只展示用量最多的前五名
+const TOP_USERS_DISPLAY = 5
 
 const AdminDashboard: React.FC = () => {
   const { token, isDark } = useThemeToken()
@@ -132,22 +132,16 @@ const AdminDashboard: React.FC = () => {
     }
   }
 
-  // ========== 用户分布横向条形图配置（Top N + 其他折叠） ==========
+  // ========== 用户分布横向条形图配置（Top N） ==========
   const userBarOption = useMemo(() => {
     if (!stats?.by_user?.length) return null
 
     const totalTokens = stats.by_user.reduce((sum, u) => sum + u.tokens, 0)
     const sorted = [...stats.by_user].sort((a, b) => b.tokens - a.tokens)
     const head = sorted.slice(0, TOP_USERS_DISPLAY)
-    const rest = sorted.slice(TOP_USERS_DISPLAY)
-    const restTokens = rest.reduce((sum, u) => sum + u.tokens, 0)
 
     const labels: string[] = head.map(u => userDisplayName(u))
     const tokens: number[] = head.map(u => u.tokens)
-    if (rest.length > 0) {
-      labels.push(`其他（${rest.length} 人）`)
-      tokens.push(restTokens)
-    }
 
     return {
      tooltip: {
@@ -158,16 +152,11 @@ const AdminDashboard: React.FC = () => {
         axisPointer: { type: 'shadow' },
        formatter: (params: any) => {
           const item = params[0]
-          const isOthers = rest.length > 0 && item.dataIndex === labels.length - 1 && item.name.startsWith('其他')
           const percent = totalTokens > 0 ? ((item.value / totalTokens) * 100).toFixed(1) : '0.0'
-          const detail = isOthers
-            ? `<div>聚合用户数: ${rest.length}</div>`
-            : ''
           return `<div style="font-family: 'Space Grotesk', sans-serif;">
             <div style="font-weight: 600; margin-bottom: 4px;">${item.name}</div>
             <div>Token: ${item.value.toLocaleString()}</div>
             <div>占比: ${percent}%</div>
-            ${detail}
           </div>`
         }
       },
@@ -203,15 +192,10 @@ const AdminDashboard: React.FC = () => {
         {
           type: 'bar',
           barWidth: '55%',
-          data: tokens.slice().reverse().map((t, i) => {
-            // 反转后数组里，"其他"会落在索引 0（视觉上在最下方）
-            const originalIndex = tokens.length - 1 - i
-            const isOthers = rest.length > 0 && originalIndex === tokens.length - 1
+          data: tokens.slice().reverse().map(t => {
             return {
               value: t,
-              itemStyle: isOthers
-                ? { color: 'rgba(148, 163, 184, 0.45)', borderRadius: [0, 4, 4, 0] }
-                : {
+              itemStyle: {
                     color: {
                       type: 'linear',
                       x: 0, y: 0, x2: 1, y2: 0,
@@ -235,7 +219,7 @@ const AdminDashboard: React.FC = () => {
     
     const totalTokens = stats.by_provider.reduce((sum, p) => sum + p.tokens, 0)
     const data = stats.by_provider.map((provider, idx) => ({
-      name: provider.provider,
+      name: provider.channel,
       value: provider.tokens,
       percent: totalTokens > 0 ? ((provider.tokens / totalTokens) * 100).toFixed(1) : 0
     }))
@@ -404,8 +388,8 @@ const AdminDashboard: React.FC = () => {
   const modelBarOption = useMemo(() => {
     if (!stats?.by_model?.length) return null
 
-    // 按 token 数降序排列，便于一眼看出主力模型
-    const sortedModels = [...stats.by_model].sort((a, b) => b.tokens - a.tokens)
+    // 按 token 数降序排列，只展示用量最高的五个模型
+    const sortedModels = [...stats.by_model].sort((a, b) => b.tokens - a.tokens).slice(0, 5)
     const names = sortedModels.map(m => modelDisplayName(m.model, m.display_name))
     const tokens = sortedModels.map(m => m.tokens || 0)
 

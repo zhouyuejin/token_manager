@@ -4,9 +4,9 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
   Table, Button, Tag, Space, Modal, Form, Input, InputNumber, 
-  Select, Popconfirm, Radio, Alert 
+  Select, Dropdown, Radio, Alert
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined, KeyOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined, KeyOutlined, MoreOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, resetPassword, User } from '../../api/users'
 import { getModelGroups, ModelGroup } from '../../api/modelGroups'
 import { Department } from '../../api/projects'
@@ -46,6 +46,7 @@ const UsersPage = () => {
   const watchedRole = Form.useWatch('role', form)
   const watchedQuotaMode = Form.useWatch('quota_mode', form)
   const message = useMessage()
+  const [modal, modalContextHolder] = Modal.useModal()
   const { token, isDark } = useThemeToken()
 
   useEffect(() => {
@@ -342,7 +343,7 @@ const UsersPage = () => {
     {
       title: '操作',
       key: 'action',
-      width: 520,
+      width: 210,
       fixed: 'right' as const,
       render: (_: any, record: User) => (
         <WriteOnly><Space style={{ whiteSpace: 'nowrap' }}>
@@ -359,28 +360,43 @@ const UsersPage = () => {
           >
             编辑
           </Button>
-          <Button type="text" onClick={() => {
-            setDepartmentUser(record)
-            departmentForm.setFieldsValue({ department_id: record.department_id })
-          }}>分配部门</Button>
-          <Button type="text" icon={<KeyOutlined />} onClick={() => setPasswordUser(record)}>
-            重置密码
-          </Button>
-          <Button type="text" icon={<TeamOutlined />} onClick={() => openProjectModal(record)}>分配项目</Button>
-          <Popconfirm
-            title={record.role === 'admin' ? "不能删除管理员用户" : "确认删除此用户？"}
-            onConfirm={() => handleDelete(record.user_id)}
-            disabled={record.role === 'admin'}
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                { key: 'department', label: '分配部门' },
+                { key: 'password', label: '重置密码', icon: <KeyOutlined /> },
+                { key: 'project', label: '分配项目', icon: <TeamOutlined /> },
+                { type: 'divider' },
+                { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true, disabled: record.role === 'admin' },
+              ],
+              onClick: ({ key }) => {
+                switch (key) {
+                  case 'department':
+                    setDepartmentUser(record)
+                    departmentForm.setFieldsValue({ department_id: record.department_id })
+                    break
+                  case 'password':
+                    setPasswordUser(record)
+                    break
+                  case 'project':
+                    openProjectModal(record)
+                    break
+                  case 'delete':
+                    modal.confirm({
+                      title: '确认删除此用户？',
+                      onOk: () => handleDelete(record.user_id),
+                      okText: '确认',
+                      cancelText: '取消',
+                      okButtonProps: { danger: true },
+                    })
+                    break
+                }
+              },
+            }}
           >
-            <Button
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              disabled={record.role === 'admin'}
-            >
-              删除
-            </Button>
-          </Popconfirm>
+            <Button type="text" icon={<MoreOutlined />} aria-label="更多操作">更多</Button>
+          </Dropdown>
         </Space></WriteOnly>
       ),
     },
@@ -388,6 +404,7 @@ const UsersPage = () => {
 
   return (
     <div>
+      {modalContextHolder}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ 
           margin: 0, 

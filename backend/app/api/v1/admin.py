@@ -34,7 +34,7 @@ from app.schemas.admin import (
     AdminStatsResponse,
     AdminUserCreate, AdminUserUpdate, AdminUserResponse, AdminPasswordReset,
     UserListResponse, QuotaAdjustRequest,
-    ChannelCreate, ChannelUpdate, ChannelResponse, ChannelListResponse,
+    ChannelCreate, ChannelUpdate, ChannelResponse, ChannelListResponse, QuotaConfig,
     ChannelWithModelsResponse,
     ChannelQuotaResponse, ChannelQuotaListResponse, QuotaDetail,
     ChannelTestRequest, ChannelTestResponse,
@@ -755,6 +755,21 @@ async def get_channel_quota(channel_id: str, db: Session = Depends(get_db), admi
         weekly=QuotaDetail(limit=weekly.quota_limit, used=weekly.quota_used, remain=weekly.quota_remain, percent=float(weekly.quota_percent), last_sync=str(weekly.sync_at)) if weekly else None,
         windows=windows,
     )
+
+
+@router.post("/channels/{channel_id}/quota/test")
+async def test_channel_quota_script(channel_id: str, config: QuotaConfig, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    channel = db.query(Channel).filter(Channel.channel_id == channel_id).first()
+    if not channel:
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    if config.query_mode != "script":
+        raise HTTPException(status_code=400, detail="仅支持脚本模式试运行")
+    from app.services.sync_service import ScriptQuotaAdapter, normalize_quota_windows
+    try:
+        result = await ScriptQuotaAdapter(channel).fetch_quota(config.model_dump())
+        return {**result, "windows": normalize_quota_windows(result["windows"])}
+    except (ValueError, TypeError, OverflowError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.post("/channels/{channel_id}/quota/sync")

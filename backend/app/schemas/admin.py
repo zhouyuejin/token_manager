@@ -105,6 +105,7 @@ class QuotaConfig(BaseModel):
     custom_api_path: Optional[str] = None
     extra_params: Optional[Dict[str, str]] = None
     windows: Optional[List[Dict[str, Any]]] = None
+    script: Optional[str] = Field(default=None, max_length=32768)
 
 
 class ChannelCreate(BaseModel):

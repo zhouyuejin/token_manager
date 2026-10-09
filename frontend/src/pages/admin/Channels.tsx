@@ -4,13 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../../utils/message'
 import { 
-  Table, Button, Tag, Space, Modal, Form, Input, InputNumber, Switch, 
-  Popconfirm, Row, Col, Progress, Tooltip
+  Table, Button, Tag, Space, Modal,
+  Popconfirm, Progress, Tooltip
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SyncOutlined, SettingOutlined } from '@ant-design/icons'
 import { 
   getChannels, deleteChannel,
-  syncChannelQuota, updateChannelQuota, Channel, 
+  syncChannelQuota, Channel,
   syncChannelModels, recoverChannelHealth, ChannelHealth
 } from '../../api/channels'
 import { Model, bindChannelToModel, unbindChannel } from '../../api/models'
@@ -60,11 +60,9 @@ const healthLabels: Record<string, string> = { healthy: '健康', degraded: '降
 const ChannelsPage = () => {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const [configModalVisible, setConfigModalVisible] = useState(false)
   const [modelModalVisible, setModelModalVisible] = useState(false)
   const [selectedChannelModels, setSelectedChannelModels] = useState<any[]>([])
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
-  const [configForm] = Form.useForm()
+  const [selectedChannel] = useState<Channel | null>(null)
   const message = useMessage()
   const { token } = useThemeToken()
   const [allModels, setAllModels] = useState<Model[]>([])
@@ -127,25 +125,6 @@ const ChannelsPage = () => {
       fetchData()
     } catch {
       message.error('删除失败')
-    }
-  }
-
-  const handleConfig = async (values: any) => {
-    if (!selectedChannel) return
-    try {
-      const payload = { ...values }
-      if (typeof payload.quota_config === 'string') {
-        payload.quota_config = payload.quota_config.trim()
-          ? JSON.parse(payload.quota_config)
-          : undefined
-      }
-      await updateChannelQuota(selectedChannel.channel_id, payload)
-      message.success('配置更新成功')
-      setConfigModalVisible(false)
-      fetchData()
-    } catch (e) {
-      if (e instanceof SyntaxError) message.error('用量查询配置不是合法 JSON')
-      else message.error('配置更新失败')
     }
   }
 
@@ -237,8 +216,34 @@ const ChannelsPage = () => {
       title: '配额', key: 'quota', width: 200,
       render: (_: any, record: Channel) => {
         const quota = quotasMap[record.channel_id]
+        const scriptedBalance = record.quota_config?.query_mode === 'script' && quota?.windows?.find((window: any) => window.raw_data?.provider === 'script' && window.raw_data?.window?.raw_data?.balance)?.raw_data?.window?.raw_data?.balance
+        if (scriptedBalance) return <span>余额: {scriptedBalance.total_balance} {scriptedBalance.currency}</span>
+        const balanceWindow = quota?.windows?.find((window: any) =>
+          window.raw_data?.provider === 'deepseek' && window.type === 'custom'
+        )
+        const balanceData = balanceWindow?.raw_data?.window?.raw_data
+        if (balanceData?.balance_infos) return (
+          <div style={{ fontSize: 12 }}>
+            {balanceData.balance_infos.map((balance: any) => (
+              <div key={balance.currency}>
+                <div>余额: {balance.total_balance} {balance.currency}</div>
+                <div style={{ color: '#666' }}>赠送: {balance.granted_balance} · 充值: {balance.topped_up_balance}</div>
+              </div>
+            ))}
+            {balanceData.is_available === false && <Tag color="red">余额不可用</Tag>}
+          </div>
+        )
         const stats = calcQuotaStats(quota)
         if (!stats) return <span style={{ color: '#999' }}>未配置</span>
+        if (record.quota_config?.query_mode === 'script' && quota.windows?.some((window: any) => window.raw_data?.provider === 'script')) return (
+          <div style={{ fontSize: 12 }}>{quota.windows.filter((window: any) => window.raw_data?.provider === 'script').map((window: any) => (
+            <div key={window.type}>
+              {window.label || window.type}: 已用 {window.used} · 剩余 {window.remain}/{window.limit}
+              <Progress percent={Math.round(window.percent)} size="small" />
+              {window.reset_in_seconds != null && <span>{formatRemainTime(window.reset_in_seconds * 1000)}重置</span>}
+            </div>
+          ))}</div>
+        )
         return (
           <div style={{ fontSize: 12 }}>
             <div>5小时: <Progress percent={Math.round(stats.hourlyUsedPercent)} size="small" style={{ width: 100, display: 'inline' }} /></div>
@@ -267,17 +272,7 @@ const ChannelsPage = () => {
         <WriteOnly><Space>
           <Tooltip title="编辑"><Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/channels/${record.channel_id}/edit`)} /></Tooltip>
           <Tooltip title="同步配额"><Button size="small" icon={<SyncOutlined />} onClick={() => handleSync(record.channel_id)} /></Tooltip>
-          <Tooltip title="配置"><Button size="small" icon={<SettingOutlined />} onClick={() => {
-            setSelectedChannel(record)
-            configForm.setFieldsValue({
-              quota_hourly: record.quota_hourly,
-              quota_weekly: record.quota_weekly,
-              sync_enabled: record.sync_enabled,
-              sync_interval: record.sync_interval,
-              quota_config: record.quota_config ? JSON.stringify(record.quota_config, null, 2) : ''
-            })
-            setConfigModalVisible(true)
-          }} /></Tooltip>
+          <Tooltip title="配额配置"><Button size="small" icon={<SettingOutlined />} onClick={() => navigate(`/admin/channels/${record.channel_id}/quota`)} /></Tooltip>
           <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.channel_id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -296,33 +291,6 @@ return (
       <Table columns={columns} dataSource={channelsList} rowKey="channel_id" loading={loading}
           scroll={{ x: 1500, y: "calc(100vh - 320px)" }} />
 
-
-      {/* 配置 Modal */}
-      <Modal title="配额配置" open={configModalVisible} onCancel={() => setConfigModalVisible(false)} onOk={() => configForm.submit()}>
-        <Form form={configForm} onFinish={handleConfig} layout="vertical">
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="quota_hourly" label="小时配额"><InputNumber style={{ width: '100%' }} /></Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="quota_weekly" label="周配额"><InputNumber style={{ width: '100%' }} /></Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="sync_enabled" label="自动同步" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item name="sync_interval" label="同步间隔(秒)">
-            <InputNumber style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="quota_config"
-            label="用量查询配置(JSON)"
-            tooltip='手动模式示例: {"query_mode":"manual","windows":[{"type":"five_hour","label":"5小时","limit":100,"remain":80,"reset_at":"2026-09-14T15:00:00Z"}]}'
-          >
-            <Input.TextArea rows={6} />
-          </Form.Item>
-        </Form>
-      </Modal>
 
       {/* 模型绑定 Modal */}
       <Modal title={`${selectedChannel?.name} - 绑定模型`} open={modelModalVisible} onCancel={() => setModelModalVisible(false)} footer={null} width={800}>
