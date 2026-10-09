@@ -127,6 +127,10 @@ const StatsPage = () => {
       used: Number(dept.used_cny), reserved: Number(dept.reserved_cny), remaining: 0, amount: 0,
     })),
   ]
+  const apiTypeRows = (stats?.by_api_type || []).map((row: any) => ({
+    ...row,
+    label: ({ chat: 'Chat Completions', responses: 'Responses', embeddings: 'Embeddings', images: 'Images', 'audio/transcriptions': 'Audio Transcriptions', rerank: 'Rerank' } as Record<string, string>)[row.api_type] || row.api_type,
+  })).sort((a: any, b: any) => b.tokens - a.tokens)
   const selectedBillingRow = billingRows.find(row => row.id === billingScopeId) || billingRows[0]
   const billingRoseOption = {
     tooltip: { trigger: 'item', formatter: (item: any) => {
@@ -664,16 +668,28 @@ const StatsPage = () => {
       )}
 
       <Card title="接口类型用量" loading={loading} style={{ marginBottom: 20 }}>
-        <Table
-          rowKey="api_type"
-          pagination={false}
-          dataSource={stats?.by_api_type || []}
-          columns={[
-            { title: '接口类型', dataIndex: 'api_type', render: (value: string) => ({ chat: 'Chat Completions', responses: 'Responses', embeddings: 'Embeddings', images: 'Images', 'audio/transcriptions': 'Audio Transcriptions', rerank: 'Rerank' } as Record<string, string>)[value] || value },
-            { title: '调用次数', dataIndex: 'requests' },
-            { title: 'Token 数', dataIndex: 'tokens' },
-          ]}
-        />
+        {apiTypeRows.length ? <>
+          <ReactECharts
+            style={{ height: Math.max(220, apiTypeRows.length * 48 + 64) }}
+            option={{
+              tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (items: any[]) => {
+                const row = apiTypeRows[items[0]?.dataIndex]
+                return row ? `${row.label}<br/>Token：${Number(row.tokens).toLocaleString()}<br/>请求：${Number(row.requests).toLocaleString()}` : ''
+              } },
+              legend: { data: ['Token 数', '请求数'], top: 0, textStyle: { color: token.colorTextSecondary } },
+              grid: { left: 150, right: 72, top: 36, bottom: 24 },
+              xAxis: { type: 'category', data: apiTypeRows.map((row: any) => row.label), axisLabel: { color: token.colorText, interval: 0 }, axisLine: { lineStyle: { color: token.colorBorderSecondary } } },
+              yAxis: [
+                { type: 'value', name: 'Token', axisLabel: { color: token.colorTextSecondary }, splitLine: { lineStyle: { color: token.colorBorderSecondary } } },
+                { type: 'value', name: '请求', axisLabel: { color: token.colorTextSecondary }, splitLine: { show: false } },
+              ],
+              series: [
+                { name: 'Token 数', type: 'bar', yAxisIndex: 0, barMaxWidth: 28, itemStyle: { color: '#3B82F6', borderRadius: [4, 4, 0, 0] }, data: apiTypeRows.map((row: any) => row.tokens) },
+                { name: '请求数', type: 'bar', yAxisIndex: 1, barMaxWidth: 28, itemStyle: { color: '#10B981', borderRadius: [4, 4, 0, 0] }, data: apiTypeRows.map((row: any) => row.requests) },
+              ],
+            }}
+          />
+        </> : <div style={{ color: token.colorTextSecondary }}>暂无接口类型用量</div>}
       </Card>
 
       {/* 按模型统计 + 每日趋势 */}
