@@ -1,3 +1,4 @@
+import ChannelOverview from '../components/dashboard/ChannelOverview'
 import { modelDisplayName } from '../utils/modelDisplayName.mjs'
 import { userDisplayName } from '../utils/userDisplayName.mjs'
 import { formatTokenCount } from '../utils/formatTokenCount.mjs'
@@ -208,72 +209,6 @@ const AdminDashboard: React.FC = () => {
                   }
             }
           })
-        }
-      ]
-    }
-  }, [stats, isDark, token])
-
-  // ========== 供应商分布饼图配置 ==========
-  const providerPieOption = useMemo(() => {
-    if (!stats?.by_provider?.length) return null
-    
-    const totalTokens = stats.by_provider.reduce((sum, p) => sum + p.tokens, 0)
-    const data = stats.by_provider.map((provider, idx) => ({
-      name: provider.channel,
-      value: provider.tokens,
-      percent: totalTokens > 0 ? ((provider.tokens / totalTokens) * 100).toFixed(1) : 0
-    }))
-
-    return {
-      tooltip: {
-        trigger: 'item',
-        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-        textStyle: { color: token.colorText },
-        formatter: (params: any) => {
-          return `<div style="font-family: 'Space Grotesk', sans-serif;">
-            <div style="font-weight: 600; margin-bottom: 4px;">${params.name}</div>
-            <div>Token: ${params.value.toLocaleString()}</div>
-            <div>占比: ${params.percent}%</div>
-          </div>`
-        }
-      },
-      legend: {
-        orient: 'vertical',
-        right: 10,
-        top: 'center',
-        textStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
-        itemWidth: 12,
-        itemHeight: 12,
-        itemGap: 8,
-      },
-      series: [
-        {
-          type: 'pie',
-          radius: ['45%', '70%'],
-          center: ['35%', '50%'],
-          avoidLabelOverlap: true,
-          itemStyle: {
-            borderRadius: 6,
-            borderColor: isDark ? 'rgba(17, 24, 39, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-            borderWidth: 2
-          },
-          label: {
-            show: false
-          },
-          emphasis: {
-            label: {
-              show: false
-            },
-            itemStyle: {
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
-            }
-          },
-          data: data.map((d, i) => ({
-            ...d,
-            itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
-          }))
         }
       ]
     }
@@ -686,7 +621,7 @@ const AdminDashboard: React.FC = () => {
         </Col>
       </Row>
 
-      {/* 模型使用分布 + 用户占比 */}
+      {/* 模型使用分布 + 渠道运行概况 */}
       <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={12}>
           <Card 
@@ -726,6 +661,34 @@ const AdminDashboard: React.FC = () => {
           <Card 
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <CloudServerOutlined style={{ color: '#10B981' }} />
+                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
+                  渠道运行概况
+                </span>
+              </div>
+            }
+            style={{ 
+              background: token.colorBgContainer,
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 16,
+            }}
+            styles={{ 
+              body: { padding: '20px', minHeight: 400 },
+              header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
+            }}
+          >
+            <ChannelOverview usage={stats?.by_provider || []} range={`${statsParams.start_date} 至 ${statsParams.end_date}`} loading={loading} usageError={!!statsError} />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 用户用量分布 + 成本分析 */}
+      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <UserOutlined style={{ color: '#3B82F6' }} />
                 <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
                   用户用量分布
@@ -747,43 +710,6 @@ const AdminDashboard: React.FC = () => {
             {userBarOption ? (
               <ReactECharts
                 option={userBarOption}
-                style={{ height: 350 }}
-                opts={{ renderer: 'svg' }}
-              />
-            ) : (
-              <Empty description="暂无数据" />
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      {/* 供应商分布 + 成本分析 */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <Card 
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <CloudServerOutlined style={{ color: '#10B981' }} />
-                <span style={{ color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
-                  供应商用量分布
-                </span>
-              </div>
-            }
-            loading={loading}
-            style={{ 
-              background: token.colorBgContainer,
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: 16,
-            }}
-            styles={{ 
-              body: { padding: '20px', height: 400 },
-              header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
-            }}
-          >
-            {providerPieOption ? (
-              <ReactECharts 
-                option={providerPieOption} 
                 style={{ height: 350 }}
                 opts={{ renderer: 'svg' }}
               />

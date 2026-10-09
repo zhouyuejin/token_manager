@@ -143,3 +143,17 @@ def test_deleting_model_keeps_usage_history():
         assert db.query(UsageLog).filter_by(model="gpt-4").count() == 1
     finally:
         db.close()
+
+
+def test_channel_usage_exposes_id_and_saved_cost():
+    _setup('m', 'm', 1, 1, upstream='upstream-m')
+    db = TestingSessionLocal()
+    try:
+        row = db.query(UsageLog).one()
+        row.cost_usd = 0.25
+        db.commit()
+    finally:
+        db.close()
+    channel = _fetch_stats()['by_provider'][0]
+    assert channel['channel_id'] == 'ch_1'
+    assert channel['cost'] == 0.25

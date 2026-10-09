@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router-dom'
+import { channelState, channelStates, quotaSummary } from '../../utils/channelOverview.mjs'
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Col, Empty, Form, InputNumber, Popconfirm, Progress, Row, Select, Space, Statistic, Table, Tag, Tooltip } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
@@ -40,6 +42,7 @@ const WindowMetrics = ({ window }: { window: ChannelHealthWindow }) => (
 )
 
 const HealthDashboard = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [windowName, setWindowName] = useState<'5m' | '1h' | '24h'>('5m')
   const [form] = Form.useForm<AlertRuleConfig>()
   const [savingRules, setSavingRules] = useState(false)
@@ -50,7 +53,17 @@ const HealthDashboard = () => {
   const message = useMessage()
   const permissions = useAuthStore((state) => state.user?.permissions || [])
   const canEditRules = hasPermission(permissions, 'admin:write')
-  const items = data?.items || []
+  const { data: quotas } = useSwrData<{ items: any[] }>('/admin/channels/quotas')
+  const quotaMap = Object.fromEntries((quotas?.items || []).map(row => [row.channel_id, quotaSummary(row, alertRules?.quota_remaining_percent)]))
+  const stateFilter = searchParams.get('state')
+  const channelFilter = searchParams.get('channel_id')
+  const items = (data?.items || []).filter(row => {
+    if (channelFilter && row.channel_id !== channelFilter) return false
+    if (!stateFilter) return true
+    if (row.status !== 'active') return false
+    const state = channelState(row, quotaMap[row.channel_id]).key
+    return stateFilter === 'attention' ? ['error', 'warning'].includes(state) : state === stateFilter
+  })
   useEffect(() => {
     if (alertRules) form.setFieldsValue(alertRules)
   }, [alertRules, form])
@@ -88,7 +101,7 @@ const HealthDashboard = () => {
 
   const columns = [
     { title: '渠道', dataIndex: 'name', key: 'name', render: (name: string, row: ChannelHealth) => <Space direction="vertical" size={0}><span>{name}</span><span style={{ color: '#64748b', fontSize: 12 }}>{row.channel_id}</span></Space> },
-    { title: '健康状态', dataIndex: 'health_status', key: 'health_status', render: (value: string) => <Tag color={value === 'healthy' ? 'green' : value === 'degraded' ? 'orange' : 'red'}>{healthLabels[value] || value || '未知'}</Tag> },
+    { title: '健康状态', dataIndex: 'health_status', key: 'health_status', render: (_: string, row: ChannelHealth) => { const state = channelState(row, quotaMap[row.channel_id]); return <Tag color={state.color}>{state.label}</Tag> } },
     { title: windowOptions.find(item => item.value === windowName)?.label, key: 'metrics', width: 300, render: (_: unknown, row: ChannelHealth) => <WindowMetrics window={row.windows[windowName]} /> },
     { title: 'Cooldown', key: 'cooldown', render: (_: unknown, row: ChannelHealth) => <Space direction="vertical" size={0}>{row.cooldown.channel_until ? <Tag color="orange">渠道至 {formatDate(row.cooldown.channel_until)}</Tag> : <Tag color="green">未冷却</Tag>}{row.cooldown.keys.length > 0 && <span style={{ color: '#d97706', fontSize: 12 }}>{row.cooldown.keys.length} 个 Key 冷却中</span>}</Space> },
     { title: '最近错误', dataIndex: 'recent_error', key: 'recent_error', ellipsis: true, render: (value: string | null) => value ? <Tooltip title={value}>{value}</Tooltip> : '—' },
@@ -100,6 +113,7 @@ const HealthDashboard = () => {
       <div><h2 style={{ marginBottom: 4 }}>渠道健康看板</h2><span style={{ color: '#64748b' }}>基于代理用量日志实时聚合</span></div>
       <Space><Select value={windowName} options={[...windowOptions]} onChange={setWindowName} /><Button icon={<ReloadOutlined />} onClick={() => { mutate(); refreshSystemHealth() }}>刷新</Button></Space>
     </div>
+    {(stateFilter || channelFilter) && <Alert type="info" showIcon style={{ marginBottom: 16 }} message={`当前筛选：${channelFilter ? data?.items.find(row => row.channel_id === channelFilter)?.name || channelFilter : channelStates[stateFilter]?.label || '需要关注'} · ${items.length} 个渠道`} action={<Button size="small" onClick={() => setSearchParams({})}>查看全部</Button>} />}
     {systemHealthError ? <Alert type="error" showIcon style={{ marginBottom: 16 }} message="系统健康状态加载失败" description="无法读取 /health，请检查服务可用性和网络连接。" /> : systemHealth && <Card title="系统依赖与任务状态" style={{ marginBottom: 16 }}>
       <Space wrap>
         <Tag color={systemHealth.status === 'healthy' ? 'green' : systemHealth.status === 'degraded' ? 'orange' : 'red'}>{healthLabels[systemHealth.status] || systemHealth.status}</Tag>
@@ -138,7 +152,7 @@ const HealthDashboard = () => {
       <Col xs={24} sm={8}><Card><Statistic title="成功数" value={selectedWindow.successes} valueStyle={{ color: '#16a34a' }} /></Card></Col>
       <Col xs={24} sm={8}><Card><Statistic title="错误数" value={selectedWindow.errors} valueStyle={{ color: selectedWindow.errors ? '#dc2626' : '#16a34a' }} /></Card></Col>
     </Row>
-    <Card title="渠道指标" bodyStyle={{ padding: 0 }}>
+    <Card title="渠道指标" extra={(stateFilter || channelFilter) && <Space><span>已筛选：{channelFilter || channelStates[stateFilter]?.label || '需要关注'}</span><Button size="small" onClick={() => setSearchParams({})}>查看全部</Button></Space>} bodyStyle={{ padding: 0 }}>
       {items.length ? <Table rowKey="channel_id" columns={columns} dataSource={items} loading={isLoading} pagination={false} scroll={{ x: 1100 }} /> : <Empty description="暂无渠道健康数据" />}
     </Card>
   </div>

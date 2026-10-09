@@ -20,6 +20,8 @@ export interface AdminUserUsage {
 }
 
 export interface AdminProviderUsage {
+  channel_id?: string
+  cost?: number | null
   channel: string
   tokens: number
   requests: number

@@ -274,13 +274,15 @@ async def get_admin_usage_stats(
     channel_stats = db.query(
         UsageLog.channel_id,
         func.sum(UsageLog.total_tokens).label('tokens'),
-        func.count(UsageLog.id).label('requests')
+        func.count(UsageLog.id).label('requests'),
+        func.sum(UsageLog.cost_usd).label('saved_cost'),
+        func.count(UsageLog.cost_usd).label('cost_count')
     ).filter(base_filter).group_by(UsageLog.channel_id).all()
     
     channel_ids = [s.channel_id for s in channel_stats if s.channel_id]
     channel_map = {c.channel_id: c.name for c in db.query(Channel.channel_id, Channel.name).filter(Channel.channel_id.in_(channel_ids)).all()} if channel_ids else {}
     
-    by_channel = [{"channel": channel_map.get(s.channel_id, s.channel_id or "未知"), "tokens": s.tokens or 0, "requests": s.requests or 0} for s in channel_stats] if channel_stats else []
+    by_channel = [{"channel": channel_map.get(s.channel_id, s.channel_id or "未知"), "channel_id": s.channel_id, "cost": float(s.saved_cost or 0) if s.cost_count == s.requests else None, "tokens": s.tokens or 0, "requests": s.requests or 0} for s in channel_stats] if channel_stats else []
     
     # 按模型统计
     model_stats = db.query(

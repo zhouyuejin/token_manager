@@ -437,6 +437,8 @@ class UserUsage(BaseModel):
 class ChannelUsage(BaseModel):
     """渠道用量统计"""
     channel: str
+    channel_id: Optional[str] = None
+    cost: Optional[float] = None
     tokens: int
     requests: int = 0
 
