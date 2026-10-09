@@ -27,12 +27,10 @@ def get_rate_limit_redis_client():
 
 def check_proxy_rate_limit(redis_client, api_key, user, model: str, estimated_tokens: int, now: Optional[float] = None) -> RateLimitDecision:
     now = time.time() if now is None else now
-    key_id = api_key.key_id
-    user_id = api_key.user_id
-    scopes = (
-        ("key", f"{user_id}:{key_id}:{model}", api_key),
-        ("user", user_id, user),
-    )
+    user_id = user.user_id
+    scopes = [("user", user_id, user)]
+    if api_key is not None:
+        scopes.insert(0, ("key", f"{user_id}:{api_key.key_id}:{model}", api_key))
 
     concurrency_keys = []
     for scope_type, scope, limits in scopes:

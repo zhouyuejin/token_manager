@@ -27,6 +27,7 @@ class DepartmentSave(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     owner_user_id: Optional[str] = None
     status: Literal['active', 'disabled'] = 'active'
+    content_audit_enabled: bool = False
 
     @field_validator('name')
     @classmethod
@@ -47,7 +48,7 @@ class ProjectUsers(BaseModel):
 
 
 def department_response(row):
-    return {field: getattr(row, field) for field in ('dept_id', 'name', 'owner_user_id', 'status')}
+    return {field: getattr(row, field) for field in ('dept_id', 'name', 'owner_user_id', 'status', 'content_audit_enabled')}
 
 
 def project_response(row):
@@ -125,6 +126,7 @@ async def get_department_usage_stats(
         return {
             'total_tokens': 0, 'total_requests': 0, 'total_cost': 0,
             'success_rate': 100, 'by_day': [], 'by_project': [],
+            'web_chat': {'tokens': 0, 'requests': 0, 'cost': 0},
         }
 
     date_filter = [
@@ -156,6 +158,10 @@ async def get_department_usage_stats(
         func.sum(UsageLog.total_tokens).desc()
     ).all()
 
+    web_chat = db.query(
+        func.sum(UsageLog.total_tokens), func.count(UsageLog.log_id), func.sum(UsageLog.cost_usd),
+    ).filter(*date_filter, UsageLog.key_id.is_(None), UsageLog.project_id.is_(None)).one()
+
     model_rows = db.query(
         UsageLog.model,
         func.sum(UsageLog.total_tokens).label('tokens'),
@@ -186,6 +192,7 @@ async def get_department_usage_stats(
         'total_tokens': total_tokens,
         'total_requests': total_requests,
         'total_cost': round(total_cost, 8),
+        'web_chat': {'tokens': web_chat[0] or 0, 'requests': web_chat[1], 'cost': round(float(web_chat[2] or 0), 8)},
         'success_rate': round(successful_requests / total_requests * 100, 2) if total_requests else 100,
         'by_day': [
             {'date': str(row.date), 'tokens': row.tokens or 0, 'requests': row.requests or 0}
@@ -235,6 +242,8 @@ async def delete_department(dept_id: str, request: Request, admin: User = Depend
     if not row:
         raise HTTPException(404, '部门不存在')
     check_department_access(db, admin, dept_id)
+    if db.query(User.id).filter(User.department_id == dept_id).first():
+        raise HTTPException(409, '部门下存在用户，请先调整用户所属部门')
     if db.query(Project.project_id).filter(Project.dept_id == dept_id).first():
         raise HTTPException(409, '部门下存在项目，请先处理项目')
     if (db.query(UsageLog.log_id).filter(UsageLog.department_id == dept_id).first()

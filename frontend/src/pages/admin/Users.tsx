@@ -9,6 +9,8 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, DollarOutlined, TeamOutlined, KeyOutlined } from '@ant-design/icons'
 import { getUsers, createUser, updateUser, deleteUser, adjustQuota, resetPassword, User } from '../../api/users'
 import { getModelGroups, ModelGroup } from '../../api/modelGroups'
+import { Department } from '../../api/projects'
+import { useSwrData } from '../../hooks/useSwr'
 import { getAdminProjects, getProjectUsers, Project, setProjectUsers } from '../../api/projects'
 import dayjs from 'dayjs'
 import { WriteOnly } from '../../components/WriteOnly'
@@ -32,6 +34,11 @@ const UsersPage = () => {
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([])
   const [projectsLoading, setProjectsLoading] = useState(false)
   const [projectsError, setProjectsError] = useState(false)
+  const { data: departmentsData, error: departmentsError, isLoading: departmentsLoading } = useSwrData<{ items: Department[] }>('/projects/admin/departments')
+  const [departmentUser, setDepartmentUser] = useState<User | null>(null)
+  const [departmentForm] = Form.useForm()
+  const [savingDepartment, setSavingDepartment] = useState(false)
+  const departmentOptions = (departmentsData?.items || []).map(dept => ({ value: dept.dept_id, label: `${dept.name}${dept.status === 'disabled' ? '（停用）' : ''}` }))
   const [form] = Form.useForm()
   const [quotaForm] = Form.useForm()
   const [passwordForm] = Form.useForm()
@@ -78,7 +85,7 @@ const UsersPage = () => {
   const handleCreate = async (values: any) => {
     try {
       // GC-8: 创建 admin 时不传 quota/model_group_ids（后端按 GC-6 强制）
-      const payload = { ...values }
+      const payload = { ...values, department_id: values.department_id || null }
       if (payload.role === 'admin') {
         delete payload.quota
         delete payload.quota_mode
@@ -105,7 +112,7 @@ const UsersPage = () => {
       // GC-8: 编辑 admin 时，后端拒绝修改内部属性；前端剥掉 quota
       // 避免初始值（admin.quota=-1）在 demote-to-user 时被一并提交，
       // 覆盖 transition 自动副作用的 quota=0。
-      const payload = { ...values }
+      const payload = { ...values, department_id: values.department_id || null }
       if (editUser.role === 'admin') {
         delete payload.quota
         delete payload.model_group_ids
@@ -213,6 +220,7 @@ const UsersPage = () => {
   }
 
   const columns = [
+    { title: '所属部门', dataIndex: 'department_name', render: (value: string | null) => value || '未分配' },
     { 
       title: '用户名', 
       dataIndex: 'username', 
@@ -334,7 +342,7 @@ const UsersPage = () => {
     {
       title: '操作',
       key: 'action',
-      width: 440,
+      width: 520,
       fixed: 'right' as const,
       render: (_: any, record: User) => (
         <WriteOnly><Space style={{ whiteSpace: 'nowrap' }}>
@@ -351,6 +359,10 @@ const UsersPage = () => {
           >
             编辑
           </Button>
+          <Button type="text" onClick={() => {
+            setDepartmentUser(record)
+            departmentForm.setFieldsValue({ department_id: record.department_id })
+          }}>分配部门</Button>
           <Button type="text" icon={<KeyOutlined />} onClick={() => setPasswordUser(record)}>
             重置密码
           </Button>
@@ -546,6 +558,10 @@ const UsersPage = () => {
               style={{ height: 40, borderRadius: 10 }}
             />
           </Form.Item>
+          {departmentsError && <Alert type="error" message="部门列表加载失败，请刷新后重试" />}
+          <Form.Item name="department_id" label="所属部门" extra="网页 AI 对话按此部门计费；未分配时不能发送消息。">
+            <Select allowClear showSearch optionFilterProp="label" loading={departmentsLoading} disabled={!!departmentsError} options={departmentOptions} placeholder="选择所属部门" />
+          </Form.Item>
           <Form.Item
             name="role"
             label={<span style={{ color: token.colorTextSecondary }}>角色</span>}
@@ -682,6 +698,10 @@ const UsersPage = () => {
               placeholder="请输入邮箱"
               style={{ height: 40, borderRadius: 10 }}
             />
+          </Form.Item>
+          {departmentsError && <Alert type="error" message="部门列表加载失败，请刷新后重试" />}
+          <Form.Item name="department_id" label="所属部门" extra="网页 AI 对话按此部门计费；未分配时不能发送消息。">
+            <Select allowClear showSearch optionFilterProp="label" loading={departmentsLoading} disabled={!!departmentsError} options={departmentOptions} placeholder="选择所属部门" />
           </Form.Item>
           <Form.Item
             name="role"
@@ -875,6 +895,25 @@ const UsersPage = () => {
                 确认调整
               </Button>
             </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+      <Modal title={`分配部门：${departmentUser ? userDisplayName(departmentUser) : ''}`} open={!!departmentUser}
+        onCancel={() => setDepartmentUser(null)} confirmLoading={savingDepartment}
+        okButtonProps={{ disabled: departmentsLoading || !!departmentsError }} onOk={() => departmentForm.submit()}>
+        {departmentsError && <Alert type="error" message="部门列表加载失败，请刷新后重试" />}
+        <Form form={departmentForm} layout="vertical" onFinish={async values => {
+          if (!departmentUser) return
+          setSavingDepartment(true)
+          try {
+            await updateUser(departmentUser.user_id, { department_id: values.department_id || null })
+            message.success('所属部门已更新')
+            setDepartmentUser(null)
+            fetchUsers()
+          } finally { setSavingDepartment(false) }
+        }}>
+          <Form.Item name="department_id" label="所属部门" extra="清除部门后不能发送网页 AI 消息；历史账目保持不变。">
+            <Select allowClear showSearch optionFilterProp="label" loading={departmentsLoading} options={departmentOptions} placeholder="选择所属部门" />
           </Form.Item>
         </Form>
       </Modal>

@@ -30,6 +30,20 @@ API代理/网关服务，为公司内部提供统一访问大模型API的能力�
 
 阿里云 ECS 镜像部署步骤见[ACR 部署操作手册](docs/阿里云ACR部署.md)。
 
+## 网页 AI 对话
+
+1. 管理员在“用户管理”中为员工分配所属部门（管理员自身也需要分配）。
+2. 配置用户可用模型分组及额度，确保所属部门已启用且预算充足。
+3. 员工登录后选择可用模型并发送消息，无需项目授权或 API Key。
+
+网页对话仅计入用户和当前所属部门，不绑定项目。部门的“网页对话审计摘要”开关控制用量日志中的脱敏摘要；关闭不影响用户自己的聊天记录保存。员工调整部门后，新请求按新部门计费，已开始请求和历史账目保持原归属。
+
+### 升级部门对话版本
+
+部署前先在后端执行 `alembic upgrade head`（Docker 环境可执行 `docker compose exec backend alembic upgrade head`），再启动新版服务。现有用户的所属部门默认为空，管理员必须明确分配；系统不会从项目推测部门。未分配部门或部门停用时，可以查看历史会话，但不能发送新消息。已有无 Key 网页账目后不能直接降级为 Key 必填结构。
+
+外部程序调用仍须选择已授权项目、申请 API Key 并等待审批，使用方式与网页对话分开。
+
 ## 管理员注意
 
 - 必须将至少一个模型分组标记为「默认」(is_default=1 且 status=active)，否则所有用户将被拒绝访问任何模型（启动期会输出 warn 日志，AdminLayout 也会显示黄色横幅）。
@@ -131,7 +145,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 curl -X POST http://localhost:8000/api/v1/api-keys \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"name":"测试Key"}'
+  -d '{"name":"测试Key","project_id":"<已授权项目ID>"}'
 ```
 
 ### 调用中转API

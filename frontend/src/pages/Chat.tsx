@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { loadModelConfig, saveModelConfig } from '../utils/chatStorage'
 import { stripThinkTags } from '../utils/thinkTag'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Layout, Button, App } from 'antd'
+import { Layout, Button, App, Alert } from 'antd'
 import ConversationList from '../components/Chat/ConversationList'
 import MessageList from '../components/Chat/MessageList'
 import InputArea from '../components/Chat/InputArea'
@@ -13,7 +13,8 @@ import {
   ChatConversation,
   ChatMessage,
 } from '../api/chat'
-import { useSwrDataWithParams } from '../hooks/useSwr'
+import { UserInfo } from '../api/auth'
+import { useSwrData, useSwrDataWithParams } from '../hooks/useSwr'
 
 const { Sider } = Layout
 
@@ -22,6 +23,9 @@ const SIDEBAR_WIDTH = 260
 const Chat: React.FC = () => {
   const { token, isDark } = useThemeToken()
   const { message } = App.useApp()
+  const { data: currentUser, error: departmentError, isLoading: departmentLoading } = useSwrData<UserInfo>('/users/me', { revalidateOnFocus: true })
+  const departmentReady = !!currentUser?.department_id && currentUser.department_status === 'active'
+
   const [_conversations, setConversations] = useState<ChatConversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -71,6 +75,10 @@ const Chat: React.FC = () => {
 
   // 发送消息
   const handleSendMessage = async (content: string, _files?: File[]) => {
+    if (!departmentReady) {
+      message.warning('所属部门未分配或已停用，请联系管理员')
+      return
+    }
     // 先校验模型,提示信息才名副其实
     if (!modelConfig.modelId) {
       message.warning('请先选择模型')
@@ -276,10 +284,12 @@ const Chat: React.FC = () => {
           }}
         >
           <span style={{ color: token.colorText, fontSize: '16px', fontWeight: 500 }}>
-            AI 对话
+            AI 对话{currentUser?.department_name ? ` · ${currentUser.department_name}` : ''}
           </span>
         </div>
 
+        {departmentError ? <Alert type="error" showIcon message="所属部门加载失败，请刷新重试" />
+          : !departmentLoading && !departmentReady && <Alert type="warning" showIcon message="所属部门未分配或已停用，请联系管理员分配可用部门后使用 AI 对话。" />}
         <Layout.Content style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <MessageList
             messages={messages}
@@ -291,7 +301,7 @@ const Chat: React.FC = () => {
 
         <InputArea
           onSend={handleSendMessage}
-          disabled={sending && !streaming}
+          disabled={!departmentReady || (sending && !streaming)}
           loading={sending}
           modelConfig={modelConfig}
           onModelChange={setModelConfig}

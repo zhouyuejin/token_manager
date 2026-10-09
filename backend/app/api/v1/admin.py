@@ -401,8 +401,8 @@ async def export_admin_usage(
             yield _csv_row([
                 row.created_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
                 departments.get(row.department_id, row.department_id or ""),
-                projects.get(row.project_id, row.project_id or ""),
-                users.get(row.user_id, row.user_id), row.key_id, row.model,
+                projects.get(row.project_id, row.project_id or "无项目"),
+                users.get(row.user_id, row.user_id), row.key_id or "网页对话", row.model,
                 channels.get(row.channel_id, row.channel_id or ""),
                 row.prompt_tokens or 0, row.completion_tokens or 0, row.total_tokens or 0,
                 f"{row_cost:.8f}", row.status_code,
@@ -440,6 +440,7 @@ async def list_users(
     users = query.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     
     return UserListResponse(total=total, items=[AdminUserResponse(
+        department_id=u.department_id, department_name=u.department.name if u.department else None,
         user_id=u.user_id, username=u.username, nickname=u.nickname, email=u.email, role=u.role.value if hasattr(u.role, 'value') else str(u.role),
         status=u.status.value if hasattr(u.status, 'value') else str(u.status),
         quota=u.quota, quota_used=u.quota_used, created_at=u.created_at,
@@ -455,8 +456,11 @@ async def create_user(data: AdminUserCreate, request: Request = None, db: Sessio
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
     
+    if data.department_id and not db.get(Department, data.department_id):
+        raise HTTPException(404, "部门不存在")
     role = UserRole(data.role)
     user = User(
+        department_id=data.department_id,
         user_id=f"u_{secrets.token_hex(8)}", username=data.username, nickname=data.nickname, email=data.email,
         password=data.password, role=role,
         quota=-1 if role == UserRole.admin else data.quota,
@@ -469,9 +473,10 @@ async def create_user(data: AdminUserCreate, request: Request = None, db: Sessio
     db.refresh(user)
     record_operation(db=db, operator=admin, action="create", target_type="user", target_id=user.user_id,
                      detail={"username": user.username, "email": user.email, "role": user.role.value,
-                             "quota": user.quota}, ip_address=extract_client_ip(request) if request else None)
+                             "quota": user.quota, "department_id": user.department_id}, ip_address=extract_client_ip(request) if request else None)
     
     return AdminUserResponse(
+        department_id=user.department_id, department_name=user.department.name if user.department else None,
         user_id=user.user_id, username=user.username, nickname=user.nickname, email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
@@ -490,6 +495,7 @@ async def get_user(user_id: str, db: Session = Depends(get_db), admin: User = De
         raise HTTPException(status_code=404, detail="用户不存在")
     
     return AdminUserResponse(
+        department_id=user.department_id, department_name=user.department.name if user.department else None,
         user_id=user.user_id, username=user.username, nickname=user.nickname, email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
         status=user.status.value if hasattr(user.status, 'value') else str(user.status),
@@ -509,8 +515,10 @@ async def update_user(user_id: str, data: AdminUserUpdate, request: Request, db:
     
     changed = {}
     changes = data.model_dump(exclude_unset=True)
+    if changes.get("department_id") and not db.get(Department, changes["department_id"]):
+        raise HTTPException(404, "部门不存在")
     if (user.role == UserRole.admin and admin.user_id == user.user_id
-            and any(value is not None for field, value in changes.items() if field != "role")
+            and any(value is not None for field, value in changes.items() if field not in {"role", "department_id"})
             and changes.get("role") in (None, "admin")):
         raise HTTPException(status_code=400, detail="不能编辑管理员用户")
     new_role = changes.pop("role", None)

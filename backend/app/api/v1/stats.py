@@ -177,15 +177,17 @@ async def get_usage_stats(
 
 @router.get('/billing')
 async def get_my_billing(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """用户只能查看自己 Key 归属项目的当月预算和未结预扣。"""
+    """查看用户所属部门及自己 Key 归属项目的当月预算和未结预扣。"""
     keys = db.query(ApiKey).filter(ApiKey.user_id == current_user.user_id).all()
     project_ids = {row.project_id for row in keys if row.project_id}
     projects = db.query(Project).filter(Project.project_id.in_(project_ids)).all() if project_ids else []
     department_ids = {row.dept_id for row in projects if row.dept_id}
+    if current_user.department_id:
+        department_ids.add(current_user.department_id)
     month = current_month()
     budgets = db.query(Budget).filter(Budget.month == month, Budget.enabled.is_(True),
         ((Budget.scope_type == 'project') & Budget.scope_id.in_(project_ids)) |
-        ((Budget.scope_type == 'department') & Budget.scope_id.in_(department_ids))).all() if project_ids else []
+        ((Budget.scope_type == 'department') & Budget.scope_id.in_(department_ids))).all() if project_ids or department_ids else []
     names = {row.project_id: row.name for row in projects}
     names.update({row.dept_id: row.name for row in db.query(Department).filter(Department.dept_id.in_(department_ids)).all()})
     service = BudgetService(db)
@@ -195,7 +197,7 @@ async def get_my_billing(current_user: User = Depends(get_current_user), db: Ses
         'month': month,
         'budgets': [{**{field: getattr(row, field) for field in ('budget_id', 'scope_type', 'scope_id', 'amount_usd', 'policy')},
                      'scope_name': names.get(row.scope_id, row.scope_id), **service.summary(row)} for row in budgets],
-        'reservations': [{field: getattr(row, field) for field in ('reservation_id', 'key_id', 'project_id', 'model',
+        'reservations': [{field: getattr(row, field) for field in ('reservation_id', 'key_id', 'project_id', 'department_id', 'model',
                          'estimated_tokens', 'estimated_cost_usd', 'status', 'created_at', 'expires_at')} for row in reservations],
     }
 
@@ -206,6 +208,10 @@ async def get_my_usage_options(current_user: User = Depends(get_current_user), d
     project_ids = {row.project_id for row in keys if row.project_id}
     projects = db.query(Project).filter(Project.project_id.in_(project_ids)).all() if project_ids else []
     department_ids = {row.dept_id for row in projects}
+    department_ids.update(row[0] for row in db.query(UsageLog.department_id).filter(
+        UsageLog.user_id == current_user.user_id, UsageLog.department_id.isnot(None)).distinct())
+    if current_user.department_id:
+        department_ids.add(current_user.department_id)
     departments = db.query(Department).filter(Department.dept_id.in_(department_ids)).all() if department_ids else []
     models = [row[0] for row in db.query(UsageLog.model).filter_by(user_id=current_user.user_id).distinct().all()]
     channel_ids = [row[0] for row in db.query(UsageLog.channel_id).filter(

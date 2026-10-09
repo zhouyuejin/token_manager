@@ -14,6 +14,7 @@ class AdminUserCreate(BaseModel):
     """管理员创建用户请求"""
     username: str
     nickname: Nickname = None
+    department_id: Optional[str] = Field(default=None, min_length=1, max_length=32)
     email: EmailStr
     password: str = Field(..., min_length=8)
     role: str = "user"
@@ -29,6 +30,7 @@ class AdminUserUpdate(BaseModel):
     """更新用户请求"""
     username: Optional[str] = None
     nickname: Nickname = None
+    department_id: Optional[str] = Field(default=None, min_length=1, max_length=32)
     email: Optional[EmailStr] = None
     role: Optional[str] = None
     status: Optional[str] = None
@@ -50,6 +52,8 @@ class AdminUserResponse(BaseModel):
     user_id: str
     username: str
     nickname: Nickname = None
+    department_id: Optional[str] = Field(default=None, min_length=1, max_length=32)
+    department_name: Optional[str] = None
     email: str
     role: str
     status: str

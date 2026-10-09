@@ -1,8 +1,9 @@
 """
 用户模型
 """
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Boolean, Integer
+from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Boolean, Integer, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 import enum
@@ -30,6 +31,8 @@ class User(Base):
     user_id = Column(String(32), unique=True, nullable=False, index=True, comment="业务主键")
     username = Column(String(50), unique=True, nullable=False, index=True)
     nickname = Column(String(50), nullable=True, comment="用户昵称")
+    department_id = Column(String(32), ForeignKey("departments.dept_id"), nullable=True, index=True)
+    department = relationship("Department")
     avatar_url = Column(Text, nullable=True, comment="用户头像")
     password = Column(String(255), nullable=False)
     email = Column(String(100), unique=True, nullable=False)

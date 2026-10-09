@@ -7,7 +7,7 @@ class QuotaReservation(Base):
     __tablename__ = 'quota_reservations'
     reservation_id = Column(String(32), primary_key=True)
     user_id = Column(String(32), nullable=False, index=True)
-    key_id = Column(String(32), nullable=False, index=True)
+    key_id = Column(String(32), nullable=True, index=True)
     project_id = Column(String(32), nullable=True)
     department_id = Column(String(32), nullable=True)
     model = Column(String(50), nullable=False)

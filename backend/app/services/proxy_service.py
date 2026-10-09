@@ -27,6 +27,7 @@ from app.models.model_channel import ModelChannel
 from app.models.model_group import ModelGroup, ModelGroupStatus, model_group_model_mappings
 from app.models.usage_log import UsageLog
 from app.models.route_decision_log import RouteDecisionLog
+from app.models.organization import Department
 from app.models.project import Project
 from app.services.project_service import DEFAULT_PROJECT_ID, DEFAULT_DEPARTMENT_ID
 
@@ -87,7 +88,7 @@ class ProxyService:
         from app.services.quota_reservation_service import QuotaReservationService
         from fastapi import HTTPException
         try:
-            attribution = self.capture_usage_attribution(api_key.key_id)
+            attribution = self.capture_usage_attribution(getattr(api_key, "key_id", None))
             self.reservation_id = QuotaReservationService(self.db).reserve(
                 user, api_key, model, request_data,
                 {field: attribution[field] for field in ("project_id", "department_id")})
@@ -149,7 +150,7 @@ class ProxyService:
         return user
 
     @staticmethod
-    def check_api_key_ip(api_key: ApiKey, client_ip: Optional[str]) -> bool:
+    def check_api_key_ip(api_key: Optional[ApiKey], client_ip: Optional[str]) -> bool:
         """检查客户端 IP 是否命中 API Key 白名单。空白名单表示不限制。"""
         raw_whitelist = getattr(api_key, "ip_whitelist", None)
         if not raw_whitelist:
@@ -205,7 +206,7 @@ class ProxyService:
 
     def check_model_group_access(
         self,
-        api_key: ApiKey,
+        api_key: Optional[ApiKey],
         user: User,
         model_id: str
     ) -> Dict[str, Any]:
@@ -275,7 +276,7 @@ class ProxyService:
 
         return {"allowed": True}
 
-    def check_quota(self, user: User, api_key: ApiKey, estimated_tokens: int = 1000) -> Dict[str, Any]:
+    def check_quota(self, user: User, api_key: Optional[ApiKey], estimated_tokens: int = 1000) -> Dict[str, Any]:
         """检查额度是否充足，返回详细原因"""
         quota_remain = user.quota - user.quota_used
 
@@ -315,7 +316,7 @@ class ProxyService:
         self,
         model_id: str,
         user: User,
-        api_key: ApiKey
+        api_key: Optional[ApiKey]
     ) -> Optional[Tuple[Channel, str, str]]:
         """
         选择最佳渠道。
@@ -369,7 +370,7 @@ class ProxyService:
         self,
         model_id: str,
         user: User,
-        api_key: ApiKey
+        api_key: Optional[ApiKey]
     ) -> List[Tuple[Channel, ModelChannel, str]]:
         """
         获取所有候选渠道（用于 failover）。
@@ -493,7 +494,7 @@ class ProxyService:
         self,
         model_id: str,
         user: User,
-        api_key: ApiKey,
+        api_key: Optional[ApiKey],
         request_data: Dict[str, Any],
         request_id: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -503,18 +504,19 @@ class ProxyService:
         - 4xx (非429): 继续下一 channel
         - 5xx/429/超时: 触发 key/cooldown，继续下一 channel
         """
-        self.capture_usage_attribution(api_key.key_id)
+        key_id = api_key.key_id if api_key else None
+        self.capture_usage_attribution(key_id)
         candidates = self.select_candidates(model_id, user, api_key)
         candidate_ids = [ch.channel_id for ch, _, _ in candidates]
         retry_path = []
         
         if not candidates:
             if request_id:
-                self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                self.record_route_decision(request_id, user.user_id, key_id, model_id,
                                            [], {}, None, [], 502, False, "无可用渠道")
             self._record_usage_failure(
                 user_id=user.user_id,
-                key_id=api_key.key_id,
+                key_id=key_id,
                 channel_id=None,
                 model=model_id,
                 status_code=502,
@@ -537,10 +539,11 @@ class ProxyService:
                 
                 if result["success"]:
                     if request_id:
-                        self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                        self.record_route_decision(request_id, user.user_id, key_id, model_id,
                                                    candidate_ids, self._route_skip_reasons(retry_path), ch.channel_id, retry_path,
                                                    result.get("status_code", 200), True)
-                    record_api_key_success(api_key)
+                    if api_key is not None:
+                        record_api_key_success(api_key)
                     # 如果不是第一个候选，说明走了降级
                     if ch.channel_id != candidates[0][0].channel_id:
                         self.bump_channel_failure(ch)
@@ -563,10 +566,10 @@ class ProxyService:
                     continue
                 
                 # 其它 4xx 同样需要留存失败归因。
-                self._record_usage_failure(user.user_id, api_key.key_id, ch.channel_id, model_id, status_code, result.get("error"))
+                self._record_usage_failure(user.user_id, key_id, ch.channel_id, model_id, status_code, result.get("error"))
                 result["usage_recorded"] = True
                 if request_id:
-                    self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                    self.record_route_decision(request_id, user.user_id, key_id, model_id,
                                                candidate_ids, self._route_skip_reasons(retry_path), ch.channel_id, retry_path,
                                                status_code, False, result.get("error"))
                 return result
@@ -580,7 +583,7 @@ class ProxyService:
         # 全部失败
         self._record_usage_failure(
             user_id=user.user_id,
-            key_id=api_key.key_id,
+            key_id=key_id,
             channel_id=attempted_channels[-1] if attempted_channels else None,
             model=model_id,
             status_code=last_err.get("status_code", 502) if last_err else 502,
@@ -588,7 +591,7 @@ class ProxyService:
         )
         if request_id:
             self.record_route_decision(
-                request_id, user.user_id, api_key.key_id, model_id, candidate_ids, self._route_skip_reasons(retry_path),
+                request_id, user.user_id, key_id, model_id, candidate_ids, self._route_skip_reasons(retry_path),
                 attempted_channels[-1] if attempted_channels else None, retry_path,
                 last_err.get("status_code", 502) if last_err else 502, False,
                 last_err.get("error") if last_err else "未知错误",
@@ -682,7 +685,7 @@ class ProxyService:
         self,
         model_id: str,
         user: User,
-        api_key: ApiKey,
+        api_key: Optional[ApiKey],
         request_data: Dict[str, Any],
         request_id: Optional[str] = None,
     ):
@@ -690,17 +693,18 @@ class ProxyService:
         流式转发（不做 failover）。
         返回一个生成器，yield SSE chunks。
         """
-        self.capture_usage_attribution(api_key.key_id)
+        key_id = api_key.key_id if api_key else None
+        self.capture_usage_attribution(key_id)
         result = self.select_channel(model_id, user, api_key)
 
         self.stream_metadata = {"channel_id": None, "status_code": 502, "error": "无可用渠道", "recorded": False}
         if not result:
             if request_id:
-                self.record_route_decision(request_id, user.user_id, api_key.key_id, model_id,
+                self.record_route_decision(request_id, user.user_id, key_id, model_id,
                                            [], {}, None, [], 502, False, "无可用渠道")
             self._record_usage_failure(
                 user_id=user.user_id,
-                key_id=api_key.key_id,
+                key_id=key_id,
                 channel_id=None,
                 model=model_id,
                 status_code=502,
@@ -726,7 +730,7 @@ class ProxyService:
         headers['Content-Type'] = 'application/json'
         if '/chat/completions' in upstream_url:
             request_data['stream_options'] = {'include_usage': True}
-        key_snapshot = SimpleNamespace(key_id=api_key.key_id, api_key=api_key.api_key)
+        key_snapshot = SimpleNamespace(key_id=api_key.key_id, api_key=api_key.api_key) if api_key else None
         if self.reservation_id:
             self.db.commit()  # 先取完标量快照，流式读取和续期不占两条连接。
 
@@ -757,7 +761,8 @@ class ProxyService:
                             yield "data: [DONE]\n\n"
                             return
 
-                        record_api_key_success(key_snapshot)
+                        if key_snapshot is not None:
+                            record_api_key_success(key_snapshot)
                         for upstream_line in response.iter_lines():
                             if upstream_line.startswith('data:'):
                                 try:
@@ -805,7 +810,7 @@ class ProxyService:
                 self.stream_metadata["latency_ms"] = int((time.time() - start_time) * 1000)
                 if request_id:
                     self.record_route_decision(
-                        request_id, user.user_id, api_key.key_id, model_id, [ch.channel_id], {},
+                        request_id, user.user_id, key_id, model_id, [ch.channel_id], {},
                         ch.channel_id, [], self.stream_metadata.get("status_code", 502),
                         self.stream_metadata.get("status_code") == 200 and self.stream_metadata.get("completed"),
                         self.stream_metadata.get("error"),
@@ -813,8 +818,23 @@ class ProxyService:
 
         return generate()
 
-    def capture_usage_attribution(self, key_id: str):
+    def capture_chat_attribution(self, user):
+        """网页请求只保存当前所属部门，不借用项目或 API Key。"""
+        department = self.db.get(Department, user.department_id) if user.department_id else None
+        if not department or department.status != 'active':
+            from fastapi import HTTPException
+            raise HTTPException(403, '所属部门未分配或已停用，请联系管理员分配可用部门')
+        self.usage_attribution[None] = {
+            'project_id': None,
+            'department_id': department.dept_id,
+            'content_audit_enabled': bool(department.content_audit_enabled),
+        }
+        return self.usage_attribution[None]
+
+    def capture_usage_attribution(self, key_id: Optional[str]):
         """保存请求开始时的归属，防止调用期间编辑 Key 改写历史。"""
+        if key_id is None and key_id not in self.usage_attribution:
+            raise ValueError('网页调用缺少部门归属快照')
         if key_id not in self.usage_attribution:
             key = self.db.query(ApiKey).filter(ApiKey.key_id == key_id).first()
             project_id = key.project_id if key and key.project_id else DEFAULT_PROJECT_ID
@@ -847,7 +867,7 @@ class ProxyService:
         self.db.commit()
 
     def record_usage(
-        self, user_id: str, key_id: str, channel_id: Optional[str], model: str,
+        self, user_id: str, key_id: Optional[str], channel_id: Optional[str], model: str,
         tokens: Dict[str, int], latency_ms: int, status_code: int,
         error_message: Optional[str] = None,
         attribution: Optional[Dict[str, str]] = None,
@@ -979,7 +999,7 @@ class ProxyService:
     async def deduct_quota(
         self,
         user: User,
-        api_key: ApiKey,
+        api_key: Optional[ApiKey],
         tokens: Dict[str, int]
     ) -> None:
         """扣减额度"""
@@ -991,7 +1011,8 @@ class ProxyService:
         else:
             from sqlalchemy import update
             self.db.execute(update(User).where(User.user_id == user.user_id).values(quota_used=User.quota_used + total_tokens))
-            self.db.execute(update(ApiKey).where(ApiKey.key_id == api_key.key_id).values(last_used_at=datetime.now()))
+            if api_key is not None:
+                self.db.execute(update(ApiKey).where(ApiKey.key_id == api_key.key_id).values(last_used_at=datetime.now()))
             self.db.commit()
         user = self.db.query(User).filter(User.user_id == user.user_id).populate_existing().one()
         

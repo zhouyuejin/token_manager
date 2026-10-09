@@ -60,6 +60,9 @@ export interface UserInfo {
   username: string
   nickname?: string | null
   avatar_url?: string | null
+  department_id?: string | null
+  department_name?: string | null
+  department_status?: string | null
   email: string
   role: string
   status: string

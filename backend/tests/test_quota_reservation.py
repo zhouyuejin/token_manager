@@ -115,7 +115,12 @@ def test_all_entrypoints_reserve_and_finish(db, account, SessionLocal, monkeypat
     monkeypatch.setattr(ProxyService, 'check_model_group_access', lambda *args: {'allowed': True})
     monkeypatch.setattr(ProxyService, 'select_channel', lambda *args: (channel, 'upstream', 'fake'))
     monkeypatch.setattr(ProxyService, 'select_candidates', lambda *args: [(channel, type('MC', (), {'upstream_model': 'upstream'})(), 'fake')])
-    monkeypatch.setattr(chat_module, 'get_user_api_key', lambda *args: key)
+    if chat:
+        from app.models.organization import Department
+        db.add(Department(dept_id='dept_chat', name='Chat department'))
+        db.flush()
+        user.department_id = 'dept_chat'
+        db.commit()
     monkeypatch.setattr(database, 'SessionLocal', SessionLocal)
     observed = []
     occupied = []
@@ -313,6 +318,12 @@ def test_migration_on_mysql(db):
         budget_spec.loader.exec_module(budget_migration)
         budget_migration.op = Operations(MigrationContext.configure(conn))
         budget_migration.upgrade()
+        # 恢复当前网页对话允许无 Key 的账本结构。
+        chat_spec = importlib.util.spec_from_file_location('department_chat_mysql_migration', path.parent / '20261009_1000_department_chat.py')
+        chat_migration = importlib.util.module_from_spec(chat_spec)
+        chat_spec.loader.exec_module(chat_migration)
+        chat_migration.op = Operations(MigrationContext.configure(conn))
+        chat_migration.upgrade()
 
 
 @pytest.mark.parametrize('admin', [False, True])

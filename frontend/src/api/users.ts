@@ -5,6 +5,8 @@ export interface User {
   user_id: string
   username: string
   nickname?: string | null
+  department_id?: string | null
+  department_name?: string | null
   email: string
   role: string
   status: string
@@ -22,6 +24,7 @@ export interface User {
 export interface CreateUserParams {
   username: string
   nickname?: string | null
+  department_id?: string | null
   email: string
   password: string
   role?: string
@@ -60,6 +63,7 @@ export async function createUser(data: CreateUserParams): Promise<void> {
 
 export const updateUser = (userId: string, data: {
   nickname?: string | null
+  department_id?: string | null
   username?: string
   email?: string
   quota?: number

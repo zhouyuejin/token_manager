@@ -26,6 +26,7 @@ export interface DepartmentUsageStats {
   success_rate: number
   by_day: DepartmentDailyUsage[]
   by_project: DepartmentProjectUsage[]
+  web_chat: { tokens: number; requests: number; cost: number }
 }
 
 export const getDepartmentUsageStats = (params: DepartmentUsageStatsParams) =>

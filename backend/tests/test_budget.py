@@ -360,14 +360,16 @@ def test_budget_block_reaches_all_four_entrypoints(db, scope, monkeypatch, chat,
     from app.api.v1 import proxy, chat as chat_module
     from app.models.chat import ChatConversation
     from app.services.proxy_service import ProxyService
-    add_budget(db, amount='0.05')
+    add_budget(db, scope_type='department' if chat else 'project', amount='0.05')
     key = ApiKey(key_id='owner', user_id='owner', api_key='owner', key_name='test', project_id='p')
     db.add(key)
     db.add(ChatConversation(conversation_id='conv', user_id='owner', model_id='priced'))
     db.commit()
     user = db.query(User).filter_by(user_id='owner').one()
     monkeypatch.setattr(ProxyService, 'check_model_group_access', lambda *args: {'allowed': True})
-    monkeypatch.setattr(chat_module, 'get_user_api_key', lambda *args: key)
+    if chat:
+        user.department_id = 'd'
+        db.commit()
     app = FastAPI()
     app.include_router(chat_module.router if chat else proxy.router, prefix='/api')
     app.dependency_overrides[get_db] = lambda: db

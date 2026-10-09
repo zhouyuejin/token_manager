@@ -142,6 +142,7 @@ def test_usage_stats_returns_empty_totals_without_owned_departments(ctx):
     assert response.json() == {
         'total_tokens': 0, 'total_requests': 0, 'total_cost': 0,
         'success_rate': 100, 'by_day': [], 'by_project': [],
+        'web_chat': {'tokens': 0, 'requests': 0, 'cost': 0},
     }
 
 

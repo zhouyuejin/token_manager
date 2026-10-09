@@ -1,3 +1,4 @@
+import { modelDisplayName } from '../utils/modelDisplayName.mjs'
 import { userDisplayName } from '../utils/userDisplayName.mjs'
 import { formatTokenCount } from '../utils/formatTokenCount.mjs'
 import { useState, useEffect, useMemo } from 'react'
@@ -129,15 +130,6 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setExporting(false)
     }
-  }
-
-  // 获取模型显示名称
-  const getModelDisplayName = (model: string, displayName?: string) => {
-    const name = displayName || model
-    const channelType = channelsData?.items.find(channel =>
-      model.startsWith(`${channel.type}-`) && name.startsWith(`${channel.type}-`)
-    )?.type
-    return channelType ? name.slice(channelType.length + 1) : name
   }
 
   // ========== 用户分布横向条形图配置（Top N + 其他折叠） ==========
@@ -414,7 +406,7 @@ const AdminDashboard: React.FC = () => {
 
     // 按 token 数降序排列，便于一眼看出主力模型
     const sortedModels = [...stats.by_model].sort((a, b) => b.tokens - a.tokens)
-    const names = sortedModels.map(m => getModelDisplayName(m.model, m.display_name))
+    const names = sortedModels.map(m => modelDisplayName(m.model, m.display_name))
     const tokens = sortedModels.map(m => m.tokens || 0)
 
     return {
@@ -484,7 +476,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats, isDark, token, channelsData])
+  }, [stats, isDark, token])
 
   // ========== 成本统计配置 ==========
   const maxCost = stats?.by_model?.reduce((max, item) => 
@@ -495,7 +487,7 @@ const AdminDashboard: React.FC = () => {
     if (!stats?.by_model?.length) return null
     
     const sortedModels = [...stats.by_model].sort((a, b) => b.cost - a.cost)
-    const names = sortedModels.map(m => getModelDisplayName(m.model, m.display_name))
+    const names = sortedModels.map(m => modelDisplayName(m.model, m.display_name))
     const costs = sortedModels.map(m => m.cost || 0)
 
     return {
@@ -567,7 +559,7 @@ const AdminDashboard: React.FC = () => {
         }
       ]
     }
-  }, [stats, isDark, token, channelsData])
+  }, [stats, isDark, token])
 
   return (
     <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100vh' }}>
@@ -589,7 +581,7 @@ const AdminDashboard: React.FC = () => {
         </>}
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部用户" value={userId} onChange={value => { setUserId(value); setKeyId(undefined) }} style={{ width: 140 }} options={(usersData?.items || []).map(row => ({ value: row.user_id, label: userDisplayName(row) }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部 Key" value={keyId} onChange={setKeyId} style={{ width: 160 }} options={(keysData?.items || []).filter(row => (!userId || row.user_id === userId) && (!projectId || row.project_id === projectId)).map(row => ({ value: row.key_id, label: row.name || row.key_id }))} />
-        <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: getModelDisplayName(row.model, row.display_name) }))} />
+        <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: modelDisplayName(row.model, row.display_name) }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部渠道" value={channelId} onChange={setChannelId} style={{ width: 140 }} options={(channelsData?.items || []).map(row => ({ value: row.channel_id, label: row.name }))} />
         <RangePicker
           value={dateRange as any}

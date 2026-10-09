@@ -124,6 +124,13 @@ const DepartmentDashboard = () => {
             <ReactECharts option={projectOption} style={{ height: 320 }} />
           </Card></Col>
         </Row>
+        <Card title="网页 AI 对话（日常使用）" style={{ marginBottom: 16 }}>
+          <Row gutter={16}>
+            <Col span={8}><Statistic title="请求数" value={data?.web_chat?.requests || 0} /></Col>
+            <Col span={8}><Statistic title="Token" value={data?.web_chat?.tokens || 0} /></Col>
+            <Col span={8}><Statistic title="费用（USD）" value={data?.web_chat?.cost || 0} precision={8} /></Col>
+          </Row>
+        </Card>
         <Card title="项目用量明细" loading={isLoading}>
           <Table
             rowKey="project_id"

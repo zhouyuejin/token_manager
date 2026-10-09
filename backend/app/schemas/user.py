@@ -66,6 +66,9 @@ class UserInfo(BaseModel):
     username: str
     nickname: Nickname = None
     avatar_url: Optional[str] = None
+    department_id: Optional[str] = None
+    department_name: Optional[str] = None
+    department_status: Optional[str] = None
     email: str
     role: str
     status: str

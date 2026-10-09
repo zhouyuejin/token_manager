@@ -14,7 +14,7 @@ class UsageLog(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     log_id = Column(String(50), unique=True, nullable=False, index=True, comment="日志ID")
     user_id = Column(String(32), nullable=False, index=True, comment="用户ID")
-    key_id = Column(String(32), nullable=False, index=True, comment="API Key ID")
+    key_id = Column(String(32), nullable=True, index=True, comment="API Key ID")
     channel_id = Column(String(32), nullable=True, index=True, comment="渠道ID")
     model = Column(String(50), nullable=False, index=True, comment="模型ID")
     api_type = Column(String(32), nullable=False, default="chat", server_default="chat", comment="代理接口类型")

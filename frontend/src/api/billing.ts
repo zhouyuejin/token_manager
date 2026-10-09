@@ -27,7 +27,7 @@ export interface Reservation {
   user_id?: string
   username?: string | null
   nickname?: string | null
-  key_id: string
+  key_id: string | null
   project_id?: string | null
   department_id?: string | null
   model: string

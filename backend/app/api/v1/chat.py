@@ -2,6 +2,7 @@
 Chat API - 对话管理接口
 """
 import json
+import math
 import secrets
 from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -11,10 +12,11 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.user import User
-from app.models.api_key import ApiKey, ApiKeyStatus
 from app.models.chat import ChatConversation, ChatMessage, MessageRole
 from app.dependencies import get_current_user
 from app.services.proxy_service import create_proxy_service
+from app.services.quota_reservation_service import estimate_request
+from app.services.rate_limit_service import check_proxy_rate_limit, get_rate_limit_redis_client, release_proxy_concurrency
 
 router = APIRouter()
 
@@ -96,14 +98,6 @@ class ModelGroupInfo(BaseModel):
 
 class AvailableModelsResponse(BaseModel):
     groups: List[ModelGroupInfo]
-
-
-def get_user_api_key(db: Session, user_id: str) -> Optional[ApiKey]:
-    """获取用户的第一个有效API Key"""
-    return db.query(ApiKey).filter(
-        ApiKey.user_id == user_id,
-        ApiKey.status == ApiKeyStatus.active
-    ).first()
 
 
 def generate_conversation_title(first_message: str) -> str:
@@ -283,11 +277,9 @@ async def send_message(
     if not conv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
     
-    api_key = get_user_api_key(db, current_user.user_id)
-    if not api_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先创建API Key")
-    
+    api_key = None
     proxy_service = create_proxy_service(db)
+    proxy_service.capture_chat_attribution(current_user)
     model = data.model or conv.model_id
     if not model:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="没有可用的模型")
@@ -351,12 +343,23 @@ async def send_message(
     
     conv.model_id = model
     db.commit()
-    proxy_service.reserve_quota(current_user, api_key, model, request_data)
+    rate_limit_redis = get_rate_limit_redis_client()
+    limit = check_proxy_rate_limit(rate_limit_redis, None, current_user, model, sum(estimate_request(request_data)))
+    if not limit['allowed']:
+        raise HTTPException(429, limit.get('detail') or '请求过于频繁', headers={
+            'Retry-After': str(max(1, math.ceil(limit.get('retry_after_ms', 1000) / 1000)))})
+    concurrency_key = limit.get('concurrency_key')
+    try:
+        proxy_service.reserve_quota(current_user, None, model, request_data)
+    except BaseException:
+        release_proxy_concurrency(rate_limit_redis, concurrency_key)
+        raise
     
     if data.stream:
         return QuotaStreamingResponse(
             _stream_generator(proxy_service, request_data, conversation_id, user_msg.message_id, current_user, api_key, db, request.state.request_id),
-            db.get_bind(), proxy_service.reservation_id)
+            db.get_bind(), proxy_service.reservation_id,
+            on_close=lambda: release_proxy_concurrency(rate_limit_redis, concurrency_key))
     else:
         try:
             result = proxy_service.forward_with_failover(model, current_user, api_key, request_data, request_id=request.state.request_id)
@@ -370,14 +373,17 @@ async def send_message(
             tokens = proxy_service.calculate_tokens(request_data, result.get("data"))
             assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=model, tokens=tokens.get("total_tokens", 0))
             db.add(assistant_msg)
-            proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=result.get("channel_id"),
+            proxy_service.record_usage(user_id=current_user.user_id, key_id=None, channel_id=result.get("channel_id"),
                                        model=model, tokens=tokens, latency_ms=result.get("latency_ms", 0), status_code=result.get("status_code", 200),
                                        error_message=result.get("error"), request_content=request_data,
                                        response_content=result.get("data"))
             await proxy_service.deduct_quota(current_user, api_key, tokens)
             return ChatSendMessageResponse(conversation_id=conversation_id, message_id=assistant_msg.message_id, role="assistant", content=content, model=model, tokens=tokens.get("total_tokens", 0))
         finally:
-            proxy_service.release_reservation()
+            try:
+                proxy_service.release_reservation()
+            finally:
+                release_proxy_concurrency(rate_limit_redis, concurrency_key)
 
 
 async def _stream_generator(proxy_service, request_data, conversation_id, user_msg_id, current_user, api_key, db, request_id=None):
@@ -406,14 +412,14 @@ async def _stream_generator(proxy_service, request_data, conversation_id, user_m
         if metadata.get("status_code") != 200 or not metadata.get('completed'):
             if not metadata.get("recorded"):
                 code = metadata.get('status_code', 502)
-                proxy_service.record_usage(current_user.user_id, api_key.key_id, metadata.get("channel_id"), model_id, {}, metadata.get("latency_ms", 0), 499 if code == 200 else code, metadata.get("error") or '流式请求未完成', request_content=request_data)
+                proxy_service.record_usage(current_user.user_id, None, metadata.get("channel_id"), model_id, {}, metadata.get("latency_ms", 0), 499 if code == 200 else code, metadata.get("error") or '流式请求未完成', request_content=request_data)
                 db.commit()
             yield 'data: [DONE]\n\n'
             return
         assistant_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.assistant.value, content=content, model=model_id, tokens=len(content) // 4)
         db.add(assistant_msg)
         tokens = metadata.get("tokens") or proxy_service.calculate_tokens(request_data, {"choices": [{"message": {"content": content}}]})
-        proxy_service.record_usage(user_id=current_user.user_id, key_id=api_key.key_id, channel_id=metadata.get("channel_id"), model=model_id,
+        proxy_service.record_usage(user_id=current_user.user_id, key_id=None, channel_id=metadata.get("channel_id"), model=model_id,
                                    tokens=tokens, latency_ms=metadata.get("latency_ms", 0), status_code=200, error_message=None,
                                    request_content=request_data,
                                    response_content={"choices": [{"message": {"content": content}}]})

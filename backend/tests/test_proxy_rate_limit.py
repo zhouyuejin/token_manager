@@ -230,3 +230,15 @@ def test_rejects_negative_rate_limit_config():
 
     with pytest.raises(ValidationError):
         AdminUserUpdate(concurrency_limit=-1)
+
+
+def test_web_chat_uses_user_limits_without_key():
+    redis = FakeRedis()
+    user = _user(qps_limit=1, concurrency_limit=2)
+    first = check_proxy_rate_limit(redis, None, user, 'gpt', 1, now=1000.1)
+    assert first['allowed'] is True
+    second = check_proxy_rate_limit(redis, None, user, 'other-model', 1, now=1000.2)
+    assert second['allowed'] is False
+    assert second['reason'] == 'user_qps_limit'
+    release_proxy_concurrency(redis, first['concurrency_key'])
+    assert redis.values['rl:concurrency:user:usr_1'] == 0

@@ -66,7 +66,7 @@ class QuotaReservationService:
     def reserve(self, user, key, model_id, request_data, attribution):
         prompt, output = estimate_request(request_data)
         amount = prompt + output
-        uid, kid = user.user_id, key.key_id
+        uid, kid = user.user_id, key.key_id if key else None
         # 结束鉴权/归因只读事务；组织锁取得后才建立新快照，避免旧快照漏掉并发预扣。
         self.db.rollback()
         try:
@@ -132,7 +132,8 @@ class QuotaReservationService:
             row.budget_accounted = True
             row.updated_at = datetime.utcnow()
             self.db.execute(update(User).where(User.user_id == user.user_id).values(quota_used=User.quota_used + actual))
-            self.db.execute(update(ApiKey).where(ApiKey.key_id == row.key_id).values(last_used_at=datetime.utcnow()))
+            if row.key_id is not None:
+                self.db.execute(update(ApiKey).where(ApiKey.key_id == row.key_id).values(last_used_at=datetime.utcnow()))
             self.db.commit()
             return True
         except BaseException:
