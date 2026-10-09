@@ -15,11 +15,11 @@ export const maskKey = (key?: string | null) => {
 }
 
 export const getRequestErrorMessage = (data: any, fallback: string): string => {
-  if (typeof data === 'string') return data || fallback
-  if (typeof data?.detail === 'string') return data.detail || fallback
+  if (typeof data === 'string') return /insufficient balance \(1008\)/i.test(data) ? 'MiniMax 账户余额不足（错误码 1008），请检查账户余额' : data || fallback
+  if (typeof data?.detail === 'string') return getRequestErrorMessage(data.detail, fallback)
   if (Array.isArray(data?.detail)) {
     return data.detail.map((e: any) => `${(e?.loc || []).join('.')}: ${e?.msg || ''}`).join('; ') || fallback
   }
   if (data?.error) return getRequestErrorMessage(data.error, fallback)
-  return typeof data?.message === 'string' && data.message ? data.message : fallback
+  return typeof data?.message === 'string' ? getRequestErrorMessage(data.message, fallback) : fallback
 }

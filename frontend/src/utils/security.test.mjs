@@ -36,4 +36,6 @@ test('error feedback preserves backend security and stream error reasons', async
   }
   assert.equal(getRequestErrorMessage({ detail: [{ loc: ['body', 'name'], msg: '必填' }] }, '请求失败'), 'body.name: 必填')
   assert.equal(getRequestErrorMessage({}, '没有权限'), '没有权限')
+  assert.equal(getRequestErrorMessage({ error: 'insufficient balance (1008)' }, '请求失败'), 'MiniMax 账户余额不足（错误码 1008），请检查账户余额')
+  assert.equal(getRequestErrorMessage({ error: { message: 'insufficient balance (1008)' } }, '请求失败'), 'MiniMax 账户余额不足（错误码 1008），请检查账户余额')
 })

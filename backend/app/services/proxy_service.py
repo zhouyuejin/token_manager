@@ -34,6 +34,7 @@ from app.services.provider_adapters import get_provider_adapter
 from app.services.api_key_freeze_service import record_api_key_error, record_api_key_success
 from app.services.secret_crypto import decrypt_secret
 from app.services.content_privacy import content_summary, redact_sensitive_text
+from app.services.upstream_errors import format_upstream_error
 
 
 # 进程级 round_robin 计数器（重启归零）
@@ -598,7 +599,7 @@ class ProxyService:
             "usage_recorded": True,
             "channel_id": attempted_channels[-1] if attempted_channels else None,
             "status_code": last_err.get("status_code", 502) if last_err else 502,
-            "error": f"已尝试 {len(attempted_channels)} 个渠道，仍失败"
+            "error": f"已尝试 {len(attempted_channels)} 个渠道，仍失败：{last_err.get('error') if last_err else '未知错误'}"
         }
 
     def _forward_one(
@@ -643,16 +644,9 @@ class ProxyService:
                 else:
                     error_msg = f"HTTP {response.status_code}"
                     try:
-                        error_data = response.json()
-                        if isinstance(error_data, dict):
-                            error_msg = (
-                                error_data.get("error", {}).get("message") or
-                                error_data.get("message") or
-                                error_data.get("detail") or
-                                error_msg
-                            )
-                    except:
-                        pass
+                        error_msg = format_upstream_error(channel.type, response.status_code, response.json(), response.text)
+                    except ValueError:
+                        error_msg = format_upstream_error(channel.type, response.status_code, raw_text=response.text)
                     
                     # 记录成功（以便统计），但标记为非 200
                     return {
@@ -751,19 +745,15 @@ class ProxyService:
                             error_msg = f"HTTP {response.status_code}"
                             try:
                                 error_text = response.read().decode("utf-8")
-                                error_data = json.loads(error_text)
-                                error_msg = (
-                                    error_data.get("error", {}).get("message")
-                                    or error_data.get("message")
-                                    or error_data.get("detail")
-                                    or error_text[:300]
-                                    or error_msg
-                                )
-                            except Exception:
+                                try:
+                                    error_data = json.loads(error_text)
+                                except ValueError:
+                                    error_data = None
+                                error_msg = format_upstream_error(ch.type, response.status_code, error_data, error_text)
+                            except UnicodeDecodeError:
                                 pass
                             self.stream_metadata["error"] = error_msg
-                            safe_error = error_msg.replace("\\", "\\\\").replace('"', '\\"')
-                            yield f'data: {{"error": "{safe_error}"}}\n\n'
+                            yield 'data: ' + json.dumps({"error": error_msg}, ensure_ascii=False) + '\n\n'
                             yield "data: [DONE]\n\n"
                             return
 
