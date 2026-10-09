@@ -180,7 +180,7 @@ const ChannelsPage = () => {
     { 
       title: '状态', dataIndex: 'status', key: 'status', width: 100,
       render: (status: string) => (
-        <Tag color={status === 'active' ? 'green' : 'red'}>{status}</Tag>
+        <Tag color={status === 'active' ? 'green' : 'red'}>{({ active: '启用', disabled: '禁用' } as Record<string, string>)[status] || status}</Tag>
       )
     },
     { 
