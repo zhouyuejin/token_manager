@@ -3,9 +3,9 @@ import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
 import {
   Table, Button, Tag, Space, Modal, Form, Input, DatePicker, InputNumber,
-  Popconfirm, Segmented, Select, Drawer, Descriptions, Alert
+  Popconfirm, Segmented, Select, Drawer, Descriptions, Alert, Dropdown
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined, MoreOutlined } from '@ant-design/icons'
 import { createApiKey, deleteApiKey, updateApiKey, updateAdminApiKey, revokeApiKey, rotateApiKey, unfreezeApiKey, updateApiKeyStatus, ApiKey } from '../api/apiKeys'
 import { useAuthStore } from '../store/auth'
 import { useSwrData } from '../hooks/useSwr'
@@ -52,6 +52,7 @@ const ApiKeysPage = () => {
   const [form] = Form.useForm()
   const [editForm] = Form.useForm()
   const message = useMessage()
+  const [modal, modalContextHolder] = Modal.useModal()
   const { token, isDark } = useThemeToken()
 
   const fetchKeys = async () => {
@@ -316,7 +317,7 @@ const ApiKeysPage = () => {
     {
       title: '操作',
       key: 'action',
-      width: 320,
+      width: adminView && isAdmin ? 320 : 150,
       fixed: 'right' as const,
       render: (_: any, record: ApiKey) => adminView && isAdmin ? (
         <Space><Button type="text" onClick={() => handleEdit(record)}>编辑安全配置</Button>
@@ -337,33 +338,34 @@ const ApiKeysPage = () => {
           >
             编辑
           </Button>
-          <Popconfirm title={record.status === 'active' ? '确认禁用此 Key？' : '确认启用此 Key？'} onConfirm={() => handleStatusChange(record)}>
-            <Button type="text" disabled={!!record.frozen_at || getLifecycleStatus(record) === 'revoked'}>{record.status === 'active' ? '禁用' : '启用'}</Button>
-          </Popconfirm>
-          <Popconfirm
-            title="确认轮换此Key？旧密钥会立即失效。"
-            onConfirm={() => handleRotate(record.key_id)}
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                { key: 'status', label: record.status === 'active' ? '禁用' : '启用', disabled: !!record.frozen_at || getLifecycleStatus(record) === 'revoked' },
+                { key: 'rotate', label: '轮换', icon: <SyncOutlined />, disabled: !!record.frozen_at },
+                { type: 'divider' },
+                { key: 'revoke', label: '吊销', icon: <StopOutlined />, danger: true, disabled: getLifecycleStatus(record) === 'revoked' },
+                { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true },
+              ],
+              onClick: ({ key }) => {
+                const actions = {
+                  status: { title: record.status === 'active' ? '确认禁用此 Key？' : '确认启用此 Key？', onOk: () => handleStatusChange(record) },
+                  rotate: { title: '确认轮换此Key？旧密钥会立即失效。', onOk: () => handleRotate(record.key_id) },
+                  revoke: { title: '确认吊销此Key？吊销后不能再调用代理。', onOk: () => handleRevoke(record.key_id) },
+                  delete: { title: '确认删除此Key？', onOk: () => handleDelete(record.key_id) },
+                }
+                modal.confirm({
+                  ...actions[key as keyof typeof actions],
+                  okText: '确认',
+                  cancelText: '取消',
+                  okButtonProps: { danger: key === 'revoke' || key === 'delete' },
+                })
+              },
+            }}
           >
-            <Button type="text" disabled={!!record.frozen_at} icon={<SyncOutlined />} style={{ color: '#8B5CF6' }}>
-              轮换
-            </Button>
-          </Popconfirm>
-          <Popconfirm
-            title="确认吊销此Key？吊销后不能再调用代理。"
-            onConfirm={() => handleRevoke(record.key_id)}
-          >
-            <Button type="text" disabled={getLifecycleStatus(record) === 'revoked'} icon={<StopOutlined />} danger>
-              吊销
-            </Button>
-          </Popconfirm>
-          <Popconfirm
-            title="确认删除此Key？"
-            onConfirm={() => handleDelete(record.key_id)}
-          >
-            <Button type="text" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+            <Button type="text" icon={<MoreOutlined />} aria-label="更多操作">更多</Button>
+          </Dropdown>
         </Space>
       )
     }
@@ -371,6 +373,7 @@ const ApiKeysPage = () => {
 
   return (
     <div className="stagger-children">
+      {modalContextHolder}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
