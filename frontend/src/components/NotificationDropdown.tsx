@@ -92,14 +92,14 @@ export default function NotificationDropdown({
     }
   };
 
-  // 点击单条通知：关闭下拉，跳转 /notifications 并由页面解析 ?notif= 打开详情 drawer
+  // 点击单条通知：关闭下拉并跳转通知页
   const handleNotificationClick = (
     notif: Notification,
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
     setOpen(false);
-    navigate(`/notifications?notif=${notif.notif_id}`);
+    navigate("/notifications");
   };
 
   // 全部已读
