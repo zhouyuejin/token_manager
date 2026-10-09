@@ -1,6 +1,6 @@
 import { ExchangeRateStatus } from '../../components/ExchangeRateStatus'
 import { useState } from 'react'
-import { Alert, Button, Card, DatePicker, Descriptions, Drawer, Form, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Card, DatePicker, Descriptions, Drawer, Form, InputNumber, Modal, Select, Slider, Space, Switch, Table, Tag, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useNavigate } from 'react-router-dom'
 import { Budget, BudgetSave, ReconcileItem, ReconcileReport, ReconcileReportList, Reservation, runReconcile, saveBudget } from '../../api/billing'
@@ -55,7 +55,7 @@ const Billing = () => {
     setEditing(row)
     form.resetFields()
     form.setFieldsValue(row ? { ...row, amount_cny: String(row.amount_cny) } : {
-      scope_type: 'project', amount_cny: '0', thresholds: [80, 90, 100], policy: 'block', enabled: true
+      scope_type: 'project', amount_cny: '0', thresholds: 80, policy: 'block', enabled: true
     })
     setVisible(true)
   }
@@ -85,7 +85,7 @@ const Billing = () => {
     { title: '预扣中', dataIndex: 'reserved_cny', render: money },
     { title: '可用预算', dataIndex: 'remaining_cny', render: money },
     { title: '使用率', dataIndex: 'usage_percent', render: (value: number | null) => value == null ? '—' : `${Number(value).toFixed(2)}%` },
-    { title: '告警阈值', dataIndex: 'thresholds', render: (values: number[]) => values.map(t => `${t}%`).join(' / ') },
+    { title: '告警阈值', dataIndex: 'thresholds', render: (value: number) => `${value}%` },
     { title: '超预算策略', dataIndex: 'policy', render: (value: string) => value === 'block' ? '阻断' : '仅告警' },
     { title: '状态', dataIndex: 'enabled', render: (value: boolean) => <Tag color={value ? 'green' : 'default'}>{value ? '启用' : '停用'}</Tag> },
     { title: '操作', key: 'actions', width: 120, fixed: 'right' as const, render: (_: unknown, row: Budget) => <WriteOnly><Button onClick={() => open(row)}>配置</Button></WriteOnly> }
@@ -204,8 +204,8 @@ const Billing = () => {
         <Form.Item name="amount_cny" label="月预算（CNY）" rules={[{ required: true, message: '请输入月预算' }]}>
           <InputNumber stringMode min="0" precision={8} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name="thresholds" label="告警阈值" rules={[{ required: true, message: '请至少选择一个阈值' }]}>
-          <Select mode="multiple" options={Array.from({ length: 100 }, (_, i) => ({ value: i + 1, label: `${i + 1}%` }))} />
+        <Form.Item name="thresholds" label="告警阈值" getValueProps={(value: number | undefined) => ({ value: Array.isArray(value) ? value[0] ?? 80 : value ?? 80 })} rules={[{ required: true, message: '请选择告警阈值' }]}>
+          <Slider min={5} max={100} step={5} marks={{ 5: '5%', 50: '50%', 100: '100%' }} tooltip={{ formatter: value => `${value}%` }} />
         </Form.Item>
         <Form.Item name="policy" label="超预算策略" rules={[{ required: true }]}>
           <Select options={[{ value: 'block', label: '阻断' }, { value: 'alert', label: '仅告警' }]} />

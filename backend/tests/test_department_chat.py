@@ -177,11 +177,16 @@ def test_department_stats_include_web_usage(db, member):
 
 def test_my_billing_and_filters_include_department_without_keys(db, member):
     from app.api.v1.stats import get_my_billing, get_my_usage_options
+    from app.models.project import Project, UserProject
     db.add(Budget(budget_id='budget_chat', scope_type='department', scope_id='dept_chat',
+        month=current_month(), amount_cny=Decimal('10'), policy='block', enabled=True, thresholds=[]))
+    db.add(Project(project_id='project_chat', dept_id='dept_chat', name='网页对话项目'))
+    db.add(UserProject(user_id=member.user_id, project_id='project_chat'))
+    db.add(Budget(budget_id='project_budget_chat', scope_type='project', scope_id='project_chat',
         month=current_month(), amount_cny=Decimal('10'), policy='block', enabled=True, thresholds=[]))
     db.commit()
     billing = asyncio.run(get_my_billing(member, db))
-    assert [row['scope_id'] for row in billing['budgets']] == ['dept_chat']
+    assert {row['scope_id'] for row in billing['budgets']} == {'dept_chat', 'project_chat'}
     options = asyncio.run(get_my_usage_options(member, db))
     assert options['departments'] == [{'department_id': 'dept_chat', 'name': '日常使用'}]
 

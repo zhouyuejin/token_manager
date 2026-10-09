@@ -243,11 +243,11 @@ def billing_client(db, scope):
 
 
 def test_admin_can_configure_update_disable_and_view_budget(billing_client, db, scope):
-    payload = {'amount_cny': '0.05', 'thresholds': [100, 80], 'policy': 'block'}
+    payload = {'amount_cny': '0.05', 'thresholds': 80, 'policy': 'block'}
     response = billing_client.put('/billing/budgets/project/p/2026-09', json=payload)
     assert response.status_code == 200, response.text
     bid = response.json()['budget_id']
-    assert response.json()['thresholds'] == [80, 100]
+    assert response.json()['thresholds'] == 80
     response = billing_client.put('/billing/budgets/project/p/2026-09', json={**payload, 'enabled': False})
     assert response.json()['budget_id'] == bid
     assert billing_client.get('/billing/budgets', params={'month': '2026-09'}).json()['items'][0]['enabled'] is False
@@ -257,9 +257,9 @@ def test_admin_can_configure_update_disable_and_view_budget(billing_client, db, 
 @pytest.mark.parametrize('payload', [
     {'amount_cny': '-1'}, {'amount_cny': 'NaN'}, {'amount_cny': 'Infinity'},
     {'amount_cny': '0.000000001'}, {'amount_cny': '10000000000'},
-    {'amount_cny': '1', 'thresholds': []}, {'amount_cny': '1', 'thresholds': [80, 80]},
-    {'amount_cny': '1', 'thresholds': [0]}, {'amount_cny': '1', 'thresholds': [101]},
-    {'amount_cny': '1', 'thresholds': [True]}, {'amount_cny': '1', 'thresholds': [80.5]},
+    {'amount_cny': '1', 'thresholds': 0}, {'amount_cny': '1', 'thresholds': 101},
+    {'amount_cny': '1', 'thresholds': 83}, {'amount_cny': '1', 'thresholds': [80]},
+    {'amount_cny': '1', 'thresholds': True}, {'amount_cny': '1', 'thresholds': 80.5},
     {'amount_cny': '1', 'policy': 'unknown'}
 ])
 def test_invalid_budget_configuration_rejected(billing_client, payload):

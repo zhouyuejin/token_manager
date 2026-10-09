@@ -8,6 +8,7 @@ import { getApiKeys } from '../api/apiKeys'
 import { useSwrData } from '../hooks/useSwr'
 import { useAuthStore } from '../store/auth'
 import { MyBilling } from '../api/billing'
+import { UserInfo } from '../api/auth'
 import dayjs from 'dayjs'
 import ReactECharts from '../components/AsyncECharts'
 
@@ -30,9 +31,12 @@ const StatsPage = () => {
   const [model, setModel] = useState<string>()
   const [channelId, setChannelId] = useState<string>()
   const [apiType, setApiType] = useState<string>()
+  const [billingScopeId, setBillingScopeId] = useState<string>()
   // 额度数据（来自当前登录用户）
-  const quotaTotal: number = user?.quota ?? 0
-  const quotaUsed: number = Math.min(user?.quota_used ?? 0, quotaTotal)
+  const { data: currentUser } = useSwrData<UserInfo>('/users/me', { refreshInterval: 10000, revalidateOnFocus: true })
+  const quotaUser = currentUser || user
+  const quotaTotal: number = quotaUser?.quota ?? 0
+  const quotaUsed: number = Math.min(quotaUser?.quota_used ?? 0, quotaTotal)
   const quotaRemain: number = Math.max(0, quotaTotal - quotaUsed)
   const quotaPercent: number =
     quotaTotal > 0 ? Math.min(100, (quotaUsed / quotaTotal) * 100) : 0
@@ -110,6 +114,35 @@ const StatsPage = () => {
   const { data: billing, error: billingError } = useSwrData<MyBilling>('/stats/billing', { refreshInterval: 30000 })
   const { data: options } = useSwrData<any>('/stats/options')
 
+  const billingRows = [
+    ...(billing?.budgets || []).map(row => ({
+      id: row.budget_id, label: `${row.scope_type === 'project' ? '项目' : '部门'} · ${row.scope_name}`,
+      used: Number(row.used_cny), reserved: Number(row.reserved_cny),
+      remaining: Math.max(0, Number(row.remaining_cny)), amount: Number(row.amount_cny),
+    })),
+    ...(billing?.departments || []).filter(dept => !(billing.budgets || []).some(
+      row => row.scope_type === 'department' && row.scope_id === dept.department_id,
+    )).map(dept => ({
+      id: dept.department_id, label: `部门 · ${dept.scope_name}`,
+      used: Number(dept.used_cny), reserved: Number(dept.reserved_cny), remaining: 0, amount: 0,
+    })),
+  ]
+  const selectedBillingRow = billingRows.find(row => row.id === billingScopeId) || billingRows[0]
+  const billingRoseOption = {
+    tooltip: { trigger: 'item', formatter: (item: any) => {
+      const row = billingRows[item.dataIndex]
+      return `${row.label}<br/>实际消费：¥${row.used.toFixed(8)}<br/>预扣中：¥${row.reserved.toFixed(8)}<br/>${row.amount ? `剩余预算：¥${row.remaining.toFixed(8)} / ¥${row.amount.toFixed(8)}` : '未配置预算'}`
+    } },
+    legend: { type: 'scroll', orient: 'vertical', right: 12, top: 20, bottom: 20, width: '36%', textStyle: { color: token.colorText } },
+    series: [{
+      type: 'pie', roseType: 'radius', radius: ['12%', '72%'], center: ['38%', '50%'],
+      label: { show: false }, itemStyle: { borderColor: token.colorBgContainer, borderWidth: 2 },
+      data: billingRows.map((row, index) => ({
+        name: row.label, value: Math.max(row.used + row.reserved, row.amount * 0.01, 0.00000001),
+        itemStyle: { color: ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#06B6D4', '#EF4444'][index % 6] },
+      })),
+    }],
+  }
   useEffect(() => { setKeys(keysData?.items || []) }, [keysData])
 
   const fetchData = async () => {
@@ -415,15 +448,18 @@ const StatsPage = () => {
 
       {billingError && <Alert type="error" showIcon message="预算与预扣信息加载失败" style={{ marginBottom: 20 }} />}
       <Card title={`${billing?.month || ''} 预算与预扣`} style={{ marginBottom: 24 }}>
-        <Table rowKey="budget_id" size="small" pagination={false} dataSource={billing?.budgets || []} locale={{ emptyText: '当前 Key 归属项目未配置预算' }} columns={[
-          { title: '维度', dataIndex: 'scope_type', render: value => value === 'project' ? '项目' : '部门' },
-          { title: '名称', dataIndex: 'scope_name' },
-          { title: '实际消费', dataIndex: 'used_cny', render: value => `¥${Number(value).toFixed(8)}` },
-          { title: '预扣中', dataIndex: 'reserved_cny', render: value => `¥${Number(value).toFixed(8)}` },
-          { title: '剩余预算', dataIndex: 'remaining_cny', render: value => `¥${Number(value).toFixed(8)}` },
-          { title: '使用率', dataIndex: 'usage_percent', render: value => value == null ? '—' : `${Number(value).toFixed(2)}%` },
-          { title: '策略', dataIndex: 'policy', render: value => value === 'block' ? '超额阻断' : '仅告警' },
-        ]} />
+        {selectedBillingRow ? <>
+          <ReactECharts option={billingRoseOption} style={{ height: 360 }} notMerge
+            onEvents={{ click: (item: any) => { const row = billingRows[item.dataIndex]; if (row) setBillingScopeId(row.id) } }} />
+          <div style={{ borderTop: `1px solid ${token.colorBorderSecondary}`, paddingTop: 12 }}>
+            <Space wrap size={[24, 8]}>
+              <b>{selectedBillingRow.label}</b>
+              <span style={{ color: '#3B82F6' }}>实际消费 ¥{selectedBillingRow.used.toFixed(8)}</span>
+              <span style={{ color: '#F59E0B' }}>预扣中 ¥{selectedBillingRow.reserved.toFixed(8)}</span>
+              {selectedBillingRow.amount ? <span style={{ color: '#10B981' }}>剩余预算 ¥{selectedBillingRow.remaining.toFixed(8)} / ¥{selectedBillingRow.amount.toFixed(8)}</span> : <Tag>未配置预算</Tag>}
+            </Space>
+          </div>
+        </> : <div style={{ color: token.colorTextSecondary }}>暂无预算或部门消费数据</div>}
         {(billing?.reservations?.length || 0) > 0 && <Alert type="info" showIcon style={{ marginTop: 12 }} message={`当前有 ${billing!.reservations.length} 笔请求预扣中，合计 ¥${billing!.reservations.reduce((sum, row) => sum + Number(row.estimated_cost_cny), 0).toFixed(8)}`} description="请求完成后按实际用量结算；失败、断开或超时会释放预扣。" />}
       </Card>
 

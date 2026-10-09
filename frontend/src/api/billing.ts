@@ -2,7 +2,7 @@ import { get, post, put } from './request'
 
 export interface BudgetSave {
   amount_cny: string
-  thresholds: number[]
+  thresholds: number
   policy: 'block' | 'alert'
   enabled: boolean
 }
@@ -48,6 +48,7 @@ export interface Reservation {
 export interface MyBilling {
   month: string
   budgets: Pick<Budget, 'budget_id' | 'scope_type' | 'scope_id' | 'scope_name' | 'amount_cny' | 'policy' | 'used_cny' | 'reserved_cny' | 'remaining_cny' | 'usage_percent'>[]
+  departments: { department_id: string; scope_name: string; used_cny: number; reserved_cny: number; budget: null | Pick<Budget, 'amount_cny' | 'remaining_cny' | 'usage_percent' | 'policy'> }[]
   reservations: Reservation[]
 }
 

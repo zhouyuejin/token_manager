@@ -3,7 +3,7 @@ import secrets
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from decimal import Decimal
-from typing import Literal, List
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field, field_validator
@@ -44,19 +44,9 @@ def report_response(row):
 
 class BudgetSave(BaseModel):
     amount_cny: Decimal = Field(ge=0, max_digits=18, decimal_places=8)
-    thresholds: List[int] = Field(default_factory=lambda: [80, 90, 100], min_length=1, max_length=100)
+    thresholds: int = Field(default=80, ge=5, le=100, multiple_of=5)
     policy: Literal['alert', 'block'] = 'block'
     enabled: bool = True
-
-    @field_validator('thresholds', mode='before')
-    @classmethod
-    def valid_thresholds(cls, values):
-        if not isinstance(values, list) or any(type(t) is not int or not 1 <= t <= 100 for t in values):
-            raise ValueError('阈值必须为 1 到 100 的整数')
-        if len(set(values)) != len(values):
-            raise ValueError('阈值不能重复')
-        return sorted(values)
-
 
 def validate_month(month):
     try:
@@ -76,6 +66,7 @@ def response(db, row):
     scope = db.get(Project if row.scope_type == 'project' else Department, row.scope_id)
     return {**{field: getattr(row, field) for field in (
         'budget_id', 'scope_type', 'scope_id', 'month', 'amount_cny', 'thresholds', 'policy', 'enabled')},
+        'thresholds': row.thresholds[0] if row.thresholds else 80,
         'scope_name': scope.name if scope else row.scope_id, **service.summary(row)}
 
 
@@ -197,6 +188,8 @@ async def save_budget(scope_type: Literal['project', 'department'], scope_id: st
             row = Budget(budget_id=secrets.token_hex(16), scope_type=scope_type, scope_id=scope_id, month=month)
             db.add(row)
         for field, value in data.model_dump().items():
+            if field == 'thresholds':
+                value = [value]
             setattr(row, field, value)
         db.commit()
     except BaseException:

@@ -21,7 +21,7 @@ from app.models.quota_reservation import QuotaReservation
 from app.models.channel import Channel
 from app.dependencies import get_current_user
 from app.schemas.stats import UsageStatsResponse, ModelUsage, DailyUsage
-from app.services.budget_service import BudgetService, current_month
+from app.services.budget_service import BudgetService, current_month, month_bounds
 
 router = APIRouter()
 
@@ -175,12 +175,38 @@ async def get_my_billing(current_user: User = Depends(get_current_user), db: Ses
     names = {row.project_id: row.name for row in projects}
     names.update({row.dept_id: row.name for row in db.query(Department).filter(Department.dept_id.in_(department_ids)).all()})
     service = BudgetService(db)
+    department_usage = []
+    if department_ids:
+        month_start, month_end = month_bounds(month)
+        department_usage = db.query(UsageLog.department_id, func.sum(UsageLog.cost_cny)).filter(
+            UsageLog.department_id.in_(department_ids),
+            UsageLog.status_code == 200,
+            UsageLog.created_at >= month_start, UsageLog.created_at < month_end,
+        ).group_by(UsageLog.department_id).all()
+    usage_by_department = {dept_id: amount or 0 for dept_id, amount in department_usage}
+    department_names = {row.dept_id: row.name for row in db.query(Department).filter(
+        Department.dept_id.in_(department_ids)).all()} if department_ids else {}
+    department_budgets = {row.scope_id: row for row in budgets if row.scope_type == 'department'}
+    department_reservations = db.query(QuotaReservation.department_id,
+        func.sum(QuotaReservation.estimated_cost_cny)).filter(
+            QuotaReservation.department_id.in_(department_ids), QuotaReservation.status == 'reserved'
+        ).group_by(QuotaReservation.department_id).all() if department_ids else []
+    reserved_by_department = {dept_id: amount or 0 for dept_id, amount in department_reservations}
     reservations = db.query(QuotaReservation).filter_by(user_id=current_user.user_id, status='reserved').order_by(
         QuotaReservation.created_at.desc()).all()
     return {
         'month': month,
         'budgets': [{**{field: getattr(row, field) for field in ('budget_id', 'scope_type', 'scope_id', 'amount_cny', 'policy')},
                      'scope_name': names.get(row.scope_id, row.scope_id), **service.summary(row)} for row in budgets],
+        'departments': [{'department_id': dept_id, 'scope_name': department_names.get(dept_id, dept_id),
+                         'used_cny': usage_by_department.get(dept_id, 0),
+                         'reserved_cny': reserved_by_department.get(dept_id, 0),
+                         'budget': ({'amount_cny': department_budgets[dept_id].amount_cny,
+                                     'remaining_cny': service.summary(department_budgets[dept_id])['remaining_cny'],
+                                     'usage_percent': service.summary(department_budgets[dept_id])['usage_percent'],
+                                     'policy': department_budgets[dept_id].policy}
+                                    if dept_id in department_budgets else None)}
+                        for dept_id in department_ids],
         'reservations': [{field: getattr(row, field) for field in ('reservation_id', 'key_id', 'project_id', 'department_id', 'model',
                          'estimated_tokens', 'estimated_cost_cny', 'status', 'created_at', 'expires_at')} for row in reservations],
     }
