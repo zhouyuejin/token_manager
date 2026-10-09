@@ -61,18 +61,26 @@ class RouteHealthService:
         result = []
         for channel in channels:
             rows = self.db.query(UsageLog).filter(UsageLog.channel_id == channel.channel_id).all()
-            recent_failure = next((row for row in sorted(
-                rows, key=lambda row: row.created_at or datetime.min, reverse=True
-            ) if row.status_code != 200 and row.error_message), None)
+            ordered_rows = sorted(rows, key=lambda row: (row.created_at or datetime.min, row.id or 0), reverse=True)
+            recent_failure = next((row for row in ordered_rows if row.status_code != 200 and row.error_message), None)
+            billing_failure = None
+            for row in ordered_rows:
+                if row.status_code == 200:
+                    break
+                error = format_upstream_error(channel.type, row.status_code, raw_text=row.error_message or "")
+                if any(reason in error for reason in ("账户余额不足", "预付费余额已用完", "账单或支付信息异常")):
+                    billing_failure = error
+                    break
+            health_status = channel.health_status.value if hasattr(channel.health_status, "value") else str(channel.health_status)
             recent_error = format_upstream_error(channel.type, recent_failure.status_code, raw_text=recent_failure.error_message) if recent_failure else None
             result.append({
                 "channel_id": channel.channel_id,
                 "name": channel.name,
                 "status": channel.status.value if hasattr(channel.status, "value") else str(channel.status),
-                "health_status": channel.health_status.value if hasattr(channel.health_status, "value") else str(channel.health_status),
+                "health_status": "unhealthy" if billing_failure else health_status,
                 "last_check_at": channel.last_check_at,
                 "cooldown": self._cooldown(channel),
-                "recent_error": recent_error,
+                "recent_error": billing_failure or recent_error,
                 "windows": {name: self._window(rows, now - duration) for name, duration in self.WINDOWS.items()},
             })
         return result

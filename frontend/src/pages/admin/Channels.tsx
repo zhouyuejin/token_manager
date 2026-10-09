@@ -185,7 +185,8 @@ const ChannelsPage = () => {
     },
     { 
       title: '健康', dataIndex: 'health_status', key: 'health_status', width: 100,
-      render: (h: string) => {
+      render: (h: string, record: Channel) => {
+        h = healthMap[record.channel_id]?.health_status || h
         const colors = { healthy: 'green', degraded: 'orange', unhealthy: 'red' }
         return <Tag color={colors[h as keyof typeof colors] || 'default'}>{healthLabels[h] || h || '未知'}</Tag>
       }
@@ -200,7 +201,7 @@ const ChannelsPage = () => {
         const health = healthMap[record.channel_id]
         const channelUntil = health?.cooldown.channel_until
         const keyCount = health?.cooldown.keys.length || 0
-        if (!channelUntil && !keyCount) return <Tag color="green">正常</Tag>
+        if (!channelUntil && !keyCount) return <Tag color="green">未冷却</Tag>
         return <Space direction="vertical" size={0}>
           {channelUntil && <Tag title={new Date(channelUntil).toLocaleString()} color="orange">渠道剩余 {formatRemainTime(new Date(channelUntil).getTime() - now)}</Tag>}
           {keyCount > 0 && <span style={{ fontSize: 12, color: '#d97706' }}>{keyCount} 个 Key 冷却中</span>}

@@ -90,3 +90,31 @@ def test_recover_endpoint_writes_operation_log(db):
 
     log = db.query(OperationLog).filter_by(action="recover_cooldown", target_id=channel.channel_id).one()
     assert json.loads(log.detail) == {"channel_id": channel.channel_id, "channel_cooldown": True, "key_cooldowns": True}
+
+
+def test_balance_failure_overrides_probe_health_until_success(db):
+    channel = _channel(db)
+    channel.type = "minimax"
+    now = datetime.utcnow()
+    db.add(UsageLog(log_id="billing_failure", user_id="u", key_id="k",
+                    channel_id=channel.channel_id, model="m", status_code=500,
+                    error_message="insufficient balance (1008)",
+                    created_at=now - timedelta(hours=2)))
+    db.commit()
+    service = RouteHealthService(db)
+    assert service.get_channel_health(channel.channel_id)[0]["health_status"] == "unhealthy"
+
+    # A later unrelated failure and a successful connectivity probe do not prove recovery.
+    channel.health_status = ChannelHealthStatus.healthy
+    channel.last_check_at = now
+    db.add(UsageLog(log_id="later_timeout", user_id="u", key_id="k",
+                    channel_id=channel.channel_id, model="m", status_code=504,
+                    error_message="timeout", created_at=now - timedelta(minutes=1)))
+    db.commit()
+    assert service.get_channel_health(channel.channel_id)[0]["health_status"] == "unhealthy"
+
+    db.add(UsageLog(log_id="billing_recovered", user_id="u", key_id="k",
+                    channel_id=channel.channel_id, model="m", status_code=200,
+                    created_at=now))
+    db.commit()
+    assert service.get_channel_health(channel.channel_id)[0]["health_status"] == "healthy"
