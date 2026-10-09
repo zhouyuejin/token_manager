@@ -579,7 +579,6 @@ const ModelsPage = () => {
             { 
               title: '定价', 
               key: 'price',
-              width: 250,
               render: (_: any, record: ModelMapping) => (
                 <div style={{ color: '#F59E0B' }}>
                   <DollarOutlined style={{ marginRight: 4 }} />
