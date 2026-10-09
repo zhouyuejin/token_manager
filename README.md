@@ -22,6 +22,10 @@ API代理/网关服务，为公司内部提供统一访问大模型API的能力�
 | 监控 | Prometheus + Grafana |
 | 部署 | Docker + Docker Compose |
 
+## 用户使用手册
+
+普通用户操作、API 接入与管理员配置见[用户使用手册](用户使用手册.md)。
+
 ## 快速开始
 
 阿里云 ECS 镜像部署步骤见[ACR 部署操作手册](docs/阿里云ACR部署.md)。
