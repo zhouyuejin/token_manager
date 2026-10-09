@@ -66,7 +66,7 @@ def add_log(db, log_id, department_id, project_id, tokens, status=200, at='2026-
         log_id=log_id, user_id='user', key_id='key', channel_id='channel', model=model,
         department_id=department_id, project_id=project_id, total_tokens=tokens,
         prompt_tokens=prompt, completion_tokens=completion, status_code=status,
-        cost_usd=cost, created_at=datetime.fromisoformat(at),
+        cost_cny=cost, created_at=datetime.fromisoformat(at),
     ))
 
 
@@ -81,7 +81,7 @@ def test_usage_stats_aggregate_all_owned_departments_and_costs(ctx):
     db.add(Model(model_id='model', price_per_1k_input=Decimal('2'), price_per_1k_output=Decimal('4')))
     db.flush()
     add_log(db, 'saved', 'owned-a', 'project-a', 100, cost=Decimal('0.25'), at='2026-10-07 12:00:00')
-    add_log(db, 'legacy', 'owned-b', 'project-b', 50, status=503, prompt=100, completion=50, cost=None, at='2026-10-08 12:00:00')
+    add_log(db, 'legacy', 'owned-b', 'project-b', 50, status=503, prompt=100, completion=50, cost=Decimal('0.4'), at='2026-10-08 12:00:00')
     add_log(db, 'foreign-log', 'foreign', 'foreign-project', 999, cost=Decimal('9'))
     add_log(db, 'unattributed', None, None, 500, cost=Decimal('5'))
     db.commit()
@@ -140,7 +140,7 @@ def test_usage_stats_returns_empty_totals_without_owned_departments(ctx):
 
     assert response.status_code == 200
     assert response.json() == {
-        'total_tokens': 0, 'total_requests': 0, 'total_cost': 0,
+        'total_tokens': 0, 'total_requests': 0, 'total_cost': 0, 'currency': 'CNY',
         'success_rate': 100, 'by_day': [], 'by_project': [],
         'web_chat': {'tokens': 0, 'requests': 0, 'cost': 0},
     }

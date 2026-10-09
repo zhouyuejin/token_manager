@@ -419,7 +419,7 @@ const AdminDashboard: React.FC = () => {
           const item = params[0]
           return `<div style="font-family: 'Space Grotesk', sans-serif;">
             <div style="font-weight: 600; margin-bottom: 4px;">${item.name}</div>
-            <div>成本: $${item.value.toFixed(4)}</div>
+            <div>成本: ¥${item.value.toFixed(8)}</div>
           </div>`
         }
       },
@@ -444,13 +444,13 @@ const AdminDashboard: React.FC = () => {
       },
       yAxis: {
         type: 'value',
-        name: '成本 ($)',
+        name: '成本 (¥)',
         nameTextStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
         axisLine: { show: false },
         axisLabel: { 
           color: token.colorTextSecondary, 
           fontFamily: "'Space Grotesk', sans-serif",
-          formatter: (value: number) => `$${value.toFixed(3)}`
+          formatter: (value: number) => `¥${value.toFixed(8)}`
         },
         splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
       },
@@ -572,7 +572,7 @@ const AdminDashboard: React.FC = () => {
           >
             <Statistic
               title={
-                <Tooltip title="新日志使用调用时保存的费用，单位 USD。上游返回用量时按真实 Token 计费，否则使用估算用量；历史未保存费用的日志按当前价格估算。月度费用按当前查询速率折合。">
+                <Tooltip title="新日志使用调用时保存的费用，单位 CNY。上游返回用量时按真实 Token 计费，否则使用估算用量；美元来源价格按调用时保存的汇率换算，历史费用不会随汇率更新。月度费用按当前查询速率折合。">
                   <span style={{
                     color: 'rgba(148, 163, 184, 0.8)',
                     display: 'flex',
@@ -588,16 +588,16 @@ const AdminDashboard: React.FC = () => {
                         color: 'rgba(148, 163, 184, 0.7)',
                         fontFamily: "'JetBrains Mono', monospace",
                       }}>
-                        ≈ <span style={{ color: '#F59E0B', fontWeight: 600 }}>${monthlyCost.toFixed(2)}</span>/月
+                        ≈ <span style={{ color: '#F59E0B', fontWeight: 600 }}>¥{monthlyCost.toFixed(8)}</span>/月
                       </span>
                     )}
                   </span>
                 </Tooltip>
               }
               value={hasUsage ? totalCost : 0}
-              precision={4}
+              precision={8}
               valueStyle={{ color: '#F59E0B', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}
-              prefix={<DollarOutlined style={{ color: '#F59E0B' }} />}
+              prefix="¥"
               formatter={hasUsage ? undefined : () => '—'}
             />
           </Card>

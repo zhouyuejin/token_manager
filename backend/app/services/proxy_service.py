@@ -340,7 +340,7 @@ class ProxyService:
         since = datetime.now() - timedelta(hours=24)
         rows = self.db.query(
             UsageLog.channel_id,
-            func.avg(UsageLog.cost_usd),
+            func.avg(UsageLog.cost_cny),
             func.avg(UsageLog.latency_ms),
         ).filter(
             UsageLog.model == model_id,
@@ -859,10 +859,13 @@ class ProxyService:
             ).first()
         if not model:
             return Decimal('0')
-        if getattr(model.price_type, 'value', model.price_type) == 'request':
-            return Decimal(model.price_per_request or 0)
-        return (Decimal(tokens.get('prompt_tokens', 0)) * Decimal(model.price_per_1k_input or 0)
-                + Decimal(tokens.get('completion_tokens', 0)) * Decimal(model.price_per_1k_output or 0)) / 1000
+        from types import SimpleNamespace
+        from app.services.exchange_rate_service import price_snapshot
+        from app.services.quota_reservation_service import cost
+        self.cost_snapshot = price_snapshot(self.db, model.price_currency)
+        return cost(SimpleNamespace(price_type=getattr(model.price_type, 'value', model.price_type),
+            input_price=model.price_per_1k_input, output_price=model.price_per_1k_output,
+            request_price=model.price_per_request, **self.cost_snapshot), tokens)
 
     def _record_usage_failure(self, user_id, key_id, channel_id, model, status_code, error, api_type="chat"):
         """失败记录使用同一归因路径，费用为零。"""
@@ -880,13 +883,19 @@ class ProxyService:
     ) -> None:
         """记录归因和费用快照；字段不会随项目归属或价格变化重算。"""
         request_attribution = self.usage_attribution.get(key_id) or self.capture_usage_attribution(key_id)
-        usage_cost = self._usage_cost(model, channel_id, tokens, status_code)
+        snapshot = {}
         if self.reservation_id:
             from app.models.quota_reservation import QuotaReservation
             from app.services.quota_reservation_service import cost
             reservation = self.db.get(QuotaReservation, self.reservation_id)
             usage_cost = cost(reservation, tokens) if status_code == 200 else Decimal('0')
+            snapshot = {field: getattr(reservation, field) for field in ('price_currency', 'exchange_rate',
+                'exchange_rate_date', 'exchange_rate_source', 'conversion_kind')}
             attribution = {'project_id': reservation.project_id, 'department_id': reservation.department_id}
+        else:
+            self.cost_snapshot = {}
+            usage_cost = self._usage_cost(model, channel_id, tokens, status_code)
+            snapshot = self.cost_snapshot
         usage_attribution = attribution or self.capture_usage_attribution(key_id)
         audit_enabled = request_attribution.get("content_audit_enabled", False)
         usage_log = UsageLog(
@@ -895,7 +904,7 @@ class ProxyService:
             api_type=api_type,
             project_id=usage_attribution.get("project_id"),
             department_id=usage_attribution.get("department_id"),
-            cost_usd=usage_cost,
+            cost_cny=usage_cost, **snapshot,
             reservation_id=self.reservation_id,
             prompt_tokens=tokens.get("prompt_tokens", 0),
             completion_tokens=tokens.get("completion_tokens", 0),

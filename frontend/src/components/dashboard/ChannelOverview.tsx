@@ -32,7 +32,7 @@ const ChannelOverview = ({ usage, range, loading, usageError }: Props) => {
   const errorCount = channels.filter(row => stateOf(row).key === 'error').length
   const warningCount = channels.filter(row => stateOf(row).key === 'warning').length
   const top = topChannelUsage(usage, metric)
-  const formatValue = (value: number) => metric === 'cost' ? `$${Number(value).toFixed(4)}` : metric === 'tokens' ? formatTokenCount(value) : Number(value).toLocaleString()
+  const formatValue = (value: number) => metric === 'cost' ? `¥${Number(value).toFixed(8)}` : metric === 'tokens' ? formatTokenCount(value) : Number(value).toLocaleString()
   const openChannel = (id: string) => navigate(`/admin/health?channel_id=${encodeURIComponent(id)}`)
   const statusOption = {
     title: { text: String(channels.length), subtext: '已启用渠道', left: 'center', top: '33%', textStyle: { color: token.colorText, fontSize: 28 }, subtextStyle: { color: token.colorTextSecondary } },

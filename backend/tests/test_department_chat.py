@@ -132,7 +132,7 @@ def test_department_member_chats_without_key_or_project(db, member, chat_client,
     assert (row.key_id, row.project_id, row.department_id) == (None, None, 'dept_chat')
     assert (log.key_id, log.project_id, log.department_id) == (None, None, 'dept_chat')
     assert row.status == 'committed'
-    assert row.actual_cost_usd == log.cost_usd == Decimal('0.082')
+    assert row.actual_cost_cny == log.cost_cny == Decimal('0.082')
     assert db.query(User).filter_by(user_id=member.user_id).one().quota_used == 42
     assert '13800138000' not in log.request_summary
     assert db.query(ApiKey).count() == 0
@@ -155,7 +155,7 @@ def test_invalid_department_denies_upstream(db, member, chat_client, department)
 def test_department_budget_blocks_chat(db, member, chat_client):
     client, calls = chat_client
     db.add(Budget(budget_id='budget_chat', scope_type='department', scope_id='dept_chat',
-        month=current_month(), amount_usd=Decimal('0.001'), policy='block', enabled=True, thresholds=[]))
+        month=current_month(), amount_cny=Decimal('0.001'), policy='block', enabled=True, thresholds=[]))
     db.commit()
     response = send(client)
     assert response.status_code == 403, response.text
@@ -167,7 +167,7 @@ def test_department_stats_include_web_usage(db, member):
     from datetime import date
     db.get(Department, 'dept_chat').owner_user_id = member.user_id
     db.add(UsageLog(log_id='web', user_id=member.user_id, key_id=None, project_id=None,
-        department_id='dept_chat', model='priced', total_tokens=42, cost_usd=Decimal('0.082'), status_code=200))
+        department_id='dept_chat', model='priced', total_tokens=42, cost_cny=Decimal('0.082'), status_code=200))
     db.commit()
     result = asyncio.run(projects.get_department_usage_stats(date.today(), date.today(), 'dept_chat', member, db))
     assert result['total_requests'] == 1
@@ -178,7 +178,7 @@ def test_department_stats_include_web_usage(db, member):
 def test_my_billing_and_filters_include_department_without_keys(db, member):
     from app.api.v1.stats import get_my_billing, get_my_usage_options
     db.add(Budget(budget_id='budget_chat', scope_type='department', scope_id='dept_chat',
-        month=current_month(), amount_usd=Decimal('10'), policy='block', enabled=True, thresholds=[]))
+        month=current_month(), amount_cny=Decimal('10'), policy='block', enabled=True, thresholds=[]))
     db.commit()
     billing = asyncio.run(get_my_billing(member, db))
     assert [row['scope_id'] for row in billing['budgets']] == ['dept_chat']
@@ -197,7 +197,7 @@ def test_existing_project_key_never_controls_web_accounting(db, member, chat_cli
     db.add_all([UserProject(user_id=member.user_id, project_id='external_project'),
         ApiKey(key_id='external_key', user_id=member.user_id, api_key='tmk_external', key_name='External', project_id='external_project'),
         Budget(budget_id='blocked_project', scope_type='project', scope_id='external_project',
-            month=current_month(), amount_usd=0, policy='block', enabled=True, thresholds=[])])
+            month=current_month(), amount_cny=0, policy='block', enabled=True, thresholds=[])])
     db.commit()
     response = send(client, stream)
     assert response.status_code == 200, response.text
@@ -309,7 +309,7 @@ def test_admin_creates_user_in_department_and_profile_exposes_it(db, member):
 
 def test_export_labels_web_usage_without_project_or_key(db, member):
     db.add(UsageLog(log_id='web-export', user_id=member.user_id, key_id=None, project_id=None,
-        department_id='dept_chat', model='priced', total_tokens=42, cost_usd=Decimal('0.082'), status_code=200))
+        department_id='dept_chat', model='priced', total_tokens=42, cost_cny=Decimal('0.082'), status_code=200))
     db.commit()
     from datetime import datetime
     today = datetime.utcnow().strftime('%Y-%m-%d')

@@ -3,7 +3,7 @@
 """
 from datetime import datetime, timedelta
 from typing import Optional
-from sqlalchemy import case, func, and_
+from sqlalchemy import func, and_
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -78,9 +78,7 @@ async def get_usage_stats(
     model_stats = db.query(
         UsageLog.model,
         func.sum(UsageLog.total_tokens).label('tokens'),
-        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.prompt_tokens), else_=0)).label('prompt_tokens'),
-        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
-        func.sum(UsageLog.cost_usd).label('saved_cost'),
+        func.sum(UsageLog.cost_cny).label('saved_cost'),
         func.count(UsageLog.id).label('requests')
     ).filter(and_(*filters)).group_by(UsageLog.model).all()
     
@@ -106,9 +104,7 @@ async def get_usage_stats(
     if target_model_ids:
         model_mappings = db.query(
             ModelMapping.model_id, 
-            ModelMapping.display_name,
-            ModelMapping.price_per_1k_input,
-            ModelMapping.price_per_1k_output
+            ModelMapping.display_name
         ).filter(
             ModelMapping.model_id.in_(target_model_ids)
         ).all()
@@ -120,25 +116,13 @@ async def get_usage_stats(
         # 通过 upstream_model 找到对应的 model_id，再找到模型信息
         internal_model_id = stat.model if stat.model in model_info_map else upstream_to_model_id.get(stat.model)
         model_info = model_info_map.get(internal_model_id) if internal_model_id else None
-        # 计算成本：(输入token数/1000)*输入单价 + (输出token数/1000)*输出单价
-        if model_info:
-            input_price = float(model_info.price_per_1k_input) if model_info.price_per_1k_input is not None else 0
-            output_price = float(model_info.price_per_1k_output) if model_info.price_per_1k_output is not None else 0
-            prompt_tokens = float(stat.prompt_tokens) if stat.prompt_tokens else 0
-            completion_tokens = float(stat.completion_tokens) if stat.completion_tokens else 0
-            input_cost = prompt_tokens / 1000 * input_price
-            output_cost = completion_tokens / 1000 * output_price
-            cost = input_cost + output_cost
-        else:
-            cost = 0.0
-        
-        cost += float(stat.saved_cost or 0)
+        cost = float(stat.saved_cost or 0)
         total_cost += cost
         by_model.append(ModelUsage(
             model=(model_info.display_name or stat.model) if model_info else stat.model,
             tokens=stat.tokens or 0,
             requests=stat.requests,
-            cost=round(cost, 4)
+            cost=round(cost, 8)
         ))
     
     # 按日期统计
@@ -195,10 +179,10 @@ async def get_my_billing(current_user: User = Depends(get_current_user), db: Ses
         QuotaReservation.created_at.desc()).all()
     return {
         'month': month,
-        'budgets': [{**{field: getattr(row, field) for field in ('budget_id', 'scope_type', 'scope_id', 'amount_usd', 'policy')},
+        'budgets': [{**{field: getattr(row, field) for field in ('budget_id', 'scope_type', 'scope_id', 'amount_cny', 'policy')},
                      'scope_name': names.get(row.scope_id, row.scope_id), **service.summary(row)} for row in budgets],
         'reservations': [{field: getattr(row, field) for field in ('reservation_id', 'key_id', 'project_id', 'department_id', 'model',
-                         'estimated_tokens', 'estimated_cost_usd', 'status', 'created_at', 'expires_at')} for row in reservations],
+                         'estimated_tokens', 'estimated_cost_cny', 'status', 'created_at', 'expires_at')} for row in reservations],
     }
 
 

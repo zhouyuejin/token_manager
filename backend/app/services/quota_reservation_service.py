@@ -38,7 +38,9 @@ def cost(row, tokens):
     else:
         amount = (Decimal(tokens.get('prompt_tokens', 0)) * Decimal(row.input_price)
             + Decimal(tokens.get('completion_tokens', 0)) * Decimal(row.output_price)) / 1000
-    # 最小记账单位为 USD 1e-8；预扣、结算和日志采用一致的向上舍入。
+    if getattr(row, 'price_currency', 'CNY') == 'USD':
+        amount *= Decimal(row.exchange_rate)
+    # 最小记账单位为 CNY 1e-8；预扣、结算和日志采用一致的向上舍入。
     return amount.quantize(Decimal('0.00000001'), rounding=ROUND_CEILING)
 
 
@@ -82,15 +84,17 @@ class QuotaReservationService:
             model = self.db.query(Model).filter_by(model_id=model_id).first()
             if not model:
                 raise HTTPException(404, '模型不存在，无法预扣')
+            from app.services.exchange_rate_service import price_snapshot
+            snapshot = price_snapshot(self.db, model.price_currency)
             row = QuotaReservation(
                 reservation_id=secrets.token_hex(16), user_id=uid, key_id=kid, model=model_id,
-                **attribution, estimated_tokens=amount,
+                **attribution, **snapshot, estimated_tokens=amount,
                 price_type=getattr(model.price_type, 'value', model.price_type),
                 input_price=model.price_per_1k_input, output_price=model.price_per_1k_output,
                 request_price=model.price_per_request, status='reserved',
                 created_at=now, updated_at=now, expires_at=now + timedelta(seconds=LEASE_SECONDS))
-            row.estimated_cost_usd = cost(row, {'prompt_tokens': prompt, 'completion_tokens': output})
-            BudgetService(self.db).admit(budgets, row.estimated_cost_usd)
+            row.estimated_cost_cny = cost(row, {'prompt_tokens': prompt, 'completion_tokens': output})
+            BudgetService(self.db).admit(budgets, row.estimated_cost_cny)
             self.db.add(row)
             reservation_id = row.reservation_id
             self.db.commit()
@@ -125,8 +129,8 @@ class QuotaReservationService:
                              rid, row.estimated_tokens, actual)
                 raise HTTPException(502, '上游用量超过预扣上限，拒绝结算，请联系管理员检查模型配置')
             row.actual_tokens = actual
-            row.actual_cost_usd = cost(row, tokens)
-            if row.actual_cost_usd > row.estimated_cost_usd:
+            row.actual_cost_cny = cost(row, tokens)
+            if row.actual_cost_cny > row.estimated_cost_cny:
                 raise HTTPException(502, '上游费用超过预扣上限，拒绝结算，请联系管理员检查模型配置')
             row.status = 'committed'
             row.budget_accounted = True
@@ -148,7 +152,7 @@ class QuotaReservationService:
             if row and row.status == 'reserved' and (not expired or row.expires_at <= datetime.utcnow()):
                 row.status = 'expired' if expired else 'released'
                 row.actual_tokens = 0
-                row.actual_cost_usd = 0
+                row.actual_cost_cny = 0
                 row.updated_at = datetime.utcnow()
             self.db.commit()
         except BaseException:

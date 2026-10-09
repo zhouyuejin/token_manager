@@ -40,8 +40,8 @@ def test_select_candidates_uses_historical_cost_for_lowest_cost(db):
     model, first, second = _setup_routes(db, "lowest_cost")
     now = datetime.utcnow()
     db.add_all([
-        UsageLog(log_id="cost_a", user_id="u", key_id="k", channel_id=first.channel_id, model=model.model_id, status_code=200, latency_ms=100, cost_usd=2, created_at=now - timedelta(minutes=1)),
-        UsageLog(log_id="cost_b", user_id="u", key_id="k", channel_id=second.channel_id, model=model.model_id, status_code=200, latency_ms=100, cost_usd=1, created_at=now - timedelta(minutes=1)),
+        UsageLog(log_id="cost_a", user_id="u", key_id="k", channel_id=first.channel_id, model=model.model_id, status_code=200, latency_ms=100, cost_cny=2, created_at=now - timedelta(minutes=1)),
+        UsageLog(log_id="cost_b", user_id="u", key_id="k", channel_id=second.channel_id, model=model.model_id, status_code=200, latency_ms=100, cost_cny=1, created_at=now - timedelta(minutes=1)),
     ])
     db.commit()
 

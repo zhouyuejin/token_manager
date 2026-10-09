@@ -78,6 +78,7 @@ def _setup(model_id, usage_model, input_price, output_price, prompt=1000, comple
             channel_id="ch_1" if upstream else None, model=usage_model,
             prompt_tokens=prompt, completion_tokens=completion,
             total_tokens=prompt + completion, latency_ms=100, status_code=200,
+            cost_cny=(prompt * input_price + completion * output_price) / 1000 if usage_model == model_id or upstream == usage_model else 0,
             created_at=datetime.now(),
         ))
         db.commit()
@@ -150,7 +151,7 @@ def test_channel_usage_exposes_id_and_saved_cost():
     db = TestingSessionLocal()
     try:
         row = db.query(UsageLog).one()
-        row.cost_usd = 0.25
+        row.cost_cny = 0.25
         db.commit()
     finally:
         db.close()

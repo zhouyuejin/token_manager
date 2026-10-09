@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import dayjs, { Dayjs } from 'dayjs'
 import { Alert, Button, Card, Col, DatePicker, Empty, Row, Select, Space, Statistic, Table, Tooltip } from 'antd'
-import { ApiOutlined, BarChartOutlined, CheckCircleOutlined, DollarOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { ApiOutlined, BarChartOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import ReactECharts from '../../components/AsyncECharts'
 import { Department } from '../../api/projects'
 import {
@@ -108,7 +108,7 @@ const DepartmentDashboard = () => {
           <Statistic title="总请求数" value={data?.total_requests || 0} prefix={<ThunderboltOutlined />} />
         </Card></Col>
         <Col xs={24} sm={12} xl={6}><Card loading={isLoading}>
-          <Statistic title="费用（USD）" value={data?.total_cost || 0} precision={4} prefix={<DollarOutlined />} />
+          <Statistic title="费用（CNY）" value={data?.total_cost || 0} precision={8} prefix="¥" />
         </Card></Col>
         <Col xs={24} sm={12} xl={6}><Card loading={isLoading}>
           <Statistic title="成功率" value={data?.success_rate ?? 100} precision={2} suffix="%" prefix={<CheckCircleOutlined />} />
@@ -128,7 +128,7 @@ const DepartmentDashboard = () => {
           <Row gutter={16}>
             <Col span={8}><Statistic title="请求数" value={data?.web_chat?.requests || 0} /></Col>
             <Col span={8}><Statistic title="Token" value={data?.web_chat?.tokens || 0} /></Col>
-            <Col span={8}><Statistic title="费用（USD）" value={data?.web_chat?.cost || 0} precision={8} /></Col>
+            <Col span={8}><Statistic title="费用（CNY）" value={data?.web_chat?.cost || 0} precision={8} /></Col>
           </Row>
         </Card>
         <Card title="项目用量明细" loading={isLoading}>

@@ -43,7 +43,7 @@ def ctx():
     match = dict(
         user_id="alice", key_id="key-1", channel_id="channel-1", model="gpt-test",
         project_id="project-1", department_id="dept-1", prompt_tokens=70,
-        completion_tokens=30, total_tokens=100, cost_usd=Decimal("0.25000000"),
+        completion_tokens=30, total_tokens=100, cost_cny=Decimal("0.25000000"),
         latency_ms=20, status_code=200, created_at=datetime(2026, 9, 20, 8, 0),
     )
     db.add_all([
@@ -57,7 +57,7 @@ def ctx():
         UsageLog(
             log_id="other", user_id="admin", key_id="key-2", channel_id=None,
             model="other", prompt_tokens=10, completion_tokens=0, total_tokens=10,
-            cost_usd=Decimal("0.01000000"), latency_ms=30, status_code=500,
+            cost_cny=Decimal("0.01000000"), latency_ms=30, status_code=500,
             created_at=datetime(2026, 9, 20, 9, 0),
         ),
     ])
@@ -89,8 +89,8 @@ def test_report_export_reuses_all_stats_filters_and_totals(ctx):
     assert exported.headers["content-type"].startswith("text/csv")
     assert "attachment;" in exported.headers["content-disposition"]
     rows = list(csv.reader(io.StringIO(exported.content.decode("utf-8-sig"))))
-    assert rows[0] == ["时间", "部门", "项目", "用户", "API Key", "模型", "渠道", "输入Token", "输出Token", "总Token", "成本(USD)", "状态码"]
+    assert rows[0] == ["时间", "部门", "项目", "用户", "API Key", "模型", "渠道", "输入Token", "输出Token", "总Token", "成本(CNY)", "状态码", "原币种", "USD/CNY汇率", "汇率日期", "换算方式"]
     assert rows[1][0] == "2026-09-20 16:00:00"
     assert rows[1][1:7] == ["研发部", "平台", "Alice", "key-1", "gpt-test", "主渠道"]
     assert rows[1][9:12] == ["100", "0.25000000", "200"]
-    assert rows[-1] == ["汇总", "", "", "", "", "", "", "70", "30", "100", "0.25000000", "1 次请求"]
+    assert rows[-1] == ["汇总", "", "", "", "", "", "", "70", "30", "100", "0.25000000", "1 次请求", "", "", "", ""]

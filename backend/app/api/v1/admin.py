@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import Optional, List, Any
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
-from sqlalchemy import case, func, and_
+from sqlalchemy import func, and_
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ from app.models.user import User, UserRole, UserStatus
 from app.models.refresh_token import RefreshToken
 from app.models.channel import Channel, ChannelType, ChannelStatus, ChannelHealthStatus
 from app.models.channel_quota import ChannelQuota, QuotaType, SyncStatus
+from app.services.exchange_rate_service import model_prices_cny
 from app.models.model import Model, ModelStatus, PriceType
 from app.models.model_channel import ModelChannel
 from app.models.usage_log import UsageLog
@@ -275,8 +276,8 @@ async def get_admin_usage_stats(
         UsageLog.channel_id,
         func.sum(UsageLog.total_tokens).label('tokens'),
         func.count(UsageLog.id).label('requests'),
-        func.sum(UsageLog.cost_usd).label('saved_cost'),
-        func.count(UsageLog.cost_usd).label('cost_count')
+        func.sum(UsageLog.cost_cny).label('saved_cost'),
+        func.count(UsageLog.cost_cny).label('cost_count')
     ).filter(base_filter).group_by(UsageLog.channel_id).all()
     
     channel_ids = [s.channel_id for s in channel_stats if s.channel_id]
@@ -288,9 +289,7 @@ async def get_admin_usage_stats(
     model_stats = db.query(
         UsageLog.model,
         func.sum(UsageLog.total_tokens).label('tokens'),
-        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.prompt_tokens), else_=0)).label('prompt_tokens'),
-        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
-        func.sum(UsageLog.cost_usd).label('saved_cost'),
+        func.sum(UsageLog.cost_cny).label('saved_cost'),
         func.count(UsageLog.id).label('requests')
     ).filter(base_filter).group_by(UsageLog.model).all()
     
@@ -319,14 +318,9 @@ async def get_admin_usage_stats(
         # 通过 upstream_model 找到对应的 model_id，再找到模型信息
         internal_model_id = s.model if s.model in model_info else upstream_to_model_id.get(s.model)
         info = model_info.get(internal_model_id) if internal_model_id else None
-        if info:
-            cost = (float(s.prompt_tokens or 0) / 1000 * float(info.price_per_1k_input or 0) + 
-                    float(s.completion_tokens or 0) / 1000 * float(info.price_per_1k_output or 0))
-        else:
-            cost = 0
-        cost += float(s.saved_cost or 0)
+        cost = float(s.saved_cost or 0)
         total_cost += cost
-        by_model.append({"model": s.model, "display_name": info.display_name if info else None, "tokens": s.tokens or 0, "requests": s.requests or 0, "cost": round(cost, 4)})
+        by_model.append({"model": s.model, "display_name": info.display_name if info else None, "tokens": s.tokens or 0, "requests": s.requests or 0, "cost": round(cost, 8)})
     
     # 按日统计
     daily_stats = db.query(
@@ -371,25 +365,15 @@ async def export_admin_usage(
     departments = {row.dept_id: row.name for row in db.query(Department.dept_id, Department.name).all()}
     projects = {row.project_id: row.name for row in db.query(Project.project_id, Project.name).all()}
     channels = {row.channel_id: row.name for row in db.query(Channel.channel_id, Channel.name).all()}
-    model_channels = db.query(ModelChannel.upstream_model, ModelChannel.model_id).all()
-    upstream_to_model = {row.upstream_model: row.model_id for row in model_channels}
-    model_ids = {row.model_id for row in model_channels}
-    model_ids.update(row[0] for row in db.query(UsageLog.model).filter(base_filter).distinct())
-    prices = {row.model_id: row for row in db.query(Model).filter(Model.model_id.in_(model_ids)).all()}
-
     def cost(row):
-        if row.cost_usd is not None:
-            return row.cost_usd
-        price = prices.get(row.model) or prices.get(upstream_to_model.get(row.model))
-        if not price:
-            return 0
-        return (Decimal(row.prompt_tokens or 0) / 1000 * price.price_per_1k_input
-                + Decimal(row.completion_tokens or 0) / 1000 * price.price_per_1k_output)
+        if row.cost_cny is None:
+            raise HTTPException(409, '存在未转换的历史费用，请先完成人民币账本迁移')
+        return row.cost_cny
 
     def content():
         yield "\ufeff" + _csv_row([
             "时间", "部门", "项目", "用户", "API Key", "模型", "渠道",
-            "输入Token", "输出Token", "总Token", "成本(USD)", "状态码",
+            "输入Token", "输出Token", "总Token", "成本(CNY)", "状态码", "原币种", "USD/CNY汇率", "汇率日期", "换算方式",
         ])
         totals = {"prompt": 0, "completion": 0, "tokens": 0, "cost": Decimal("0"), "requests": 0}
         query = db.query(UsageLog).filter(base_filter).order_by(UsageLog.created_at, UsageLog.id)
@@ -407,11 +391,13 @@ async def export_admin_usage(
                 users.get(row.user_id, row.user_id), row.key_id or "网页对话", row.model,
                 channels.get(row.channel_id, row.channel_id or ""),
                 row.prompt_tokens or 0, row.completion_tokens or 0, row.total_tokens or 0,
-                f"{row_cost:.8f}", row.status_code,
+                f"{row_cost:.8f}", row.status_code, row.price_currency or "",
+                str(row.exchange_rate) if row.exchange_rate is not None else "",
+                str(row.exchange_rate_date.date()) if row.exchange_rate_date else "", row.conversion_kind or "",
             ])
         yield _csv_row([
             "汇总", "", "", "", "", "", "", totals["prompt"], totals["completion"],
-            totals["tokens"], f'{totals["cost"]:.8f}', f'{totals["requests"]} 次请求',
+            totals["tokens"], f'{totals["cost"]:.8f}', f'{totals["requests"]} 次请求', "", "", "", "",
         ])
 
     filename = f"usage_report_{start_date}_{end_date}.csv"
@@ -951,9 +937,7 @@ async def list_models(
             model_id=m.model_id, display_name=m.display_name, description=m.description,
             aliases=json.loads(m.aliases) if m.aliases else None,
             price_type=m.price_type.value if hasattr(m.price_type, 'value') else str(m.price_type),
-            price_per_1k_input=float(m.price_per_1k_input) if m.price_per_1k_input else 0,
-            price_per_1k_output=float(m.price_per_1k_output) if m.price_per_1k_output else 0,
-            price_per_request=float(m.price_per_request) if m.price_per_request else 0,
+            **model_prices_cny(db, m),
             status=m.status.value if hasattr(m.status, 'value') else str(m.status),
             route_strategy=m.route_strategy or "priority",
             created_at=m.created_at, bound_channels_count=len(bound_channel_ids),
@@ -987,7 +971,7 @@ async def create_model(data: ModelCreate, request: Request, db: Session = Depend
         price_type=PriceType(data.price_type),
         price_per_1k_input=data.price_per_1k_input, price_per_1k_output=data.price_per_1k_output,
         price_per_request=data.price_per_request, status=ModelStatus(data.status),
-        route_strategy=data.route_strategy,
+        route_strategy=data.route_strategy, price_currency="CNY",
     )
     db.add(model)
     
@@ -1039,9 +1023,7 @@ async def get_model(model_id: str, db: Session = Depends(get_db), admin: User = 
         model_id=model.model_id, display_name=model.display_name, description=model.description,
         aliases=json.loads(model.aliases) if model.aliases else None,
         price_type=model.price_type.value if hasattr(model.price_type, 'value') else str(model.price_type),
-        price_per_1k_input=float(model.price_per_1k_input) if model.price_per_1k_input else 0,
-        price_per_1k_output=float(model.price_per_1k_output) if model.price_per_1k_output else 0,
-        price_per_request=float(model.price_per_request) if model.price_per_request else 0,
+        **model_prices_cny(db, model),
         status=model.status.value if hasattr(model.status, 'value') else str(model.status),
         route_strategy=model.route_strategy or "priority",
         created_at=model.created_at, bound_channels_count=len(mc_list),
@@ -1058,7 +1040,13 @@ async def update_model(model_id: str, data: ModelUpdate, request: Request, db: S
         raise HTTPException(status_code=404, detail="模型不存在")
     
     changed = {}
-    for field, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    price_fields = {'price_per_1k_input', 'price_per_1k_output', 'price_per_request'}
+    if price_fields & {key for key, value in updates.items() if value is not None}:
+        # Partial price edits also convert untouched source prices before switching currency.
+        updates = {**model_prices_cny(db, model), **updates}
+        updates.pop('source_price_currency', None)
+    for field, value in updates.items():
         if value is None:
             continue
         if field == "aliases":
@@ -1240,9 +1228,7 @@ async def get_channel_models(channel_id: str, db: Session = Depends(get_db), adm
             model=ModelResponse(
                 model_id=model.model_id, display_name=model.display_name,
                 description=model.description, price_type=model.price_type.value if hasattr(model.price_type, 'value') else str(model.price_type),
-                price_per_1k_input=float(model.price_per_1k_input) if model.price_per_1k_input else 0,
-                price_per_1k_output=float(model.price_per_1k_output) if model.price_per_1k_output else 0,
-                price_per_request=float(model.price_per_request) if model.price_per_request else 0,
+                **model_prices_cny(db, model),
                 status=model.status.value if hasattr(model.status, 'value') else str(model.status),
                 route_strategy=model.route_strategy or "priority",
                 created_at=model.created_at

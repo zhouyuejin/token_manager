@@ -30,7 +30,7 @@ def reservation(reservation_id="reservation-1", status="committed", actual_token
     return QuotaReservation(
         reservation_id=reservation_id, user_id="user-1", key_id="key-1", project_id="project-1",
         department_id="dept-1", model="gpt-test", estimated_tokens=120, actual_tokens=actual_tokens,
-        estimated_cost_usd=Decimal("0.30000000"), actual_cost_usd=actual_cost, budget_accounted=True,
+        estimated_cost_cny=Decimal("0.30000000"), actual_cost_cny=actual_cost, budget_accounted=True,
         price_type="token", input_price=Decimal("1"), output_price=Decimal("2"), request_price=Decimal("0"),
         status=status, created_at=created, updated_at=created, expires_at=created + timedelta(minutes=5),
     )
@@ -40,7 +40,7 @@ def usage(reservation_id="reservation-1", total_tokens=100, cost=Decimal("0.2500
     return UsageLog(
         log_id=f"usage-{reservation_id}", user_id="user-1", key_id="key-1", channel_id="channel-1",
         model="gpt-test", project_id="project-1", department_id="dept-1", reservation_id=reservation_id,
-        prompt_tokens=70, completion_tokens=30, total_tokens=total_tokens, cost_usd=cost,
+        prompt_tokens=70, completion_tokens=30, total_tokens=total_tokens, cost_cny=cost,
         latency_ms=10, status_code=200, created_at=datetime(2026, 9, 20, 8, 1),
     )
 

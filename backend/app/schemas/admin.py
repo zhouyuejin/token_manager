@@ -270,9 +270,9 @@ class ModelCreate(BaseModel):
     description: Optional[str] = None
     aliases: Optional[List[str]] = None
     price_type: str = "token"
-    price_per_1k_input: float = 0
-    price_per_1k_output: float = 0
-    price_per_request: float = 0
+    price_per_1k_input: float = Field(default=0, ge=0, allow_inf_nan=False)
+    price_per_1k_output: float = Field(default=0, ge=0, allow_inf_nan=False)
+    price_per_request: float = Field(default=0, ge=0, allow_inf_nan=False)
     status: str = "active"
     route_strategy: str = "priority"
 
@@ -291,9 +291,9 @@ class ModelUpdate(BaseModel):
     description: Optional[str] = None
     aliases: Optional[List[str]] = None
     price_type: Optional[str] = None
-    price_per_1k_input: Optional[float] = None
-    price_per_1k_output: Optional[float] = None
-    price_per_request: Optional[float] = None
+    price_per_1k_input: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    price_per_1k_output: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    price_per_request: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     status: Optional[str] = None
     route_strategy: Optional[str] = None
 
@@ -307,14 +307,16 @@ class ModelUpdate(BaseModel):
 
 class ModelResponse(BaseModel):
     """模型响应"""
+    price_currency: str = "CNY"
+    source_price_currency: str = "CNY"
     model_id: str
     display_name: Optional[str] = None
     description: Optional[str] = None
     aliases: Optional[List[str]] = None
     price_type: str = "token"
-    price_per_1k_input: float = 0
-    price_per_1k_output: float = 0
-    price_per_request: float = 0
+    price_per_1k_input: float = Field(default=0, ge=0, allow_inf_nan=False)
+    price_per_1k_output: float = Field(default=0, ge=0, allow_inf_nan=False)
+    price_per_request: float = Field(default=0, ge=0, allow_inf_nan=False)
     status: str
     route_strategy: str = "priority"
     created_at: Optional[UtcDateTime] = None
@@ -461,6 +463,7 @@ class DailyUsageStats(BaseModel):
 
 class AdminStatsResponse(BaseModel):
     """管理员用量统计响应"""
+    currency: str = "CNY"
     total_tokens: int = 0
     total_requests: int = 0
     total_cost: float = 0

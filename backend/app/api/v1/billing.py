@@ -43,7 +43,7 @@ def report_response(row):
 
 
 class BudgetSave(BaseModel):
-    amount_usd: Decimal = Field(ge=0, max_digits=18, decimal_places=8)
+    amount_cny: Decimal = Field(ge=0, max_digits=18, decimal_places=8)
     thresholds: List[int] = Field(default_factory=lambda: [80, 90, 100], min_length=1, max_length=100)
     policy: Literal['alert', 'block'] = 'block'
     enabled: bool = True
@@ -75,8 +75,14 @@ def response(db, row):
     from app.models.organization import Department
     scope = db.get(Project if row.scope_type == 'project' else Department, row.scope_id)
     return {**{field: getattr(row, field) for field in (
-        'budget_id', 'scope_type', 'scope_id', 'month', 'amount_usd', 'thresholds', 'policy', 'enabled')},
+        'budget_id', 'scope_type', 'scope_id', 'month', 'amount_cny', 'thresholds', 'policy', 'enabled')},
         'scope_name': scope.name if scope else row.scope_id, **service.summary(row)}
+
+
+@router.get('/exchange-rate')
+async def exchange_rate(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from app.services.exchange_rate_service import rate_status
+    return rate_status(db)
 
 
 @router.get('/budgets')
@@ -103,8 +109,9 @@ async def list_reservations(month: str = Query(default=None), status: str = Quer
     rows = query.order_by(QuotaReservation.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return {'month': month, 'total': total, 'items': [{**{field: getattr(row, field) for field in (
         'reservation_id', 'user_id', 'key_id', 'project_id', 'department_id', 'model',
-        'estimated_tokens', 'actual_tokens', 'estimated_cost_usd', 'actual_cost_usd',
-        'status', 'created_at', 'updated_at', 'expires_at')},
+        'estimated_tokens', 'actual_tokens', 'estimated_cost_cny', 'actual_cost_cny',
+        'status', 'created_at', 'updated_at', 'expires_at', 'price_currency', 'exchange_rate',
+        'exchange_rate_date', 'exchange_rate_source', 'conversion_kind')},
         'nickname': nickname, 'username': username} for row, nickname, username in rows]}
 
 
@@ -151,10 +158,12 @@ async def list_reconcile_items(report_id: str, page: int = Query(1, ge=1), page_
         item['sources'] = {
             'reservation': source_fields(reservations.get(row.reservation_id), (
                 'reservation_id', 'user_id', 'key_id', 'project_id', 'department_id', 'model', 'status',
-                'estimated_tokens', 'actual_tokens', 'estimated_cost_usd', 'actual_cost_usd')),
+                'estimated_tokens', 'actual_tokens', 'estimated_cost_cny', 'actual_cost_cny',
+                'price_currency', 'exchange_rate', 'exchange_rate_date', 'conversion_kind')),
             'usage': source_fields(usages.get(row.usage_log_id), (
                 'id', 'log_id', 'reservation_id', 'user_id', 'key_id', 'channel_id', 'model', 'api_type',
-                'cost_usd', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'status_code')),
+                'cost_cny', 'prompt_tokens', 'completion_tokens', 'total_tokens', 'status_code',
+                'price_currency', 'exchange_rate', 'exchange_rate_date', 'conversion_kind')),
             'quota_record': source_fields(quota_records.get(row.quota_record_id), (
                 'record_id', 'user_id', 'type', 'amount', 'balance_before', 'balance_after', 'source', 'reason')),
         }

@@ -1,7 +1,7 @@
 import { get, post, put } from './request'
 
 export interface BudgetSave {
-  amount_usd: string
+  amount_cny: string
   thresholds: number[]
   policy: 'block' | 'alert'
   enabled: boolean
@@ -13,9 +13,9 @@ export interface Budget extends BudgetSave {
   scope_id: string
   scope_name: string
   month: string
-  used_usd: number
-  reserved_usd: number
-  remaining_usd: number
+  used_cny: number
+  reserved_cny: number
+  remaining_cny: number
   usage_percent: number | null
 }
 
@@ -33,8 +33,12 @@ export interface Reservation {
   model: string
   estimated_tokens: number
   actual_tokens?: number | null
-  estimated_cost_usd: number
-  actual_cost_usd?: number | null
+  price_currency?: 'USD' | 'CNY'
+  exchange_rate?: string
+  exchange_rate_date?: string
+  conversion_kind?: string
+  estimated_cost_cny: number
+  actual_cost_cny?: number | null
   status: 'reserved' | 'committed' | 'released' | 'expired'
   created_at: string
   updated_at?: string
@@ -43,7 +47,7 @@ export interface Reservation {
 
 export interface MyBilling {
   month: string
-  budgets: Pick<Budget, 'budget_id' | 'scope_type' | 'scope_id' | 'scope_name' | 'amount_usd' | 'policy' | 'used_usd' | 'reserved_usd' | 'remaining_usd' | 'usage_percent'>[]
+  budgets: Pick<Budget, 'budget_id' | 'scope_type' | 'scope_id' | 'scope_name' | 'amount_cny' | 'policy' | 'used_cny' | 'reserved_cny' | 'remaining_cny' | 'usage_percent'>[]
   reservations: Reservation[]
 }
 

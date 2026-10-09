@@ -7,6 +7,7 @@ from typing import List, Optional
 
 class UsageStats(BaseModel):
     """用量统计响应"""
+    currency: str = "CNY"
     total_tokens: int = 0
     total_requests: int = 0
     avg_latency_ms: int = 0

@@ -50,6 +50,7 @@ def sync_model_prices(db: Session, price_map: Optional[Dict[str, Any]] = None) -
             skipped += 1
             continue
 
+        model.price_currency = "USD"
         model.price_type = PriceType.token
         model.price_per_1k_input = _per_1k(token_price["input_cost_per_token"])
         model.price_per_1k_output = _per_1k(token_price["output_cost_per_token"])

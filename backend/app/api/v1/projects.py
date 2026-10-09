@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Literal, Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import case, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.dependencies import get_current_user, require_admin
@@ -13,8 +13,6 @@ from app.models.organization import Department
 from app.models.project import Project, UserProject
 from app.models.api_key import ApiKey
 from app.models.usage_log import UsageLog
-from app.models.model import Model
-from app.models.model_channel import ModelChannel
 from app.models.quota_reservation import QuotaReservation
 from app.models.budget import Budget
 from app.services.operation_log_service import record_operation
@@ -124,7 +122,7 @@ async def get_department_usage_stats(
 
     if not department_ids:
         return {
-            'total_tokens': 0, 'total_requests': 0, 'total_cost': 0,
+            'total_tokens': 0, 'total_requests': 0, 'total_cost': 0, 'currency': 'CNY',
             'success_rate': 100, 'by_day': [], 'by_project': [],
             'web_chat': {'tokens': 0, 'requests': 0, 'cost': 0},
         }
@@ -159,39 +157,15 @@ async def get_department_usage_stats(
     ).all()
 
     web_chat = db.query(
-        func.sum(UsageLog.total_tokens), func.count(UsageLog.log_id), func.sum(UsageLog.cost_usd),
+        func.sum(UsageLog.total_tokens), func.count(UsageLog.log_id), func.sum(UsageLog.cost_cny),
     ).filter(*date_filter, UsageLog.key_id.is_(None), UsageLog.project_id.is_(None)).one()
 
-    model_rows = db.query(
-        UsageLog.model,
-        func.sum(UsageLog.total_tokens).label('tokens'),
-        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.prompt_tokens), else_=0)).label('prompt_tokens'),
-        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
-        func.sum(UsageLog.cost_usd).label('saved_cost'),
-    ).filter(*date_filter).group_by(UsageLog.model).all()
-    upstream_models = [row.model for row in model_rows]
-    channel_mappings = db.query(ModelChannel.upstream_model, ModelChannel.model_id).filter(
-        ModelChannel.upstream_model.in_(upstream_models)
-    ).all() if upstream_models else []
-    upstream_to_model_id = {upstream: model_id for upstream, model_id in channel_mappings}
-    model_ids = set(upstream_models) | set(upstream_to_model_id.values())
-    models = {row.model_id: row for row in db.query(Model).filter(Model.model_id.in_(model_ids)).all()} if model_ids else {}
-
-    total_cost = 0.0
-    for row in model_rows:
-        model_id = row.model if row.model in models else upstream_to_model_id.get(row.model)
-        model = models.get(model_id) if model_id else None
-        if model:
-            total_cost += (
-                float(row.prompt_tokens or 0) / 1000 * float(model.price_per_1k_input or 0)
-                + float(row.completion_tokens or 0) / 1000 * float(model.price_per_1k_output or 0)
-            )
-        total_cost += float(row.saved_cost or 0)
+    total_cost = db.query(func.sum(UsageLog.cost_cny)).filter(*date_filter).scalar() or 0
 
     return {
         'total_tokens': total_tokens,
         'total_requests': total_requests,
-        'total_cost': round(total_cost, 8),
+        'total_cost': round(total_cost, 8), 'currency': 'CNY',
         'web_chat': {'tokens': web_chat[0] or 0, 'requests': web_chat[1], 'cost': round(float(web_chat[2] or 0), 8)},
         'success_rate': round(successful_requests / total_requests * 100, 2) if total_requests else 100,
         'by_day': [

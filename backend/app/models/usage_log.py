@@ -21,7 +21,13 @@ class UsageLog(Base):
     
     project_id = Column(String(32), nullable=True, index=True, comment="项目快照")
     department_id = Column(String(32), nullable=True, index=True, comment="部门快照")
-    cost_usd = Column(Numeric(18, 8), nullable=True, comment="本次费用USD，旧日志为空")
+    cost_usd = Column(Numeric(18, 8), nullable=True, comment="历史原始美元费用，禁止覆写")
+    price_currency = Column(String(3), nullable=True)
+    exchange_rate = Column(Numeric(18, 8), nullable=True)
+    exchange_rate_date = Column(DateTime, nullable=True)
+    exchange_rate_source = Column(String(32), nullable=True)
+    conversion_kind = Column(String(40), nullable=True)
+    cost_cny = Column(Numeric(18, 8), nullable=True, comment="本次费用CNY，旧日志为空")
     reservation_id = Column(String(32), nullable=True, index=True, comment="预扣关联，避免预算重复计费")
 
     # Token 统计

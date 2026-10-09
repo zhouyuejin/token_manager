@@ -5,7 +5,7 @@ export interface AlertRuleConfig {
   channel_error_min_requests: number
   quota_remaining_percent: number
   project_growth_multiplier: number
-  project_growth_min_cost_usd: number
+  project_growth_min_cost_cny: number
 }
 
 export const getAlertRules = () => get<AlertRuleConfig>('/admin/alerts/rules')

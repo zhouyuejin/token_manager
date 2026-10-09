@@ -61,25 +61,25 @@ class BudgetService:
             UsageLog.created_at >= start, UsageLog.created_at < end, UsageLog.status_code == 200)
         rows = reservations.all()
         # 升级前已结算记录仍按旧日志计费，避免无法关联的旧账本重复计算。
-        used = sum((r.actual_cost_usd or Decimal(0) for r in rows if r.status == 'committed' and r.budget_accounted), Decimal(0))
-        used += sum((r.cost_usd or Decimal(0) for r in legacy.all()), Decimal(0))
-        reserved = sum((r.estimated_cost_usd for r in rows if r.status == 'reserved'), Decimal(0))
-        return {'used_usd': used, 'reserved_usd': reserved,
-                'remaining_usd': budget.amount_usd - used - reserved,
-                'usage_percent': used / budget.amount_usd * 100 if budget.amount_usd else None}
+        used = sum((r.actual_cost_cny or Decimal(0) for r in rows if r.status == 'committed' and r.budget_accounted), Decimal(0))
+        used += sum((r.cost_cny or Decimal(0) for r in legacy.all()), Decimal(0))
+        reserved = sum((r.estimated_cost_cny for r in rows if r.status == 'reserved'), Decimal(0))
+        return {'used_cny': used, 'reserved_cny': reserved,
+                'remaining_cny': budget.amount_cny - used - reserved,
+                'usage_percent': used / budget.amount_cny * 100 if budget.amount_cny else None}
 
     def admit(self, budgets, amount):
         for budget in budgets:
             # 准入从新事务开始，快照在组织/预算锁之后建立；不锁其它用户账本。
-            remaining = self.summary(budget)['remaining_usd']
+            remaining = self.summary(budget)['remaining_cny']
             budget_usage.labels(scope_type=budget.scope_type).set(
-                float(max(0, min(1, (budget.amount_usd - remaining) / budget.amount_usd)))
-                if budget.amount_usd else 0
+                float(max(0, min(1, (budget.amount_cny - remaining) / budget.amount_cny)))
+                if budget.amount_cny else 0
             )
             if budget.policy == 'block' and (remaining < amount or remaining < 0):
                 budget_rejections.labels(scope_type=budget.scope_type).inc()
                 kind = '项目' if budget.scope_type == 'project' else '部门'
-                raise HTTPException(403, f'{kind}月预算不足（{budget.month}），可用 ${max(remaining, 0):.8f}，本次预扣 ${amount:.8f}')
+                raise HTTPException(403, f'{kind}月预算不足（{budget.month}），可用 ¥{max(remaining, 0):.8f}，本次预扣 ¥{amount:.8f}')
 
     async def check_alerts(self):
         ids = [bid for bid, in self.db.query(Budget.budget_id).filter(
@@ -92,9 +92,9 @@ class BudgetService:
                 if not budget.enabled:
                     self.db.rollback()
                     continue
-                used = self.summary(budget)['used_usd']
+                used = self.summary(budget)['used_cny']
                 sent = {t for t, in self.db.query(BudgetAlert.threshold).filter_by(budget_id=bid).all()}
-                thresholds = [t for t in budget.thresholds if t not in sent and used > 0 and used * 100 >= budget.amount_usd * t]
+                thresholds = [t for t in budget.thresholds if t not in sent and used > 0 and used * 100 >= budget.amount_cny * t]
                 if thresholds:
                     model = Project if budget.scope_type == 'project' else Department
                     owner = self.db.get(model, budget.scope_id)
@@ -118,7 +118,7 @@ class BudgetService:
                             kind = '项目' if budget.scope_type == 'project' else '部门'
                             notif = Notification(notif_id='notif_' + secrets.token_hex(8), user_id=uid,
                                 type=NotificationType.system, title=f'{kind}预算达到 {threshold}%',
-                                content=f'{owner.name if owner else budget.scope_id} {budget.month} 月预算 ${budget.amount_usd:.8f}，实际消费 ${used:.8f}。',
+                                content=f'{owner.name if owner else budget.scope_id} {budget.month} 月预算 ¥{budget.amount_cny:.8f}，实际消费 ¥{used:.8f}。',
                                 extra_data=json.dumps({'kind': 'budget_alert', 'budget_id': bid, 'month': budget.month,
                                                        'threshold': threshold, 'scope_type': budget.scope_type, 'scope_id': budget.scope_id}), is_read=0)
                             self.db.add(notif)

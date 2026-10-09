@@ -16,7 +16,7 @@ class AlertRuleConfig(BaseModel):
     channel_error_min_requests: int = Field(ge=1)
     quota_remaining_percent: float = Field(ge=0, le=100)
     project_growth_multiplier: float = Field(gt=0)
-    project_growth_min_cost_usd: float = Field(ge=0)
+    project_growth_min_cost_cny: float = Field(ge=0)
 
 @router.get("/rules")
 def get_alert_rules(db: Session = Depends(get_db), _: object = Depends(require_admin)):

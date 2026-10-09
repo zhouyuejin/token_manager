@@ -88,13 +88,13 @@ def test_reconcile_items_include_linked_source_ledger_details():
     reservation = QuotaReservation(
         reservation_id="reservation-1", user_id="user-1", key_id="key-1", project_id="project-1",
         department_id="dept-1", model="model-1", estimated_tokens=20, actual_tokens=10,
-        estimated_cost_usd=0.02, actual_cost_usd=0.01, budget_accounted=True, price_type="token",
+        estimated_cost_cny=0.02, actual_cost_cny=0.01, budget_accounted=True, price_type="token",
         input_price=1, output_price=2, request_price=0, status="committed", created_at=created_at,
         updated_at=created_at, expires_at=created_at,
     )
     usage = UsageLog(
         id=7, log_id="usage-1", user_id="user-1", key_id="key-1", model="model-1",
-        project_id="project-1", department_id="dept-1", cost_usd=0.01, reservation_id="reservation-1",
+        project_id="project-1", department_id="dept-1", cost_cny=0.01, reservation_id="reservation-1",
         prompt_tokens=6, completion_tokens=4, total_tokens=10, latency_ms=12, status_code=200,
         created_at=created_at,
     )
@@ -122,13 +122,15 @@ def test_reconcile_items_include_linked_source_ledger_details():
         "reservation_id": "reservation-1", "user_id": "user-1", "key_id": "key-1",
         "project_id": "project-1", "department_id": "dept-1", "model": "model-1",
         "status": "committed", "estimated_tokens": 20, "actual_tokens": 10,
-        "estimated_cost_usd": 0.02, "actual_cost_usd": 0.01,
+        "estimated_cost_cny": 0.02, "actual_cost_cny": 0.01,
+        "price_currency": "CNY", "exchange_rate": 1.0, "exchange_rate_date": None, "conversion_kind": None,
     }
     assert sources["usage"] == {
         "id": 7, "log_id": "usage-1", "reservation_id": "reservation-1", "user_id": "user-1",
         "key_id": "key-1", "channel_id": None, "model": "model-1", "api_type": "chat",
-        "cost_usd": 0.01, "prompt_tokens": 6, "completion_tokens": 4, "total_tokens": 10,
+        "cost_cny": 0.01, "prompt_tokens": 6, "completion_tokens": 4, "total_tokens": 10,
         "status_code": 200,
+        "price_currency": None, "exchange_rate": None, "exchange_rate_date": None, "conversion_kind": None,
     }
     assert sources["quota_record"] == {
         "record_id": "quota-1", "user_id": "user-1", "type": "decrease", "amount": 10,

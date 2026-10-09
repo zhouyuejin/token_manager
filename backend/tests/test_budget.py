@@ -59,7 +59,7 @@ def add_budget(db, scope_type='project', amount='0.15', month=None, policy='bloc
     from app.services.budget_service import current_month
     row = Budget(budget_id=uuid.uuid4().hex, scope_type=scope_type,
                  scope_id='p' if scope_type == 'project' else 'd',
-                 month=month or current_month(), amount_usd=Decimal(amount),
+                 month=month or current_month(), amount_cny=Decimal(amount),
                  thresholds=[80, 90, 100], policy=policy, enabled=True)
     db.add(row)
     db.commit()
@@ -85,7 +85,7 @@ def test_frontend_billing_views_only_expose_user_reservations(db, scope):
     rid = reserve(db, scope)
     mine = run_async(get_my_billing(current_user=db.query(User).filter_by(user_id='owner').one(), db=db))
     assert mine['budgets'][0]['scope_name'] == '项目'
-    assert mine['budgets'][0]['reserved_usd'] > 0
+    assert mine['budgets'][0]['reserved_cny'] > 0
     assert [row['reservation_id'] for row in mine['reservations']] == [rid]
 
     admin_rows = run_async(list_reservations(month=None, status='reserved', page=1, page_size=10, admin=db.query(User).filter_by(user_id='admin').one(), db=db))
@@ -100,11 +100,11 @@ def test_user_cost_dashboard_filters_own_key(db, scope):
     db.add_all([
         UsageLog(log_id='a', user_id='owner', key_id='key-a', project_id='p', department_id='d',
                  channel_id='channel-a', model='priced', prompt_tokens=10, completion_tokens=10,
-                 total_tokens=20, cost_usd=Decimal('0.02'), latency_ms=10, status_code=200,
+                 total_tokens=20, cost_cny=Decimal('0.02'), latency_ms=10, status_code=200,
                  created_at=datetime.now()),
         UsageLog(log_id='b', user_id='owner', key_id='key-b', project_id='p', department_id='d',
                  channel_id='channel-b', model='priced', prompt_tokens=20, completion_tokens=20,
-                 total_tokens=40, cost_usd=Decimal('0.04'), latency_ms=20, status_code=200,
+                 total_tokens=40, cost_cny=Decimal('0.04'), latency_ms=20, status_code=200,
                  created_at=datetime.now()),
     ])
     db.flush()
@@ -158,18 +158,18 @@ def test_actual_consumption_and_legacy_logs_are_counted_once(db, scope):
     from app.services.budget_service import BudgetService
     budget = add_budget(db, amount='1')
     db.add(UsageLog(log_id='legacy', user_id='owner', key_id='owner', model='priced',
-                   project_id='p', department_id='d', cost_usd=Decimal('0.2'), status_code=200))
+                   project_id='p', department_id='d', cost_cny=Decimal('0.2'), status_code=200))
     db.commit()
     rid = reserve(db, scope)
     QuotaReservationService(db).commit(rid, {'prompt_tokens': 0, 'completion_tokens': 80, 'total_tokens': 80})
     db.add(UsageLog(log_id='linked', user_id='owner', key_id='owner', model='priced',
                    project_id='p', department_id='d', reservation_id=rid,
-                   cost_usd=Decimal('0.08'), status_code=200))
+                   cost_cny=Decimal('0.08'), status_code=200))
     db.commit()
     summary = BudgetService(db).summary(budget)
-    assert summary['used_usd'] == Decimal('0.28')
-    assert summary['reserved_usd'] == 0
-    assert summary['remaining_usd'] == Decimal('0.72')
+    assert summary['used_cny'] == Decimal('0.28')
+    assert summary['reserved_cny'] == 0
+    assert summary['remaining_cny'] == Decimal('0.72')
 
 
 def test_threshold_once_per_month_and_websocket_failure_isolated(db, scope, monkeypatch):
@@ -213,9 +213,9 @@ def test_upgrade_legacy_ledger_and_log_are_not_double_counted(db, scope):
     row = db.get(QuotaReservation, rid)
     row.budget_accounted = False
     db.add(UsageLog(log_id='before-upgrade', user_id='owner', key_id='owner', model='priced',
-                   project_id='p', department_id='d', cost_usd=Decimal('0.08'), status_code=200))
+                   project_id='p', department_id='d', cost_cny=Decimal('0.08'), status_code=200))
     db.commit()
-    assert BudgetService(db).summary(budget)['used_usd'] == Decimal('0.08')
+    assert BudgetService(db).summary(budget)['used_cny'] == Decimal('0.08')
 
 
 def test_sub_precision_estimate_does_not_disappear_from_pending_budget(db, scope):
@@ -223,7 +223,7 @@ def test_sub_precision_estimate_does_not_disappear_from_pending_budget(db, scope
     db.query(Model).filter_by(model_id='priced').update({'price_per_1k_output': Decimal('0.000001')})
     db.commit()
     rid = reserve(db, scope, output=1)
-    assert db.get(QuotaReservation, rid).estimated_cost_usd == Decimal('0.00000001')
+    assert db.get(QuotaReservation, rid).estimated_cost_cny == Decimal('0.00000001')
     with pytest.raises(HTTPException):
         reserve(db, scope, output=1)
 
@@ -243,7 +243,7 @@ def billing_client(db, scope):
 
 
 def test_admin_can_configure_update_disable_and_view_budget(billing_client, db, scope):
-    payload = {'amount_usd': '0.05', 'thresholds': [100, 80], 'policy': 'block'}
+    payload = {'amount_cny': '0.05', 'thresholds': [100, 80], 'policy': 'block'}
     response = billing_client.put('/billing/budgets/project/p/2026-09', json=payload)
     assert response.status_code == 200, response.text
     bid = response.json()['budget_id']
@@ -255,12 +255,12 @@ def test_admin_can_configure_update_disable_and_view_budget(billing_client, db, 
 
 
 @pytest.mark.parametrize('payload', [
-    {'amount_usd': '-1'}, {'amount_usd': 'NaN'}, {'amount_usd': 'Infinity'},
-    {'amount_usd': '0.000000001'}, {'amount_usd': '10000000000'},
-    {'amount_usd': '1', 'thresholds': []}, {'amount_usd': '1', 'thresholds': [80, 80]},
-    {'amount_usd': '1', 'thresholds': [0]}, {'amount_usd': '1', 'thresholds': [101]},
-    {'amount_usd': '1', 'thresholds': [True]}, {'amount_usd': '1', 'thresholds': [80.5]},
-    {'amount_usd': '1', 'policy': 'unknown'}
+    {'amount_cny': '-1'}, {'amount_cny': 'NaN'}, {'amount_cny': 'Infinity'},
+    {'amount_cny': '0.000000001'}, {'amount_cny': '10000000000'},
+    {'amount_cny': '1', 'thresholds': []}, {'amount_cny': '1', 'thresholds': [80, 80]},
+    {'amount_cny': '1', 'thresholds': [0]}, {'amount_cny': '1', 'thresholds': [101]},
+    {'amount_cny': '1', 'thresholds': [True]}, {'amount_cny': '1', 'thresholds': [80.5]},
+    {'amount_cny': '1', 'policy': 'unknown'}
 ])
 def test_invalid_budget_configuration_rejected(billing_client, payload):
     assert billing_client.put('/billing/budgets/project/p/2026-09', json=payload).status_code == 422
@@ -268,13 +268,13 @@ def test_invalid_budget_configuration_rejected(billing_client, payload):
 
 def test_month_scope_and_admin_access_validation(billing_client, db):
     from app.dependencies import get_current_user
-    assert billing_client.put('/billing/budgets/project/missing/2026-09', json={'amount_usd': '1'}).status_code == 404
-    assert billing_client.put('/billing/budgets/user/owner/2026-09', json={'amount_usd': '1'}).status_code == 422
+    assert billing_client.put('/billing/budgets/project/missing/2026-09', json={'amount_cny': '1'}).status_code == 404
+    assert billing_client.put('/billing/budgets/user/owner/2026-09', json={'amount_cny': '1'}).status_code == 422
     for month in ['2026-13', '2026-9', 'bad', '9999-12']:
         assert billing_client.get('/billing/budgets', params={'month': month}).status_code == 422
     billing_client.app.dependency_overrides[get_current_user] = lambda: db.query(User).filter_by(user_id='owner').one()
     assert billing_client.get('/billing/budgets').status_code == 403
-    assert billing_client.put('/billing/budgets/project/p/2026-09', json={'amount_usd': '1'}).status_code == 403
+    assert billing_client.put('/billing/budgets/project/p/2026-09', json={'amount_cny': '1'}).status_code == 403
 
 
 def test_cost_overrun_rejected_even_when_total_tokens_fit_reservation(db, scope):
@@ -294,7 +294,7 @@ def test_late_settlement_stays_in_reservation_month_and_alerts(db, scope):
     db.get(QuotaReservation, rid).created_at = datetime(2020, 1, 15)
     db.commit()
     QuotaReservationService(db).commit(rid, {'prompt_tokens': 0, 'completion_tokens': 80, 'total_tokens': 80})
-    assert BudgetService(db).summary(budget)['used_usd'] == Decimal('0.08')
+    assert BudgetService(db).summary(budget)['used_cny'] == Decimal('0.08')
     run_async(BudgetService(db).check_alerts())
     assert db.query(Notification).count() == 6
 
@@ -331,8 +331,8 @@ def test_migration_roundtrip_preserves_old_usage():
     from alembic.operations import Operations
     engine = create_engine('sqlite://')
     with engine.begin() as conn:
-        conn.execute(text('CREATE TABLE usage_logs (log_id VARCHAR(50) PRIMARY KEY, cost_usd NUMERIC(18,8), project_id VARCHAR(32), department_id VARCHAR(32), created_at DATETIME)'))
-        conn.execute(text("INSERT INTO usage_logs (log_id, cost_usd) VALUES ('old', 0.2)"))
+        conn.execute(text('CREATE TABLE usage_logs (log_id VARCHAR(50) PRIMARY KEY, cost_cny NUMERIC(18,8), project_id VARCHAR(32), department_id VARCHAR(32), created_at DATETIME)'))
+        conn.execute(text("INSERT INTO usage_logs (log_id, cost_cny) VALUES ('old', 0.2)"))
         conn.execute(text('CREATE TABLE quota_reservations (reservation_id VARCHAR(32) PRIMARY KEY, project_id VARCHAR(32), department_id VARCHAR(32), created_at DATETIME)'))
         conn.execute(text("INSERT INTO quota_reservations (reservation_id) VALUES ('old')"))
         path = Path(__file__).parents[1] / 'alembic/versions/20260918_1200_budgets.py'
@@ -344,7 +344,7 @@ def test_migration_roundtrip_preserves_old_usage():
         migration.upgrade()
         assert conn.execute(text('SELECT budget_accounted FROM quota_reservations')).scalar() == 0
         migration.downgrade()
-        assert conn.execute(text('SELECT cost_usd FROM usage_logs')).scalar() == 0.2
+        assert conn.execute(text('SELECT cost_cny FROM usage_logs')).scalar() == 0.2
         assert 'budgets' not in inspect(conn).get_table_names()
         migration.upgrade()
     engine.dispose()
@@ -395,18 +395,20 @@ def test_mysql_migration_roundtrip_keeps_historical_cost_once(db, scope, budget_
     QuotaReservationService(db).commit(rid, {'prompt_tokens': 0, 'completion_tokens': 80, 'total_tokens': 80})
     db.add(UsageLog(log_id='old-linked', user_id='owner', key_id='owner', model='priced',
                    project_id='p', department_id='d', reservation_id=rid,
-                   cost_usd=Decimal('0.08'), status_code=200))
+                   cost_cny=Decimal('0.08'), status_code=200))
     db.commit()
     with db.get_bind().begin() as conn:
         budget_schema.op = Operations(MigrationContext.configure(conn))
         budget_schema.downgrade()
         budget_schema.upgrade()
         budget_schema.upgrade()
+        from tests.conftest import upgrade_cny_schema
+        upgrade_cny_schema(conn)
     db.expire_all()
-    assert db.query(UsageLog).one().cost_usd == Decimal('0.08')
+    assert db.query(UsageLog).one().cost_cny == Decimal('0.08')
     assert db.get(QuotaReservation, rid).budget_accounted is False
     budget = add_budget(db, amount='1')
-    assert BudgetService(db).summary(budget)['used_usd'] == Decimal('0.08')
+    assert BudgetService(db).summary(budget)['used_cny'] == Decimal('0.08')
 
 
 def test_sub_precision_actual_charge_cannot_reuse_budget_forever(db, scope):
@@ -415,7 +417,7 @@ def test_sub_precision_actual_charge_cannot_reuse_budget_forever(db, scope):
     db.commit()
     rid = reserve(db, scope, output=1)
     QuotaReservationService(db).commit(rid, {'prompt_tokens': 0, 'completion_tokens': 1, 'total_tokens': 1})
-    assert db.get(QuotaReservation, rid).actual_cost_usd == Decimal('0.00000001')
+    assert db.get(QuotaReservation, rid).actual_cost_cny == Decimal('0.00000001')
     with pytest.raises(HTTPException):
         reserve(db, scope, output=1)
 
@@ -434,7 +436,7 @@ def test_two_users_reserving_each_others_scope_do_not_deadlock(db, scope, Sessio
     from app.models.budget import Budget
     from app.services.budget_service import current_month
     db.add(Budget(budget_id='other', scope_type='project', scope_id='p2', month=current_month(),
-                  amount_usd=1, thresholds=[80, 90, 100], policy='block', enabled=True))
+                  amount_cny=1, thresholds=[80, 90, 100], policy='block', enabled=True))
     db.commit()
     reserve(db, scope)
     reserve(db, other_scope, 'other')
@@ -466,4 +468,4 @@ def test_failover_attempt_logs_share_reservation_without_double_billing(db, scop
     run_async(service.deduct_quota(db.query(User).filter_by(user_id='owner').one(),
                                   db.query(ApiKey).filter_by(key_id='owner').one(), tokens))
     assert db.query(UsageLog).count() == 3
-    assert BudgetService(db).summary(budget)['used_usd'] == Decimal('0.08')
+    assert BudgetService(db).summary(budget)['used_cny'] == Decimal('0.08')

@@ -18,6 +18,8 @@ TEST_DATABASE_URL = os.environ.get(
 def engine():
     eng = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
     Base.metadata.create_all(bind=eng)
+    with eng.begin() as connection:
+        upgrade_cny_schema(connection)
     return eng
 
 
@@ -42,3 +44,16 @@ def db(engine, SessionLocal):
         yield session
     finally:
         session.close()
+
+
+def upgrade_cny_schema(connection):
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    path = Path(__file__).parents[1] / 'alembic/versions/20261009_1100_cny_billing.py'
+    spec = importlib.util.spec_from_file_location('cny_schema', path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()

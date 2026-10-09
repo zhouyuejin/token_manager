@@ -140,25 +140,25 @@ def test_usage_snapshots_cost_department_and_failure_zero(ctx):
     row = db.query(UsageLog).one()
     assert row.project_id == project['project_id']
     assert row.department_id == project['dept_id']
-    assert row.cost_usd == Decimal('0.2')
+    assert row.cost_cny == Decimal('0.2')
     db.query(Model).one().price_per_1k_input = Decimal('100')
     other_dep = client.post('/projects/admin/departments', json={'name': '其他部'}).json()
     client.put(f"/projects/admin/{project['project_id']}", json={'name': '调整项目', 'dept_id': other_dep['dept_id']})
     db.refresh(row)
     assert row.department_id == project['dept_id']
-    assert row.cost_usd == Decimal('0.2')
+    assert row.cost_cny == Decimal('0.2')
     ProxyService(db)._record_usage_failure('owner', key['key_id'], 'channel', 'model', 502, 'failed')
     failed = db.query(UsageLog).filter(UsageLog.status_code == 502).one()
     assert failed.project_id == project['project_id']
     assert failed.department_id == other_dep['dept_id']
-    assert failed.cost_usd == 0
+    assert failed.cost_cny == 0
 
 
 def test_admin_project_filter_applies_to_all_stats_and_keeps_legacy(ctx):
     db, client = ctx
     project = setup_project(client)
     db.add_all([
-        UsageLog(log_id='new', user_id='owner', key_id='key', channel_id='channel', model='model', project_id=project['project_id'], department_id=project['dept_id'], cost_usd=Decimal('0.25'), total_tokens=100, status_code=200),
+        UsageLog(log_id='new', user_id='owner', key_id='key', channel_id='channel', model='model', project_id=project['project_id'], department_id=project['dept_id'], cost_cny=Decimal('0.25'), total_tokens=100, status_code=200),
         UsageLog(log_id='old', user_id='owner', key_id='old', model='legacy', total_tokens=10, status_code=500),
     ])
     db.commit()
@@ -310,7 +310,7 @@ def test_failover_other_4xx_is_logged_with_attribution(ctx, monkeypatch):
     row = db.query(UsageLog).one()
     assert row.project_id == project['project_id']
     assert row.channel_id == 'selected'
-    assert row.cost_usd == 0
+    assert row.cost_cny == 0
 
 
 def test_request_price_and_mixed_legacy_cost(ctx):
@@ -321,13 +321,13 @@ def test_request_price_and_mixed_legacy_cost(ctx):
     db.add_all([
         Model(model_id='request', price_type=PriceType.request, price_per_request=Decimal('0.3')),
         Model(model_id='token', price_per_1k_input=Decimal('1'), price_per_1k_output=Decimal('2')),
-        UsageLog(log_id='legacy', user_id='owner', key_id='old', model='token', prompt_tokens=100, completion_tokens=50, total_tokens=150, status_code=200),
-        UsageLog(log_id='snapshot', user_id='owner', key_id='key', model='token', prompt_tokens=100, completion_tokens=50, total_tokens=150, status_code=200, cost_usd=Decimal('0.5')),
+        UsageLog(log_id='legacy', user_id='owner', key_id='old', model='token', prompt_tokens=100, completion_tokens=50, total_tokens=150, status_code=200, cost_cny=Decimal('0.2')),
+        UsageLog(log_id='snapshot', user_id='owner', key_id='key', model='token', prompt_tokens=100, completion_tokens=50, total_tokens=150, status_code=200, cost_cny=Decimal('0.5')),
     ])
     db.commit()
     ProxyService(db).record_usage('owner', key['key_id'], 'channel', 'request', {}, 10, 200)
     db.commit()
-    assert db.query(UsageLog).filter_by(model='request').one().cost_usd == Decimal('0.3')
+    assert db.query(UsageLog).filter_by(model='request').one().cost_cny == Decimal('0.3')
     for path in ['/admin/stats/usage', '/stats/usage']:
         response = client.get(path)
         assert response.status_code == 200, response.text
@@ -395,5 +395,5 @@ def test_proxy_stream_route_persists_channel_attribution_and_cost(ctx, monkeypat
     assert row.department_id == project['dept_id']
     assert row.status_code == status
     assert row.total_tokens == (150 if status == 200 else 0)
-    assert row.cost_usd == (Decimal('0.2') if status == 200 else 0)
+    assert row.cost_cny == (Decimal('0.2') if status == 200 else 0)
     assert db.query(User).filter_by(user_id='owner').one().quota_used == (150 if status == 200 else 0)

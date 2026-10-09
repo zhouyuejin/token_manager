@@ -261,6 +261,9 @@ def send_daily_reports():
 
 def setup_scheduler():
     """设置定时任务"""
+    scheduler.add_job(refresh_exchange_rate, trigger=IntervalTrigger(hours=1),
+                      id='refresh_exchange_rate', name='更新 USD/CNY 参考汇率', replace_existing=True,
+                      next_run_time=datetime.now())
     scheduler.add_job(check_upstream_health, trigger=IntervalTrigger(seconds=60),
                       id='check_upstream_health', name='探测上游渠道', replace_existing=True)
     scheduler.add_job(check_budget_alerts, trigger=IntervalTrigger(seconds=60),
@@ -423,3 +426,9 @@ async def notify_quota_change(
         return False
     finally:
         db.close()
+
+
+def refresh_exchange_rate():
+    from app.services.exchange_rate_service import refresh_rate
+    with SessionLocal() as db:
+        refresh_rate(db)

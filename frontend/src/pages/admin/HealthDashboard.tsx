@@ -139,7 +139,7 @@ const HealthDashboard = () => {
             <Form.Item name="project_growth_multiplier" label="项目消费增长倍数" extra="倍数（>0）；比较最近 1 小时与此前 24 小时的平均每小时消费。" rules={[{ required: true }, { validator: (_, value) => value > 0 ? Promise.resolve() : Promise.reject(new Error('必须大于 0')) }]}>
               <InputNumber min={0} step={0.1} disabled={!canEditRules} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="project_growth_min_cost_usd" label="项目最小消费额" extra="美元（≥0）；最近 1 小时消费达到该值后才比较增长倍数。" rules={[{ required: true }]}>
+            <Form.Item name="project_growth_min_cost_cny" label="项目最小消费额" extra="人民币（≥0）；最近 1 小时消费达到该值后才比较增长倍数。" rules={[{ required: true }]}>
               <InputNumber min={0} step={0.01} disabled={!canEditRules} style={{ width: '100%' }} />
             </Form.Item>
           </Col>

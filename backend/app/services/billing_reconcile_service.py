@@ -86,12 +86,12 @@ class BillingReconcileService:
                             "user_id": reservation.user_id, "key_id": reservation.key_id,
                             "project_id": reservation.project_id, "department_id": reservation.department_id,
                             "model": reservation.model, "tokens": reservation.actual_tokens,
-                            "cost_usd": f"{Decimal(reservation.actual_cost_usd):.8f}",
+                            "cost_cny": f"{Decimal(reservation.actual_cost_cny):.8f}",
                         }
                         actual = {
                             "user_id": usage.user_id, "key_id": usage.key_id, "project_id": usage.project_id,
                             "department_id": usage.department_id, "model": usage.model, "tokens": usage.total_tokens,
-                            "cost_usd": f"{Decimal(usage.cost_usd):.8f}",
+                            "cost_cny": f"{Decimal(usage.cost_cny):.8f}",
                         }
                         if expected != actual:
                             self._item(report.report_id, "committed_usage_mismatch", "预扣结算与最终成功用量不一致",
@@ -100,10 +100,10 @@ class BillingReconcileService:
                 if reservation.status == "reserved" and reservation.expires_at < now - timedelta(minutes=RECONCILE_GRACE_MINUTES):
                     self._item(report.report_id, "expired_lease_still_reserved", "预扣租约超过宽限期仍未终结", reservation=reservation, now=now)
                 invalid_terminal = (
-                    reservation.status == "committed" and (reservation.actual_tokens is None or reservation.actual_cost_usd is None)
+                    reservation.status == "committed" and (reservation.actual_tokens is None or reservation.actual_cost_cny is None)
                 ) or (
                     reservation.status in {"released", "expired"} and
-                    ((reservation.actual_tokens or 0) != 0 or Decimal(reservation.actual_cost_usd or 0) != Decimal("0"))
+                    ((reservation.actual_tokens or 0) != 0 or Decimal(reservation.actual_cost_cny or 0) != Decimal("0"))
                 )
                 if invalid_terminal:
                     self._item(report.report_id, "terminal_reservation_invalid", "终态预扣的实际 token 或费用不合法", reservation=reservation, now=now)
@@ -114,9 +114,9 @@ class BillingReconcileService:
             for usage in usage_query.yield_per(500):
                 if usage.created_at < RECONCILE_COVERAGE_STARTED_AT or not (200 <= usage.status_code < 400):
                     continue
-                if usage.cost_usd is None:
-                    self._item(report.report_id, "usage_missing_cost", "成功用量缺少 USD 费用", usage=usage, now=now)
-                if (usage.cost_usd or 0) != 0 and (not usage.reservation_id or usage.reservation_id not in existing_ids):
+                if usage.cost_cny is None:
+                    self._item(report.report_id, "usage_missing_cost", "成功用量缺少 CNY 费用", usage=usage, now=now)
+                if (usage.cost_cny or 0) != 0 and (not usage.reservation_id or usage.reservation_id not in existing_ids):
                     self._item(report.report_id, "usage_missing_reservation", "成功计费用量缺少有效预扣", usage=usage, now=now)
             previous = {}
             quota_record_count = 0

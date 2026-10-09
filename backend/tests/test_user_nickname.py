@@ -144,7 +144,7 @@ def test_reservation_user_display_prefers_nickname_and_preserves_old_records(ctx
     for reservation_id, user_id in (("active", owner.user_id), ("historical", "removed-user")):
         db.add(QuotaReservation(
             reservation_id=reservation_id, user_id=user_id, key_id="key", model="model",
-            estimated_tokens=100, estimated_cost_usd=1, price_type="token",
+            estimated_tokens=100, estimated_cost_cny=1, price_type="token",
             input_price=0, output_price=0, request_price=0, status="reserved",
             created_at=datetime(2026, 10, 8), updated_at=datetime(2026, 10, 8),
             expires_at=datetime(2026, 10, 9),
@@ -172,7 +172,7 @@ def test_admin_reservations_default_to_ten_per_page(ctx):
     db, client, owner = ctx
     db.add_all(QuotaReservation(
         reservation_id=f"reservation-{i:02d}", user_id=owner.user_id, key_id="key", model="model",
-        estimated_tokens=100, estimated_cost_usd=1, price_type="token",
+        estimated_tokens=100, estimated_cost_cny=1, price_type="token",
         input_price=0, output_price=0, request_price=0, status="reserved",
         created_at=datetime(2026, 10, 8, 0, i), updated_at=datetime(2026, 10, 8, 0, i),
         expires_at=datetime(2026, 10, 9),
@@ -222,7 +222,7 @@ def test_usage_stats_and_export_prefer_nickname_without_losing_username(ctx):
     owner.nickname = "统计昵称"
     db.add(UsageLog(
         log_id="nickname-usage", user_id=owner.user_id, key_id="key", model="test-model",
-        prompt_tokens=70, completion_tokens=30, total_tokens=100, cost_usd=0,
+        prompt_tokens=70, completion_tokens=30, total_tokens=100, cost_cny=0,
         latency_ms=20, status_code=200, created_at=datetime(2026, 10, 8, 8),
     ))
     db.commit()

@@ -186,7 +186,7 @@ const StatsPage = () => {
           fontFamily: "'Space Grotesk', sans-serif", 
           color: v ? '#22C55E' : '#64748B' 
         }}>
-          {v ? `$${v.toFixed(2)}` : '-'}
+          {v ? `¥${v.toFixed(8)}` : '-'}
         </span>
       )
     },
@@ -418,13 +418,13 @@ const StatsPage = () => {
         <Table rowKey="budget_id" size="small" pagination={false} dataSource={billing?.budgets || []} locale={{ emptyText: '当前 Key 归属项目未配置预算' }} columns={[
           { title: '维度', dataIndex: 'scope_type', render: value => value === 'project' ? '项目' : '部门' },
           { title: '名称', dataIndex: 'scope_name' },
-          { title: '实际消费', dataIndex: 'used_usd', render: value => `$${Number(value).toFixed(8)}` },
-          { title: '预扣中', dataIndex: 'reserved_usd', render: value => `$${Number(value).toFixed(8)}` },
-          { title: '剩余预算', dataIndex: 'remaining_usd', render: value => `$${Number(value).toFixed(8)}` },
+          { title: '实际消费', dataIndex: 'used_cny', render: value => `¥${Number(value).toFixed(8)}` },
+          { title: '预扣中', dataIndex: 'reserved_cny', render: value => `¥${Number(value).toFixed(8)}` },
+          { title: '剩余预算', dataIndex: 'remaining_cny', render: value => `¥${Number(value).toFixed(8)}` },
           { title: '使用率', dataIndex: 'usage_percent', render: value => value == null ? '—' : `${Number(value).toFixed(2)}%` },
           { title: '策略', dataIndex: 'policy', render: value => value === 'block' ? '超额阻断' : '仅告警' },
         ]} />
-        {(billing?.reservations?.length || 0) > 0 && <Alert type="info" showIcon style={{ marginTop: 12 }} message={`当前有 ${billing!.reservations.length} 笔请求预扣中，合计 $${billing!.reservations.reduce((sum, row) => sum + Number(row.estimated_cost_usd), 0).toFixed(8)}`} description="请求完成后按实际用量结算；失败、断开或超时会释放预扣。" />}
+        {(billing?.reservations?.length || 0) > 0 && <Alert type="info" showIcon style={{ marginTop: 12 }} message={`当前有 ${billing!.reservations.length} 笔请求预扣中，合计 ¥${billing!.reservations.reduce((sum, row) => sum + Number(row.estimated_cost_cny), 0).toFixed(8)}`} description="请求完成后按实际用量结算；失败、断开或超时会释放预扣。" />}
       </Card>
 
       {/* 主要内容区：额度使用 + API Keys */}
@@ -675,9 +675,9 @@ const StatsPage = () => {
                     const item = params[0];
                     const value = item?.value ?? 0;
                     const displayValue = Number(value) < 0.01 
-                      ? Number(value).toFixed(4) 
+                      ? Number(value).toFixed(8)
                       : Number(value).toFixed(2);
-                    return (item?.name || '') + ': $' + displayValue;
+                    return (item?.name || '') + ': ¥' + displayValue;
                   }
                 },
                 grid: {
@@ -695,7 +695,7 @@ const StatsPage = () => {
                 },
                 yAxis: {
                   type: 'value',
-                  name: 'Cost ($)',
+                  name: 'Cost (¥)',
                   nameTextStyle: { color: token.colorTextSecondary, padding: [0, 0, 0, 10] },
                   axisLine: { show: false },
                   splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } },

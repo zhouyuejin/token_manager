@@ -35,7 +35,7 @@ def test_alert_rules_update_is_audited_and_used_by_alert_service(db):
         channel_error_min_requests=8,
         quota_remaining_percent=15,
         project_growth_multiplier=2.5,
-        project_growth_min_cost_usd=0.05,
+        project_growth_min_cost_cny=0.05,
     )
 
     result = update_alert_rules(data, make_request("PUT"), db, admin)
@@ -49,7 +49,7 @@ def test_alert_rules_update_is_audited_and_used_by_alert_service(db):
         "channel_error_min_requests": 5,
         "quota_remaining_percent": 20.0,
         "project_growth_multiplier": 3.0,
-        "project_growth_min_cost_usd": 0.01,
+        "project_growth_min_cost_cny": 0.01,
     }, "after": data.model_dump()}
 
 

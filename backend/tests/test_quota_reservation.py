@@ -58,8 +58,8 @@ def test_actual_cost_release_and_expiry(db, account):
     service.commit(rid, {'prompt_tokens': 2, 'completion_tokens': 40, 'total_tokens': 42})
     row = db.get(QuotaReservation, rid)
     assert row.status == 'committed'
-    assert row.actual_cost_usd == Decimal('0.082')
-    assert row.estimated_cost_usd >= row.actual_cost_usd
+    assert row.actual_cost_cny == Decimal('0.082')
+    assert row.estimated_cost_cny >= row.actual_cost_cny
     service.release(rid)
     assert db.get(QuotaReservation, rid).status == 'committed'
     failed = reserve(db, account, 50)
@@ -165,7 +165,7 @@ def test_all_entrypoints_reserve_and_finish(db, account, SessionLocal, monkeypat
     row = db.query(QuotaReservation).one()
     assert row.status == ('committed' if status == 200 else 'released')
     assert db.query(User).filter_by(user_id=account).one().quota_used == (42 if status == 200 else 0)
-    assert db.query(UsageLog).one().cost_usd == (Decimal('0.082') if status == 200 else 0)
+    assert db.query(UsageLog).one().cost_cny == (Decimal('0.082') if status == 200 else 0)
 
 
 def test_price_snapshot_and_default_output_bound(db, account):
@@ -191,8 +191,8 @@ def test_price_snapshot_and_default_output_bound(db, account):
     finally:
         loop.close()
     from app.models.usage_log import UsageLog
-    assert db.query(UsageLog).one().cost_usd == Decimal('0.082')
-    assert db.get(QuotaReservation, rid).actual_cost_usd == Decimal('0.082')
+    assert db.query(UsageLog).one().cost_cny == Decimal('0.082')
+    assert db.get(QuotaReservation, rid).actual_cost_cny == Decimal('0.082')
 
 
 def test_lease_renew_prevents_timeout_release(db, account):
@@ -252,7 +252,7 @@ def test_minimax_message_template_usage_fits_reservation(db, account):
     row = db.get(QuotaReservation, rid)
     assert row.status == 'committed'
     assert row.actual_tokens == 1229
-    assert row.actual_cost_usd == Decimal('2.253')
+    assert row.actual_cost_cny == Decimal('2.253')
     db.refresh(user)
     assert user.quota_used == 1229
     # 同上:reserve_quota 不应把估算默认 1024 写回 request。
@@ -324,6 +324,8 @@ def test_migration_on_mysql(db):
         chat_spec.loader.exec_module(chat_migration)
         chat_migration.op = Operations(MigrationContext.configure(conn))
         chat_migration.upgrade()
+        from tests.conftest import upgrade_cny_schema
+        upgrade_cny_schema(conn)
 
 
 @pytest.mark.parametrize('admin', [False, True])

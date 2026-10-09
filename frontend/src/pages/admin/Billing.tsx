@@ -1,3 +1,4 @@
+import { ExchangeRateStatus } from '../../components/ExchangeRateStatus'
 import { useState } from 'react'
 import { Alert, Button, Card, DatePicker, Descriptions, Drawer, Form, InputNumber, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import dayjs from 'dayjs'
@@ -53,8 +54,8 @@ const Billing = () => {
   const open = (row: Budget | null) => {
     setEditing(row)
     form.resetFields()
-    form.setFieldsValue(row ? { ...row, amount_usd: String(row.amount_usd) } : {
-      scope_type: 'project', amount_usd: '0', thresholds: [80, 90, 100], policy: 'block', enabled: true
+    form.setFieldsValue(row ? { ...row, amount_cny: String(row.amount_cny) } : {
+      scope_type: 'project', amount_cny: '0', thresholds: [80, 90, 100], policy: 'block', enabled: true
     })
     setVisible(true)
   }
@@ -63,7 +64,7 @@ const Billing = () => {
     setSaving(true)
     try {
       await saveBudget(values.scope_type, values.scope_id, month, {
-        amount_usd: values.amount_usd, thresholds: values.thresholds, policy: values.policy, enabled: values.enabled
+        amount_cny: values.amount_cny, thresholds: values.thresholds, policy: values.policy, enabled: values.enabled
       })
       message.success('预算保存成功')
       setVisible(false)
@@ -74,15 +75,15 @@ const Billing = () => {
 
   const money = (value: string | number) => {
     const n = Number(value)
-    return `$${n === 0 ? '0.00' : Math.abs(n) < 0.01 ? n.toFixed(8) : n.toFixed(2)}`
+    return `¥${n === 0 ? '0.00' : Math.abs(n) < 0.01 ? n.toFixed(8) : n.toFixed(2)}`
   }
   const columns = [
     { title: '维度', dataIndex: 'scope_type', render: (value: string) => value === 'project' ? '项目' : '部门' },
     { title: '名称', dataIndex: 'scope_name' },
-    { title: '月预算', dataIndex: 'amount_usd', render: money },
-    { title: '实际消费', dataIndex: 'used_usd', render: money },
-    { title: '预扣中', dataIndex: 'reserved_usd', render: money },
-    { title: '可用预算', dataIndex: 'remaining_usd', render: money },
+    { title: '月预算', dataIndex: 'amount_cny', render: money },
+    { title: '实际消费', dataIndex: 'used_cny', render: money },
+    { title: '预扣中', dataIndex: 'reserved_cny', render: money },
+    { title: '可用预算', dataIndex: 'remaining_cny', render: money },
     { title: '使用率', dataIndex: 'usage_percent', render: (value: number | null) => value == null ? '—' : `${Number(value).toFixed(2)}%` },
     { title: '告警阈值', dataIndex: 'thresholds', render: (values: number[]) => values.map(t => `${t}%`).join(' / ') },
     { title: '超预算策略', dataIndex: 'policy', render: (value: string) => value === 'block' ? '阻断' : '仅告警' },
@@ -97,8 +98,9 @@ const Billing = () => {
     { title: '模型', dataIndex: 'model', width: 150, render: (value: string) => modelDisplayName(value) },
     { title: '预估 Token', dataIndex: 'estimated_tokens', width: 120, render: (value: number) => value.toLocaleString() },
     { title: '实际 Token', dataIndex: 'actual_tokens', width: 120, render: (value: number | null) => value == null ? '—' : value.toLocaleString() },
-    { title: '预扣金额', dataIndex: 'estimated_cost_usd', width: 120, render: money },
-    { title: '实际金额', dataIndex: 'actual_cost_usd', width: 120, render: (value: number | null) => value == null ? '—' : money(value) },
+    { title: '调用汇率', key: 'exchange_rate', width: 160, render: (_: unknown, row: Reservation) => row.price_currency === 'USD' ? `${row.exchange_rate || '—'} (${row.exchange_rate_date?.slice(0, 10) || '—'})` : '人民币原价' },
+    { title: '预扣金额', dataIndex: 'estimated_cost_cny', width: 120, render: money },
+    { title: '实际金额', dataIndex: 'actual_cost_cny', width: 120, render: (value: number | null) => value == null ? '—' : money(value) },
     { title: '创建时间', dataIndex: 'created_at', width: 180, render: (value: string) => dayjs.utc(value).utcOffset(8).format('YYYY-MM-DD HH:mm:ss') }
   ]
   const statusMeta = {
@@ -137,8 +139,9 @@ const Billing = () => {
   const sourceLabels: Record<string, string> = {
     reservation_id: '预扣 ID', user_id: '用户 ID', key_id: 'Key ID', project_id: '项目 ID', department_id: '部门 ID',
     model: '模型', status: '状态', estimated_tokens: '预估 Token', actual_tokens: '实际 Token',
-    estimated_cost_usd: '预估金额（USD）', actual_cost_usd: '实际金额（USD）', id: '用量序号', log_id: '用量 ID',
-    channel_id: '渠道 ID', api_type: '接口类型', cost_usd: '费用（USD）', prompt_tokens: '输入 Token',
+    estimated_cost_cny: '预估金额（CNY）', actual_cost_cny: '实际金额（CNY）', id: '用量序号', log_id: '用量 ID',
+    price_currency: '原币种', exchange_rate: '换算汇率', exchange_rate_date: '汇率日期', conversion_kind: '换算方式',
+    channel_id: '渠道 ID', api_type: '接口类型', cost_cny: '费用（CNY）', prompt_tokens: '输入 Token',
     completion_tokens: '输出 Token', total_tokens: '总 Token', status_code: 'HTTP 状态码', record_id: '流水 ID',
     type: '变动类型', amount: '变动额度', balance_before: '变动前余额', balance_after: '变动后余额',
     source: '来源', reason: '原因',
@@ -163,7 +166,8 @@ const Billing = () => {
       <Button onClick={() => { mutate(); mutateReservations() }}>刷新</Button>
       <WriteOnly><Button type="primary" onClick={() => open(null)}>配置月预算</Button></WriteOnly>
     </Space>}>
-      <Alert type="info" showIcon style={{ marginBottom: 16 }} message="按北京时间自然月配置，金额单位为 USD。项目与部门预算同时生效，可用预算已扣除预扣中金额。未配置或停用时不限制，下月需单独配置。告警每 60 秒检查一次。" />
+      <ExchangeRateStatus />
+      <Alert type="info" showIcon style={{ marginBottom: 16 }} message="按北京时间自然月配置，金额单位为 CNY。项目与部门预算同时生效，可用预算已扣除预扣中金额。未配置或停用时不限制，下月需单独配置。告警每 60 秒检查一次。" />
       {error && <Alert type="error" message="预算加载失败" action={<Button onClick={() => mutate()}>重试</Button>} />}
       <Table rowKey="budget_id" loading={isLoading} dataSource={data?.items || []} columns={columns} scroll={{ x: 1500 }} />
     </Card>
@@ -197,7 +201,7 @@ const Billing = () => {
         <Form.Item name="scope_id" label={kind === 'project' ? '项目' : '部门'} rules={[{ required: true, message: '请选择预算归属' }]}>
           <Select disabled={!!editing} showSearch optionFilterProp="label" options={options} />
         </Form.Item>
-        <Form.Item name="amount_usd" label="月预算（USD）" rules={[{ required: true, message: '请输入月预算' }]}>
+        <Form.Item name="amount_cny" label="月预算（CNY）" rules={[{ required: true, message: '请输入月预算' }]}>
           <InputNumber stringMode min="0" precision={8} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="thresholds" label="告警阈值" rules={[{ required: true, message: '请至少选择一个阈值' }]}>

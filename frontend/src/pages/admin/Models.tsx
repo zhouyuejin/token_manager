@@ -1,3 +1,5 @@
+import { modelUpdate } from '../../utils/modelUpdate.mjs'
+import { ExchangeRateStatus } from '../../components/ExchangeRateStatus'
 import { modelDisplayName } from '../../utils/modelDisplayName.mjs'
 import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
@@ -141,7 +143,7 @@ const ModelsPage = () => {
   const handleUpdate = async (values: any) => {
     if (!editModel) return
     try {
-      await updateModel(editModel.model_id, parseAliases(values))
+      await updateModel(editModel.model_id, modelUpdate(parseAliases(values), editModel))
       message.success('更新成功')
       setModalVisible(false)
       setEditModel(null)
@@ -324,11 +326,11 @@ const ModelsPage = () => {
   // 格式化价格显示
   const formatPrice = (model: ModelMapping) => {
     if (model.price_type === 'request') {
-      return `$${model.price_per_request}/次`
+      return `¥${model.price_per_request}/次`
     }
     const inputPrice = model.price_per_1k_input || 0
     const outputPrice = model.price_per_1k_output || 0
-    return `$${inputPrice}/1K输入 · $${outputPrice}/1K输出`
+    return `¥${inputPrice}/1K输入 · ¥${outputPrice}/1K输出`
   }
 
   // 打开获取模型弹窗
@@ -539,6 +541,8 @@ const ModelsPage = () => {
         description={<Space wrap><Tag>Chat Completions</Tag><Tag>Responses</Tag><Tag>Embeddings</Tag><Tag>Images</Tag><Tag>Audio Transcriptions</Tag><span>Rerank 尚未开放；供应商上游格式请在渠道配置中查看。</span></Space>}
       />
 
+      <ExchangeRateStatus />
+
       {/* 模型列表 */}
       <div style={{
         background: token.colorBgContainer,
@@ -728,19 +732,19 @@ const ModelsPage = () => {
                     {priceType === 'token' ? (
                       <Row gutter={16}>
                         <Col span={12}>
-                          <Form.Item name="price_per_1k_input" label={<span style={{ color: token.colorTextSecondary }}>每千输入Token价格($)</span>}>
-                            <InputNumber min={0} step={0.0001} precision={4}  placeholder="0.001" />
+                          <Form.Item name="price_per_1k_input" label={<span style={{ color: token.colorTextSecondary }}>每千输入Token价格(¥)</span>}>
+                            <InputNumber min={0} step={0.000001} precision={12}  placeholder="0.001" />
                           </Form.Item>
                         </Col>
                         <Col span={12}>
-                          <Form.Item name="price_per_1k_output" label={<span style={{ color: token.colorTextSecondary }}>每千输出Token价格($)</span>}>
-                            <InputNumber min={0} step={0.0001} precision={4}  placeholder="0.002" />
+                          <Form.Item name="price_per_1k_output" label={<span style={{ color: token.colorTextSecondary }}>每千输出Token价格(¥)</span>}>
+                            <InputNumber min={0} step={0.000001} precision={12}  placeholder="0.002" />
                           </Form.Item>
                         </Col>
                       </Row>
                     ) : (
-                      <Form.Item name="price_per_request" label={<span style={{ color: token.colorTextSecondary }}>每次请求价格($)</span>}>
-                        <InputNumber min={0} step={0.01} precision={2}  placeholder="0.01" />
+                      <Form.Item name="price_per_request" label={<span style={{ color: token.colorTextSecondary }}>每次请求价格(¥)</span>}>
+                        <InputNumber min={0} step={0.000001} precision={12}  placeholder="0.01" />
                       </Form.Item>
                     )}
 

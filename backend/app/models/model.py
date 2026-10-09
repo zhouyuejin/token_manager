@@ -33,11 +33,13 @@ class Model(Base):
     description = Column(String(255), nullable=True, comment="模型描述")
     aliases = Column(Text, nullable=True, comment="别名(JSON数组)")
 
+    price_currency = Column(String(3), nullable=False, default="CNY", server_default="CNY")
+
     # 定价配置
     price_type = Column(Enum(PriceType), default=PriceType.token, nullable=False, comment="计费类型")
-    price_per_1k_input = Column(Numeric(10, 6), default=0, nullable=False, comment="每千输入token价格(单位:$)")
-    price_per_1k_output = Column(Numeric(10, 6), default=0, nullable=False, comment="每千输出token价格(单位:$)")
-    price_per_request = Column(Numeric(10, 6), default=0, nullable=False, comment="每次请求价格(单位:$)")
+    price_per_1k_input = Column(Numeric(24, 12), default=0, nullable=False, comment="每千输入token价格(单位:price_currency)")
+    price_per_1k_output = Column(Numeric(24, 12), default=0, nullable=False, comment="每千输出token价格(单位:price_currency)")
+    price_per_request = Column(Numeric(24, 12), default=0, nullable=False, comment="每次请求价格(单位:price_currency)")
 
     status = Column(Enum(ModelStatus), default=ModelStatus.active, nullable=False)
     route_strategy = Column(String(20), default="priority", nullable=False, comment="路由策略: priority/weight/lowest_cost/lowest_latency")

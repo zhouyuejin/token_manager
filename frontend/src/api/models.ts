@@ -6,6 +6,8 @@ export interface Model {
   display_name?: string
   description?: string
   aliases?: string[]
+  price_currency?: 'CNY'
+  source_price_currency?: 'USD' | 'CNY'
   price_type: 'token' | 'request'
   price_per_1k_input: number
   price_per_1k_output: number
