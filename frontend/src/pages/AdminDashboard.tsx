@@ -403,14 +403,6 @@ const AdminDashboard: React.FC = () => {
     const total = models.reduce((sum, item) => sum + (item.cost || 0), 0)
     if (!models.length) return null
     return {
-      title: {
-        text: `¥${total.toFixed(8)}`,
-        subtext: '总成本',
-        left: 'center',
-        top: '34%',
-        textStyle: { color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 600 },
-        subtextStyle: { color: token.colorTextSecondary, fontSize: 11 }
-      },
       tooltip: {
         trigger: 'item',
         renderMode: 'richText',
@@ -430,8 +422,9 @@ const AdminDashboard: React.FC = () => {
       },
       series: [{
         type: 'pie',
-        radius: ['48%', '70%'],
-        center: ['50%', '42%'],
+        roseType: 'radius',
+        radius: ['8%', '78%'],
+        center: ['50%', '43%'],
         label: { show: false },
         labelLine: { show: false },
         data: models.map((item, index) => ({
@@ -442,6 +435,7 @@ const AdminDashboard: React.FC = () => {
       }]
     }
   }, [stats?.by_model, token])
+  const totalModelCost = (stats?.by_model || []).reduce((sum, item) => sum + (item.cost || 0), 0)
 
   return (
     <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100vh' }}>
@@ -705,11 +699,16 @@ const AdminDashboard: React.FC = () => {
             }}
           >
             {costChartOption ? (
+              <>
+              <div style={{ textAlign: 'center', color: token.colorTextSecondary, marginTop: 8 }}>
+                总成本 <strong style={{ color: token.colorText, marginLeft: 8 }}>¥{totalModelCost.toFixed(8)}</strong>
+              </div>
               <ReactECharts
                 option={costChartOption}
-                style={{ height: 350 }}
+                style={{ height: 310 }}
                 opts={{ renderer: 'canvas' }}
               />
+              </>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(100, 116, 139, 0.6)' }}>
                 暂无数据
