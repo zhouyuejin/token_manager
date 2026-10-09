@@ -9,13 +9,14 @@ import { useNotificationWebSocket } from './hooks/useNotificationWebSocket'
 import { useSwrData } from './hooks/useSwr'
 import { UserInfo } from './api/auth'
 import { isAuthSessionCurrent } from './utils/authSession.mjs'
-import { defaultAdminPath } from './utils/adminPermissions.mjs'
+import { defaultAdminPath, hasPermission } from './utils/adminPermissions.mjs'
 
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
 const ApiKeys = lazy(() => import('./pages/ApiKeys'))
 const Stats = lazy(() => import('./pages/Stats'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const DepartmentDashboard = lazy(() => import('./pages/admin/DepartmentDashboard'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Chat = lazy(() => import('./pages/Chat'))
@@ -68,7 +69,7 @@ function App() {
   useEffect(() => {
     if (token && user) {
       const nextPath = defaultAdminPath(user.permissions)
-      if (nextPath !== '/stats' && window.location.pathname === '/stats') {
+      if ((hasPermission(user.permissions, 'admin:read') || hasPermission(user.permissions, 'department:read')) && window.location.pathname === '/stats') {
         navigate(nextPath, { replace: true })
       }
     }
@@ -97,7 +98,7 @@ function App() {
           <Route path="/" element={token ? <MainLayout /> : <Navigate to="/login" />}>
             <Route index element={<Navigate to={homePath} />} />
             
-            <Route path="stats" element={homePath !== '/stats' ? <Navigate to={homePath} /> : <Stats />} />
+            <Route path="stats" element={user && (hasPermission(user.permissions, 'admin:read') || hasPermission(user.permissions, 'department:read')) ? <Navigate to={homePath} /> : <Stats />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="approvals" element={<Approvals />} />
             <Route path="api-keys" element={<ApiKeys />} />
@@ -106,6 +107,7 @@ function App() {
             
             <Route path="admin" element={<AdminLayout><Outlet /></AdminLayout>}>
               <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="department-dashboard" element={<DepartmentDashboard />} />
               <Route path="approvals" element={<AdminApprovals />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="projects" element={<ProjectsPage />} />

@@ -1,4 +1,4 @@
-const departmentPaths = ['/admin/projects', '/admin/departments']
+const departmentPaths = ['/admin/projects', '/admin/departments', '/admin/department-dashboard']
 
 export const hasPermission = (permissions = [], permission) => permissions.includes(permission)
 
@@ -11,7 +11,7 @@ export const canReadAdminPath = (path, permissions = []) => {
 
 export const defaultAdminPath = (permissions = []) => {
   if (hasPermission(permissions, 'admin:read')) return '/admin/dashboard'
-  if (hasPermission(permissions, 'department:read')) return '/admin/departments'
+  if (hasPermission(permissions, 'department:read')) return '/admin/department-dashboard'
   return '/stats'
 }
 

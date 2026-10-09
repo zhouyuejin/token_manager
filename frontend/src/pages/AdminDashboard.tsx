@@ -2,6 +2,8 @@ import { userDisplayName } from '../utils/userDisplayName.mjs'
 import { formatTokenCount } from '../utils/formatTokenCount.mjs'
 import { useState, useEffect, useMemo } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
+import { useAuthStore } from '../store/auth'
+import { hasPermission } from '../utils/adminPermissions.mjs'
 import { Row, Col, Card, Statistic, DatePicker, Typography, Empty, Tooltip, Select, Alert, Button, Space } from 'antd'
 import { 
   UserOutlined, 
@@ -44,6 +46,7 @@ const TOP_USERS_DISPLAY = 10
 
 const AdminDashboard: React.FC = () => {
   const { token, isDark } = useThemeToken()
+  const canReadDepartments = useAuthStore(state => hasPermission(state.user?.permissions, 'department:read'))
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().subtract(7, 'day'),
     dayjs()
@@ -57,8 +60,8 @@ const AdminDashboard: React.FC = () => {
   const [keyId, setKeyId] = useState<string>()
   const [exporting, setExporting] = useState(false)
   const message = useMessage()
-  const { data: projectsData, error: projectsError, mutate: mutateProjects } = useSwrData<{ items: Project[] }>("/projects/admin")
-  const { data: departmentsData } = useSwrData<{ items: Department[] }>("/projects/admin/departments")
+  const { data: projectsData, error: projectsError, mutate: mutateProjects } = useSwrData<{ items: Project[] }>(canReadDepartments ? "/projects/admin" : null)
+  const { data: departmentsData } = useSwrData<{ items: Department[] }>(canReadDepartments ? "/projects/admin/departments" : null)
   const { data: usersData } = useSwrData<{ items: { user_id: string; username: string; nickname?: string | null }[] }>("/admin/users?page_size=100")
   const { data: channelsData } = useSwrData<{ items: { channel_id: string; name: string; type: string }[] }>("/admin/channels")
   const { data: keysData } = useSwrData<{ items: { key_id: string; name: string; user_id: string; project_id?: string | null }[] }>("/api-keys/admin")
@@ -580,8 +583,10 @@ const AdminDashboard: React.FC = () => {
           仪表盘
         </h2>
         <Space wrap>
-        <Select allowClear showSearch optionFilterProp="label" placeholder="全部部门" value={departmentId} onChange={value => { setDepartmentId(value); if (value && !projectsData?.items.find(project => project.project_id === projectId && project.dept_id === value)) setProjectId(undefined) }} style={{ width: 140 }} options={(departmentsData?.items || []).map(row => ({ value: row.dept_id, label: row.name }))} />
-        <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目" value={projectId} onChange={value => { setProjectId(value); setKeyId(undefined) }} style={{ width: 200 }} options={(projectsData?.items || []).filter(project => !departmentId || project.dept_id === departmentId).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
+        {canReadDepartments && <>
+          <Select allowClear showSearch optionFilterProp="label" placeholder="全部部门" value={departmentId} onChange={value => { setDepartmentId(value); if (value && !projectsData?.items.find(project => project.project_id === projectId && project.dept_id === value)) setProjectId(undefined) }} style={{ width: 140 }} options={(departmentsData?.items || []).map(row => ({ value: row.dept_id, label: row.name }))} />
+          <Select allowClear showSearch optionFilterProp="label" placeholder="全部项目" value={projectId} onChange={value => { setProjectId(value); setKeyId(undefined) }} style={{ width: 200 }} options={(projectsData?.items || []).filter(project => !departmentId || project.dept_id === departmentId).map(project => ({ value: project.project_id, label: `${project.department_name} / ${project.name}` }))} />
+        </>}
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部用户" value={userId} onChange={value => { setUserId(value); setKeyId(undefined) }} style={{ width: 140 }} options={(usersData?.items || []).map(row => ({ value: row.user_id, label: userDisplayName(row) }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部 Key" value={keyId} onChange={setKeyId} style={{ width: 160 }} options={(keysData?.items || []).filter(row => (!userId || row.user_id === userId) && (!projectId || row.project_id === projectId)).map(row => ({ value: row.key_id, label: row.name || row.key_id }))} />
         <Select allowClear showSearch optionFilterProp="label" placeholder="全部模型" value={model} onChange={setModel} style={{ width: 160 }} options={(stats?.by_model || []).map(row => ({ value: row.model, label: getModelDisplayName(row.model, row.display_name) }))} />

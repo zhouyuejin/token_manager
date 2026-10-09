@@ -6,6 +6,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { getCurrentUser, getLoginOptions, LoginOptions } from '../api/auth'
 import { useMessage } from '../utils/message'
+import { defaultAdminPath } from '../utils/adminPermissions.mjs'
 import gsap from 'gsap'
 
 const isDev = import.meta.env.DEV
@@ -389,7 +390,7 @@ const Login = () => {
     setAuth(accessToken, refreshToken)
     getCurrentUser().then(user => {
       useAuthStore.setState({ user })
-      navigate(user.role === 'admin' ? '/admin/dashboard' : '/stats')
+      navigate(defaultAdminPath(user.permissions))
     }).catch(() => message.error('企业登录成功，但无法读取用户信息'))
   }, [navigate, message, setAuth])
 
@@ -403,11 +404,7 @@ const Login = () => {
       message.success('登录成功')
       setTimeout(() => {
         const userInfo = useAuthStore.getState().user
-        if (userInfo?.role === 'admin') {
-          navigate('/admin/dashboard')
-        } else {
-          navigate('/stats')
-        }
+        navigate(defaultAdminPath(userInfo?.permissions))
       }, 100)
     } catch (error) {
       // 错误已在请求拦截器中处理

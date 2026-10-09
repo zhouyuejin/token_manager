@@ -1,8 +1,10 @@
 """部门、项目维护及项目成员分配。"""
 import secrets
+from datetime import date, timedelta
 from typing import Literal, Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 from app.core.database import get_db
 from app.dependencies import get_current_user, require_admin
@@ -11,6 +13,8 @@ from app.models.organization import Department
 from app.models.project import Project, UserProject
 from app.models.api_key import ApiKey
 from app.models.usage_log import UsageLog
+from app.models.model import Model
+from app.models.model_channel import ModelChannel
 from app.models.quota_reservation import QuotaReservation
 from app.models.budget import Budget
 from app.services.operation_log_service import record_operation
@@ -92,6 +96,107 @@ async def list_departments(admin: User = Depends(require_admin), db: Session = D
         {**department_response(row), 'owner_name': nickname or username or row.owner_user_id}
         for row, nickname, username in query.all()
     ]}
+
+
+@router.get('/admin/usage-stats')
+async def get_department_usage_stats(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    department_id: Optional[str] = Query(None),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    end_date = end_date or date.today()
+    start_date = start_date or end_date - timedelta(days=6)
+    if start_date > end_date:
+        raise HTTPException(422, '开始日期不能晚于结束日期')
+
+    owned_department_ids = [row[0] for row in db.query(Department.dept_id).filter(
+        Department.owner_user_id == admin.user_id
+    ).all()]
+    if department_id:
+        if department_id not in owned_department_ids:
+            raise HTTPException(404, '部门不存在')
+        department_ids = [department_id]
+    else:
+        department_ids = owned_department_ids
+
+    if not department_ids:
+        return {
+            'total_tokens': 0, 'total_requests': 0, 'total_cost': 0,
+            'success_rate': 100, 'by_day': [], 'by_project': [],
+        }
+
+    date_filter = [
+        UsageLog.department_id.in_(department_ids),
+        func.date(UsageLog.created_at) >= start_date,
+        func.date(UsageLog.created_at) <= end_date,
+    ]
+    total_tokens = db.query(func.sum(UsageLog.total_tokens)).filter(*date_filter).scalar() or 0
+    total_requests = db.query(UsageLog.log_id).filter(*date_filter).count()
+    successful_requests = db.query(UsageLog.log_id).filter(
+        *date_filter, UsageLog.status_code == 200
+    ).count()
+
+    daily_rows = db.query(
+        func.date(UsageLog.created_at).label('date'),
+        func.sum(UsageLog.total_tokens).label('tokens'),
+        func.count(UsageLog.log_id).label('requests'),
+    ).filter(*date_filter).group_by(func.date(UsageLog.created_at)).order_by(
+        func.date(UsageLog.created_at)
+    ).all()
+    project_rows = db.query(
+        UsageLog.project_id,
+        Project.name,
+        func.sum(UsageLog.total_tokens).label('tokens'),
+        func.count(UsageLog.log_id).label('requests'),
+    ).outerjoin(Project, Project.project_id == UsageLog.project_id).filter(
+        *date_filter, UsageLog.project_id.isnot(None)
+    ).group_by(UsageLog.project_id, Project.name).order_by(
+        func.sum(UsageLog.total_tokens).desc()
+    ).all()
+
+    model_rows = db.query(
+        UsageLog.model,
+        func.sum(UsageLog.total_tokens).label('tokens'),
+        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.prompt_tokens), else_=0)).label('prompt_tokens'),
+        func.sum(case((UsageLog.cost_usd.is_(None), UsageLog.completion_tokens), else_=0)).label('completion_tokens'),
+        func.sum(UsageLog.cost_usd).label('saved_cost'),
+    ).filter(*date_filter).group_by(UsageLog.model).all()
+    upstream_models = [row.model for row in model_rows]
+    channel_mappings = db.query(ModelChannel.upstream_model, ModelChannel.model_id).filter(
+        ModelChannel.upstream_model.in_(upstream_models)
+    ).all() if upstream_models else []
+    upstream_to_model_id = {upstream: model_id for upstream, model_id in channel_mappings}
+    model_ids = set(upstream_models) | set(upstream_to_model_id.values())
+    models = {row.model_id: row for row in db.query(Model).filter(Model.model_id.in_(model_ids)).all()} if model_ids else {}
+
+    total_cost = 0.0
+    for row in model_rows:
+        model_id = row.model if row.model in models else upstream_to_model_id.get(row.model)
+        model = models.get(model_id) if model_id else None
+        if model:
+            total_cost += (
+                float(row.prompt_tokens or 0) / 1000 * float(model.price_per_1k_input or 0)
+                + float(row.completion_tokens or 0) / 1000 * float(model.price_per_1k_output or 0)
+            )
+        total_cost += float(row.saved_cost or 0)
+
+    return {
+        'total_tokens': total_tokens,
+        'total_requests': total_requests,
+        'total_cost': round(total_cost, 8),
+        'success_rate': round(successful_requests / total_requests * 100, 2) if total_requests else 100,
+        'by_day': [
+            {'date': str(row.date), 'tokens': row.tokens or 0, 'requests': row.requests or 0}
+            for row in daily_rows
+        ],
+        'by_project': [
+            {'project_id': row.project_id, 'name': row.name or row.project_id,
+             'tokens': row.tokens or 0, 'requests': row.requests or 0}
+            for row in project_rows
+        ],
+    }
 
 
 @router.post('/admin/departments')

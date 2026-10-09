@@ -11,11 +11,14 @@ const roles = {
 
 test('admin routes and menus follow effective permissions for each role', () => {
   assert.equal(defaultAdminPath(roles.admin), '/admin/dashboard')
-  assert.equal(defaultAdminPath(roles.department_admin), '/admin/departments')
+  assert.equal(defaultAdminPath(roles.department_admin), '/admin/department-dashboard')
   assert.equal(defaultAdminPath(roles.auditor), '/admin/dashboard')
   assert.equal(defaultAdminPath(roles.user), '/stats')
 
   assert.equal(canAccessAdminPath('/admin/projects', roles.department_admin), true)
+  assert.equal(canAccessAdminPath('/admin/department-dashboard', roles.department_admin), true)
+  assert.equal(canAccessAdminPath('/admin/department-dashboard', roles.auditor), false)
+  assert.equal(canAccessAdminPath('/admin/department-dashboard', roles.admin), true)
   assert.equal(canAccessAdminPath('/admin/projects', roles.auditor), false)
   assert.equal(canAccessAdminPath('/admin/users', roles.auditor), true)
   assert.equal(canAccessAdminPath('/admin/users', roles.user), false)

@@ -40,7 +40,7 @@ import NotificationDropdown from "../NotificationDropdown";
 import { useNotificationStore } from "../../store/notification";
 import { useSwrData } from "../../hooks/useSwr";
 import { useDefaultModelGroupWarning } from "../../hooks/useDefaultModelGroupWarning";
-import { canReadAdminPath, hasPermission } from "../../utils/adminPermissions.mjs";
+import { canReadAdminPath, defaultAdminPath, hasPermission } from "../../utils/adminPermissions.mjs";
 
 const { Sider } = Layout;
 
@@ -64,6 +64,7 @@ const getPageTitle = (pathname: string): string => {
     "/admin/projects": "项目管理",
     "/admin/billing": "预算管理",
     "/admin/departments": "部门管理",
+    "/admin/department-dashboard": "部门仪表盘",
     "/admin/channels": "渠道管理",
     "/admin/health": "渠道健康看板",
     "/admin/roles": "角色与权限",
@@ -173,7 +174,7 @@ const MainLayout = () => {
 
   const menuItems: MenuProps["items"] = [
     {
-      key: isAdmin ? "/admin/dashboard" : "/stats",
+      key: defaultAdminPath(permissions),
       icon: <DashboardOutlined />,
       label: "仪表盘",
     },
