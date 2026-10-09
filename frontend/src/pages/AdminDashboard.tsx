@@ -397,88 +397,51 @@ const AdminDashboard: React.FC = () => {
     }
   }, [stats, isDark, token])
 
-  // ========== 成本统计配置 ==========
-  const maxCost = stats?.by_model?.reduce((max, item) => 
-    Math.max(max, item.cost || 0), 0) || 0
-
-  // ========== 成本分布折线图配置 ==========
+  // ========== 成本分布环形图配置 ==========
   const costChartOption = useMemo(() => {
-    if (!stats?.by_model?.length) return null
-    
-    const sortedModels = [...stats.by_model].sort((a, b) => b.cost - a.cost)
-    const names = sortedModels.map(m => modelDisplayName(m.model, m.display_name))
-    const costs = sortedModels.map(m => m.cost || 0)
-
+    const models = [...(stats?.by_model || [])].sort((a, b) => b.cost - a.cost)
+    const total = models.reduce((sum, item) => sum + (item.cost || 0), 0)
+    if (!models.length) return null
     return {
+      title: {
+        text: `¥${total.toFixed(8)}`,
+        subtext: '总成本',
+        left: 'center',
+        top: '34%',
+        textStyle: { color: token.colorText, fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 600 },
+        subtextStyle: { color: token.colorTextSecondary, fontSize: 11 }
+      },
       tooltip: {
-        trigger: 'axis',
-        backgroundColor: isDark ? 'rgba(17, 24, 39, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-        textStyle: { color: token.colorText, fontFamily: "'Space Grotesk', sans-serif" },
-        formatter: (params: any) => {
-          const item = params[0]
-          return `<div style="font-family: 'Space Grotesk', sans-serif;">
-            <div style="font-weight: 600; margin-bottom: 4px;">${item.name}</div>
-            <div>成本: ¥${item.value.toFixed(8)}</div>
-          </div>`
-        }
+        trigger: 'item',
+        renderMode: 'richText',
+        formatter: (item: any) => `${item.name}：¥${Number(item.value).toFixed(8)}（${item.percent}%）`
       },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '15%',
-        top: '10%',
-        containLabel: true
+      legend: {
+        type: 'scroll',
+        orient: 'horizontal',
+        bottom: 0,
+        left: 'center',
+        width: '100%',
+        itemWidth: 10,
+        itemHeight: 10,
+        itemGap: 12,
+        textStyle: { color: token.colorTextSecondary, fontSize: 11, width: 120, overflow: 'truncate' },
+        pageTextStyle: { color: token.colorTextSecondary }
       },
-      xAxis: {
-        type: 'category',
-        data: names,
-        axisLine: { show: false },
-        axisLabel: { 
-          color: token.colorText, 
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontSize: 11,
-          rotate: names.length > 4 ? 20 : 0
-        },
-        axisTick: { show: false }
-      },
-      yAxis: {
-        type: 'value',
-        name: '成本 (¥)',
-        nameTextStyle: { color: token.colorTextSecondary, fontFamily: "'Space Grotesk', sans-serif" },
-        axisLine: { show: false },
-        axisLabel: { 
-          color: token.colorTextSecondary, 
-          fontFamily: "'Space Grotesk', sans-serif",
-          formatter: (value: number) => `¥${value.toFixed(8)}`
-        },
-        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
-      },
-      series: [
-        {
-          type: 'line',
-          data: costs.map((c, i) => ({
-            value: c,
-            itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
-          })),
-          smooth: true,
-          symbol: 'circle',
-          symbolSize: 10,
-          lineStyle: { width: 3 },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(245, 158, 11, 0.5)' },
-                { offset: 1, color: 'rgba(245, 158, 11, 0.05)' }
-              ]
-            }
-          }
-        }
-      ]
+      series: [{
+        type: 'pie',
+        radius: ['48%', '70%'],
+        center: ['50%', '42%'],
+        label: { show: false },
+        labelLine: { show: false },
+        data: models.map((item, index) => ({
+          name: modelDisplayName(item.model, item.display_name),
+          value: item.cost || 0,
+          itemStyle: { color: CHART_COLORS[index % CHART_COLORS.length] }
+        }))
+      }]
     }
-  }, [stats, isDark, token])
+  }, [stats?.by_model, token])
 
   return (
     <div style={{ padding: 24, background: token.colorBgLayout, minHeight: '100vh' }}>
@@ -703,7 +666,7 @@ const AdminDashboard: React.FC = () => {
               borderRadius: 16,
             }}
             styles={{ 
-              body: { padding: '20px', height: 400 },
+              body: { padding: '20px', height: 400, overflowY: 'auto' },
               header: { borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }
             }}
           >
@@ -742,10 +705,10 @@ const AdminDashboard: React.FC = () => {
             }}
           >
             {costChartOption ? (
-              <ReactECharts 
-                option={costChartOption} 
+              <ReactECharts
+                option={costChartOption}
                 style={{ height: 350 }}
-                opts={{ renderer: 'svg' }}
+                opts={{ renderer: 'canvas' }}
               />
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(100, 116, 139, 0.6)' }}>
