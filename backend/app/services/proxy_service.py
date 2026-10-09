@@ -186,7 +186,7 @@ class ProxyService:
 
     def get_effective_model_group_ids(self, user: User) -> Set[str]:
         """
-        返回该用户可用的有效模型分组ID集合。
+        管理员可使用全部启用分组；其他用户使用指定分组，未指定时使用默认分组。
         """
         if user.role == UserRole.admin:
             return {
@@ -196,13 +196,16 @@ class ProxyService:
                 .all()
             }
 
+        user_ids: Set[str] = set(json.loads(user.model_group_ids or '[]'))
+        if user_ids:
+            return user_ids
+
         default_groups = self.db.query(ModelGroup).filter(
             ModelGroup.is_default == 1,
             ModelGroup.status == "active"
         ).all()
         default_ids = {g.group_id for g in default_groups}
-        user_ids: Set[str] = set(json.loads(user.model_group_ids or '[]'))
-        return default_ids | user_ids
+        return default_ids
 
     def check_model_group_access(
         self,

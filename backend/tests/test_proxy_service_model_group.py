@@ -148,13 +148,33 @@ def test_get_effective_default_only(db: Session, default_active_group, user_no_g
     assert effective == {"grp_default"}
 
 
-def test_get_effective_default_plus_user(db: Session, default_active_group, non_default_active_group, user_with_extra_group):
-    """Scenario 2: User has extra groups + default exists → union"""
+def test_get_effective_assigned_excludes_default(db: Session, default_active_group, non_default_active_group, user_with_extra_group):
+    """Assigned groups replace the default group."""
+    assert ProxyService(db).get_effective_model_group_ids(user_with_extra_group) == {"grp_extra"}
+
+
+@pytest.mark.asyncio
+async def test_chat_models_and_access_use_only_assigned_group(
+    db: Session, user_with_extra_group, model_in_default_group, model_in_non_default_group,
+):
+    from app.api.v1.chat import get_available_models
+
     service = ProxyService(db)
-    effective = service.get_effective_model_group_ids(user_with_extra_group)
-    assert "grp_default" in effective
-    assert "grp_extra" in effective
-    assert len(effective) == 2
+    response = await get_available_models(current_user=user_with_extra_group, db=db)
+    assert {m["model_id"] for g in response.groups for m in g.models} == {"gpt-3.5"}
+    assert service.check_model_group_access(None, user_with_extra_group, "gpt-3.5")["allowed"] is True
+    assert service.check_model_group_access(None, user_with_extra_group, "gpt-4")["allowed"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_models_fall_back_to_default(
+    db: Session, user_no_groups, model_in_default_group, model_in_non_default_group,
+):
+    from app.api.v1.chat import get_available_models
+
+    response = await get_available_models(current_user=user_no_groups, db=db)
+    assert {m["model_id"] for g in response.groups for m in g.models} == {"gpt-4"}
+
 
 
 def test_get_effective_disabled_default_excluded(db: Session, default_disabled_group, user_no_groups):

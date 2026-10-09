@@ -64,6 +64,10 @@ body {
   min-height: 100vh;
 }
 
+.ant-table-wrapper .ant-table-pagination.ant-pagination {
+  padding-right: var(--space-md);
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Space Grotesk', sans-serif;
   font-weight: 600;

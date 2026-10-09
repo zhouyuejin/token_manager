@@ -1,11 +1,14 @@
 """
 测试 admin 角色在 ProxyService 中的特权短路：
-- get_effective_model_group_ids(user) 对 admin 返回所有 active 分组
+- get_effective_model_group_ids(user) 对 admin 返回全部启用分组，其他角色使用指定分组或默认分组
 - check_quota(user, ...) 对 admin 永远 allowed=True，reason="admin_unlimited"
 
 策略：纯单元 + mock（参考 test_user_unlimited_quota.py 模式），无 DB 依赖。
 """
+import json
 from unittest.mock import MagicMock
+
+import pytest
 
 import app.models  # noqa: F401, E402
 from app.models.user import User, UserRole, UserStatus
@@ -44,32 +47,21 @@ def _make_db_with_groups(group_ids):
 
 # ========== get_effective_model_group_ids ==========
 
-def test_admin_get_effective_group_ids_returns_all_active():
-    """admin → 返回全部 active 分组集合，无视 user.model_group_ids 字段。"""
-    user = _make_user(UserRole.admin, model_group_ids='["some", "old", "ids"]')
-    db = _make_db_with_groups(["g_a", "g_b", "g_c"])
-    svc = ProxyService(db)
-
-    result = svc.get_effective_model_group_ids(user)
-
-    assert result == {"g_a", "g_b", "g_c"}
+@pytest.mark.parametrize("assigned", ["[]", '["g_vip"]', None])
+def test_admin_get_effective_group_ids_returns_all_active(assigned):
+    user = _make_user(UserRole.admin, model_group_ids=assigned)
+    service = ProxyService(_make_db_with_groups(["g_default", "g_vip", "g_other"]))
+    assert service.get_effective_model_group_ids(user) == {"g_default", "g_vip", "g_other"}
 
 
-def test_non_admin_get_effective_group_ids_unchanged():
-    """非 admin → 走原 default ∪ user_ids 逻辑，不受本次改动影响（回归）。"""
-    # 模拟两条链路：db.query(ModelGroup).filter(is_default=1) 返回 [g_default]
-    #                db.query(ModelGroup).filter(status=active) 也在前面被 admin 短路调用
-    # 这里我们让普通用户走 admin 短路**不触发**，所以需要让 admin 短路失效（role=user）
-    # 然后原逻辑会执行两次 db.query，但 MagicMock 的链式都返回 _mock_groups([g_default])
-    user = _make_user(UserRole.user, model_group_ids='["g_user"]')
-    db = MagicMock()
-    db.query.return_value.filter.return_value.all.return_value = _mock_groups(["g_default"])
-    svc = ProxyService(db)
+@pytest.mark.parametrize("role", [role for role in UserRole if role != UserRole.admin])
+@pytest.mark.parametrize("assigned", ['["g_vip"]', '["g_vip", "g_extra"]', "[]", None])
+def test_effective_groups_use_assignments_or_default(role, assigned):
+    user = _make_user(role, model_group_ids=assigned)
+    svc = ProxyService(_make_db_with_groups(["g_default"]))
 
-    result = svc.get_effective_model_group_ids(user)
-
-    # 原逻辑：default_ids ∪ user_ids = {g_default} ∪ {g_user} = {g_default, g_user}
-    assert result == {"g_default", "g_user"}
+    expected = set(json.loads(assigned or "[]")) or {"g_default"}
+    assert svc.get_effective_model_group_ids(user) == expected
 
 
 # ========== check_quota ==========
