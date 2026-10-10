@@ -218,6 +218,16 @@ const applyCSSVars = (vars: Record<string, string>) => {
   })
 }
 
+const getTableCSSVars = (config: ThemeConfig): Record<string, string> => {
+  const token = antTheme.getDesignToken(config)
+  const table = config.components?.Table
+  return {
+    '--table-row-hover-bg': table?.rowHoverBg ?? token.colorFillAlter,
+    '--table-row-selected-bg': table?.rowSelectedBg ?? token.colorFillAlter,
+    '--table-row-selected-hover-bg': table?.rowSelectedHoverBg ?? token.colorFillAlter,
+  }
+}
+
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [custom, setCustom] = useState<{ color: string; mode: ThemeMode }>(() => {
     try {
@@ -245,7 +255,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   // 同步 Ant Design 配色与自定义组件的 CSS 变量。
   useEffect(() => {
     if (theme !== 'custom') {
-      applyCSSVars(themeCSSVars[theme])
+      applyCSSVars({ ...themeCSSVars[theme], ...getTableCSSVars(themeConfig) })
       return
     }
     const token = antTheme.getDesignToken(themeConfig)
@@ -276,6 +286,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       '--glass-bg': token.colorBgContainer,
       '--glass-border': token.colorBorderSecondary,
       '--shadow-glow': `0 0 20px ${token.colorPrimaryBorder}`,
+      ...getTableCSSVars(themeConfig),
     })
   }, [theme, custom, themeConfig])
 

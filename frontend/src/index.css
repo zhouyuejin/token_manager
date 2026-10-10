@@ -132,7 +132,7 @@ h1, h2, h3, h4, h5, h6 {
 .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right-first,
 .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left-last,
 .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right-last {
-  background: var(--ant-table-row-hover-bg) !important;
+  background: var(--table-row-hover-bg) !important;
 }
 
 .ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-left,
@@ -141,5 +141,18 @@ h1, h2, h3, h4, h5, h6 {
 .ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-right-first,
 .ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-left-last,
 .ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-fix-right-last {
-  background: var(--ant-table-row-selected-bg) !important;
+  background: var(--table-row-selected-bg) !important;
+}
+
+.ant-table-tbody > tr.ant-table-row-selected:hover > td.ant-table-cell-fix-left,
+.ant-table-tbody > tr.ant-table-row-selected:hover > td.ant-table-cell-fix-right,
+.ant-table-tbody > tr.ant-table-row-selected:hover > td.ant-table-cell-fix-left-first,
+.ant-table-tbody > tr.ant-table-row-selected:hover > td.ant-table-cell-fix-right-first,
+.ant-table-tbody > tr.ant-table-row-selected:hover > td.ant-table-cell-fix-left-last,
+.ant-table-tbody > tr.ant-table-row-selected:hover > td.ant-table-cell-fix-right-last {
+  background: var(--table-row-selected-hover-bg) !important;
+}
+
+.ant-table-tbody .ant-btn-text:not(:disabled):hover {
+  background: transparent !important;
 }

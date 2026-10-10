@@ -317,7 +317,7 @@ const ApiKeysPage = () => {
     {
       title: '操作',
       key: 'action',
-      width: adminView && isAdmin ? 320 : 150,
+      width: adminView && isAdmin ? 220 : 150,
       fixed: 'right' as const,
       render: (_: any, record: ApiKey) => adminView && isAdmin ? (
         <Space><Button type="text" onClick={() => handleEdit(record)}>编辑安全配置</Button>
