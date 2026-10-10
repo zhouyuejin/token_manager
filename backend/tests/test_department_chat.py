@@ -189,6 +189,9 @@ def test_my_billing_and_filters_include_department_without_keys(db, member):
     assert {row['scope_id'] for row in billing['budgets']} == {'dept_chat', 'project_chat'}
     options = asyncio.run(get_my_usage_options(member, db))
     assert options['departments'] == [{'department_id': 'dept_chat', 'name': '日常使用'}]
+    assert options['projects'] == [
+        {'project_id': 'project_chat', 'name': '网页对话项目', 'department_id': 'dept_chat'},
+    ]
 
 
 @pytest.mark.parametrize('stream', [False, True])

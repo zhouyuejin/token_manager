@@ -92,19 +92,17 @@ async def proxy_conversation(request, db, source):
         release_proxy_concurrency(redis, concurrency_key)
         raise
 
-    candidates = service.select_candidates(model, user, api_key)
-    if not candidates:
-        service.release_reservation()
-        release_proxy_concurrency(redis, concurrency_key)
-        raise HTTPException(502, "无可用渠道")
-
     streaming = bool(body.get("stream"))
+    stream_returned = False
     start = time.time()
     upstream_response = None
     upstream_client = None
     selected = None
     last_error = None
     try:
+        candidates = service.select_candidates(model, user, api_key)
+        if not candidates:
+            raise HTTPException(502, "无可用渠道")
         for channel, model_channel, key in candidates:
             adapter = get_provider_adapter(channel)
             upstream_format = resolve_upstream_format(channel).value
@@ -253,7 +251,9 @@ async def proxy_conversation(request, db, source):
                 finally:
                     release_proxy_concurrency(redis, concurrency_key)
 
-            return QuotaStreamingResponse(generate(), db.get_bind(), reservation_id, on_close=close_upstream)
+            response = QuotaStreamingResponse(generate(), db.get_bind(), reservation_id, on_close=close_upstream)
+            stream_returned = True
+            return response
 
         try:
             upstream_data = upstream_response.json()
@@ -273,13 +273,14 @@ async def proxy_conversation(request, db, source):
         await service.deduct_quota(user, api_key, tokens)
         return Response(content=json.dumps(result, ensure_ascii=False), media_type="application/json")
     except BaseException:
-        try:
-            service.release_reservation()
-        finally:
-            release_proxy_concurrency(redis, concurrency_key)
+        service.release_reservation()
         raise
     finally:
-        if upstream_response is not None and not streaming:
-            upstream_response.close()
-        if upstream_client is not None and not streaming:
-            upstream_client.close()
+        if not stream_returned:
+            try:
+                if upstream_response is not None:
+                    upstream_response.close()
+                if upstream_client is not None:
+                    upstream_client.close()
+            finally:
+                release_proxy_concurrency(redis, concurrency_key)

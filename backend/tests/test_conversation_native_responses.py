@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
+from app.models.channel import ChannelType
 from app.services import conversation_gateway as gateway
 
 
@@ -19,7 +20,7 @@ def test_native_responses_preserves_non_function_tools(monkeypatch, tool, status
     body = {'model': 'm', 'input': 'hello', 'tools': [tool], 'max_output_tokens': 2048}
     reserved = []
     forwarded = []
-    channel = SimpleNamespace(timeout=5, channel_id='c')
+    channel = SimpleNamespace(timeout=5, channel_id='c', type=ChannelType.openai)
     adapter = SimpleNamespace(
         build_headers=lambda *args: {},
         build_protocol_url=lambda *args: 'https://example.invalid/v1/responses',

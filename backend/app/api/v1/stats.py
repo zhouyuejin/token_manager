@@ -15,7 +15,7 @@ from app.models.usage_log import UsageLog
 from app.models.model import Model as ModelMapping, ModelStatus as ModelMappingStatus
 from app.models.model_channel import ModelChannel
 from app.models.budget import Budget
-from app.models.project import Project
+from app.models.project import Project, UserProject
 from app.models.organization import Department
 from app.models.quota_reservation import QuotaReservation
 from app.models.channel import Channel
@@ -161,9 +161,11 @@ async def get_usage_stats(
 
 @router.get('/billing')
 async def get_my_billing(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """查看用户所属部门及自己 Key 归属项目的当月预算和未结预扣。"""
+    """查看用户所属部门、已分配项目及自己 Key 归属项目的当月预算和未结预扣。"""
     keys = db.query(ApiKey).filter(ApiKey.user_id == current_user.user_id).all()
     project_ids = {row.project_id for row in keys if row.project_id}
+    project_ids.update(row[0] for row in db.query(UserProject.project_id).filter(
+        UserProject.user_id == current_user.user_id))
     projects = db.query(Project).filter(Project.project_id.in_(project_ids)).all() if project_ids else []
     department_ids = {row.dept_id for row in projects if row.dept_id}
     if current_user.department_id:
@@ -216,6 +218,8 @@ async def get_my_billing(current_user: User = Depends(get_current_user), db: Ses
 async def get_my_usage_options(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     keys = db.query(ApiKey).filter(ApiKey.user_id == current_user.user_id).all()
     project_ids = {row.project_id for row in keys if row.project_id}
+    project_ids.update(row[0] for row in db.query(UserProject.project_id).filter(
+        UserProject.user_id == current_user.user_id))
     projects = db.query(Project).filter(Project.project_id.in_(project_ids)).all() if project_ids else []
     department_ids = {row.dept_id for row in projects}
     department_ids.update(row[0] for row in db.query(UsageLog.department_id).filter(

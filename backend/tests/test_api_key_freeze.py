@@ -170,7 +170,7 @@ def test_admin_unfreeze_resets_counter_and_returns_freeze_metadata(session, redi
     key = session.query(ApiKey).first()
     response = _api_key_response(key, admin=True)
     assert response.frozen_at and response.frozen_reason
-    assert response.api_key != 'tmk_test'
+    assert response.api_key == key.api_key
     admin = session.query(User).filter(User.user_id == 'admin').first()
     _run(admin_unfreeze_api_key(Request({'type': 'http', 'headers': []}), key.key_id, admin, session))
     assert key.status == ApiKeyStatus.active

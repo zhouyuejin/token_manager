@@ -80,6 +80,9 @@ def test_responses_success_settles_with_separate_auth_session(proxy_client, db, 
         'quota': 5000, 'quota_low_alert': 0, 'quota_change_alert': 0,
     })
     db.commit()
+    # This test exercises a native Responses channel, without Chat conversion.
+    db.query(Channel).filter_by(channel_id='v1_channel').update({'upstream_format': 'responses'})
+    db.commit()
     upstream_body = {
         'id': 'resp_test', 'object': 'response', 'status': 'completed', 'output': [],
         'usage': {'input_tokens': 2, 'output_tokens': 3, 'total_tokens': 5},
@@ -93,7 +96,7 @@ def test_responses_success_settles_with_separate_auth_session(proxy_client, db, 
     }, headers={'Authorization': 'Bearer tmk_v1_test'})
 
     assert response.status_code == 200, response.text
-    assert response.json() == upstream_body
+    assert response.json() == {**upstream_body, 'model': 'visible-model'}
     db.expire_all()
     assert db.query(User).filter_by(user_id='v1_user').one().quota_used == 5
     assert db.query(ApiKey).filter_by(key_id='v1_key').one().last_used_at is not None
