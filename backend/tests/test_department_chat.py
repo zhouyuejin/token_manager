@@ -324,3 +324,30 @@ def test_export_labels_web_usage_without_project_or_key(db, member):
     csv = asyncio.run(content())
     assert '无项目' in csv and '网页对话' in csv and '日常使用' in csv
     assert '0.08200000' in csv
+
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('text', ['', '描述图片'])
+def test_image_content_reaches_upstream_and_survives_history(chat_client, db, stream, text):
+    client, calls = chat_client
+    parts = [
+        *([{'type': 'text', 'text': text}] if text else []),
+        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,aGVsbG8='}},
+    ]
+    response = client.post('/chats/conv/messages', json={
+        'messages': [{'role': 'user', 'content': parts}], 'stream': stream, 'max_tokens': 100,
+    })
+    assert response.status_code == 200, response.text
+    assert calls[-1]['messages'][0]['content'] == parts
+    saved = client.get('/chats/conv/messages').json()['items']
+    saved_parts = next(m for m in saved if m['role'] == 'user')['content']
+    assert saved_parts[-1]['image_url']['url'] == 'data:image/png;base64,aGVsbG8='
+    assert [p['text'] for p in saved_parts if p['type'] == 'text'] == ([text] if text else [])
+    # MySQL's existing second-resolution timestamps can tie within this fast test.
+    from datetime import datetime
+    from app.models.chat import ChatMessage
+    for row in db.query(ChatMessage).all():
+        row.created_at = datetime(2020, 1, 1 if row.role == 'user' else 2)
+    db.commit()
+    response = send(client, stream)
+    assert response.status_code == 200, response.text
+    assert calls[-1]['messages'][0]['content'] == parts

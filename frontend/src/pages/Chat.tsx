@@ -1,3 +1,4 @@
+import { buildChatContent, ChatContent } from '../utils/chatContent'
 import { getRequestErrorMessage } from '../utils/security'
 import { useState, useEffect } from 'react'
 import { loadModelConfig, saveModelConfig } from '../utils/chatStorage'
@@ -74,7 +75,7 @@ const Chat: React.FC = () => {
   }
 
   // 发送消息
-  const handleSendMessage = async (content: string, _files?: File[]) => {
+  const handleSendMessage = async (content: ChatContent, files?: File[]) => {
     if (!departmentReady) {
       message.warning('所属部门未分配或已停用，请联系管理员')
       return
@@ -82,6 +83,13 @@ const Chat: React.FC = () => {
     // 先校验模型,提示信息才名副其实
     if (!modelConfig.modelId) {
       message.warning('请先选择模型')
+      return
+    }
+
+    try {
+      if (typeof content === 'string') content = await buildChatContent(content, files)
+    } catch (error: any) {
+      message.error(error.message)
       return
     }
 
@@ -122,15 +130,9 @@ const Chat: React.FC = () => {
     )
 
     try {
-      // 构造消息历史
-      const messageHistory = [
-        ...messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content },
-      ]
-
       // 使用流式 API
       const response = await sendMessageStream(conversationId, {
-        messages: messageHistory,
+        messages: [{ role: 'user', content }],
         model: modelConfig.modelId,
         stream: true,
       })

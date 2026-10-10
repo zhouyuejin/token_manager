@@ -4,7 +4,7 @@ Chat API - 对话管理接口
 import json
 import math
 import secrets
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Union, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from app.api.streaming import QuotaStreamingResponse
 from sqlalchemy.orm import Session
@@ -52,11 +52,39 @@ class ChatConversationListResponse(BaseModel):
     items: List[ChatConversationResponse]
 
 
+class TextPart(BaseModel):
+    type: Literal["text"]
+    text: str
+
+
+class ImageURL(BaseModel):
+    url: str
+    detail: Optional[Literal["auto", "low", "high"]] = None
+
+
+class ImagePart(BaseModel):
+    type: Literal["image_url"]
+    image_url: ImageURL
+
+
+MessageContent = Union[str, List[Union[TextPart, ImagePart]]]
+CONTENT_PREFIX = "__chat_multimodal_v1__:"
+
+
+def restore_content(content):
+    if content.startswith(CONTENT_PREFIX):
+        try:
+            return json.loads(content[len(CONTENT_PREFIX):])
+        except ValueError:
+            pass
+    return content
+
+
 class ChatMessageResponse(BaseModel):
     message_id: str
     conversation_id: str
     role: str
-    content: str
+    content: MessageContent
     model: str
     tokens: Optional[int] = 0
     created_at: Any
@@ -69,7 +97,7 @@ class ChatMessageListResponse(BaseModel):
 
 class MessageItem(BaseModel):
     role: str
-    content: str
+    content: MessageContent
 
 
 class ChatSendMessageRequest(BaseModel):
@@ -100,8 +128,10 @@ class AvailableModelsResponse(BaseModel):
     groups: List[ModelGroupInfo]
 
 
-def generate_conversation_title(first_message: str) -> str:
+def generate_conversation_title(first_message: MessageContent) -> str:
     """从第一条消息生成标题"""
+    if isinstance(first_message, list):
+        first_message = " ".join(p.text for p in first_message if isinstance(p, TextPart))
     title = first_message.replace("\n", " ").strip()
     return (title[:20] + "...") if len(title) > 20 else (title or "新对话")
 
@@ -260,7 +290,7 @@ async def get_messages(conversation_id: str, current_user: User = Depends(get_cu
     
     return ChatMessageListResponse(total=total, items=[
         ChatMessageResponse(message_id=m.message_id, conversation_id=m.conversation_id, role=m.role.value if hasattr(m.role, 'value') else str(m.role),
-                           content=m.content, model=m.model, tokens=m.tokens, created_at=m.created_at) for m in messages
+                           content=restore_content(m.content), model=m.model, tokens=m.tokens, created_at=m.created_at) for m in messages
     ])
 
 
@@ -298,8 +328,11 @@ async def send_message(
             db.commit()
     
     # 保存用户消息
+    last_content = data.messages[-1].model_dump(exclude_none=True)["content"] if data.messages else ""
+    stored_content = (CONTENT_PREFIX + json.dumps(last_content, ensure_ascii=False)
+                      if isinstance(last_content, list) or last_content.startswith(CONTENT_PREFIX) else last_content)
     user_msg = ChatMessage(message_id=secrets.token_hex(16), conversation_id=conversation_id, role=MessageRole.user.value,
-                          content=data.messages[-1].content if data.messages else "", model=model)
+                          content=stored_content, model=model)
     db.add(user_msg)
     db.commit()
     db.refresh(user_msg)
@@ -318,7 +351,7 @@ async def send_message(
 
     history = db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).order_by(ChatMessage.created_at.asc()).all()
     cleaned = [
-        {"role": _normalize_role(m.role), "content": m.content or ""}
+        {"role": _normalize_role(m.role), "content": restore_content(m.content or "")}
         for m in history
         if m.content is not None  # 跳过空内容
     ]
@@ -328,7 +361,15 @@ async def send_message(
         if role not in ("user", "assistant", "system"):
             continue
         if messages_for_api and messages_for_api[-1]["role"] == role:
-            messages_for_api[-1]["content"] += "\n" + item["content"]
+            previous = messages_for_api[-1]["content"]
+            current = item["content"]
+            if isinstance(previous, str) and isinstance(current, str):
+                messages_for_api[-1]["content"] += "\n" + current
+            else:
+                messages_for_api[-1]["content"] = (
+                    (previous if isinstance(previous, list) else [{"type": "text", "text": previous}])
+                    + (current if isinstance(current, list) else [{"type": "text", "text": current}])
+                )
         else:
             messages_for_api.append(dict(item))
 

@@ -2,6 +2,7 @@
 聊天会话模型
 """
 from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Integer
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -37,7 +38,7 @@ class ChatMessage(Base):
     message_id = Column(String(32), primary_key=True)
     conversation_id = Column(String(32), nullable=False, index=True)
     role = Column(String(20), nullable=False)
-    content = Column(Text, nullable=False)
+    content = Column(Text().with_variant(LONGTEXT(), "mysql"), nullable=False)
     model = Column(String(50), nullable=True)
     tokens = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())

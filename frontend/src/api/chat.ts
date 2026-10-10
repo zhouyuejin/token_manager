@@ -1,3 +1,4 @@
+import type { ChatContent } from '../utils/chatContent'
 import { get, post, del, put } from './request'
 import { useAuthStore } from '../store/auth'
 
@@ -7,7 +8,7 @@ export interface ChatMessage {
   message_id: string
   conversation_id: string
   role: 'user' | 'assistant' | 'system'
-  content: string
+  content: ChatContent
   model?: string
   tokens?: number
   created_at: string
@@ -50,7 +51,7 @@ export interface ModelGroup {
 export interface SendMessageRequest {
   messages: {
     role: string
-    content: string
+    content: ChatContent
   }[]
   model?: string
   temperature?: number

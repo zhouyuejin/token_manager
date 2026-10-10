@@ -1,7 +1,7 @@
 import defaultAvatar from '../../assets/default-avatar.webp'
 import { useEffect, useRef } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
-import { Spin, Empty, Avatar } from 'antd'
+import { Spin, Empty, Avatar, Image } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons'
 import { XMarkdown } from '@ant-design/x-markdown'
 import { ChatMessage } from '../../api/chat'
@@ -76,7 +76,10 @@ const MessageList: React.FC<MessageListProps> = ({
         // 只对"当前正在流式输出的最后一条 assistant 消息"启用 XMarkdown 的增量渲染
         // 否则传 streaming 会触发未完成块的额外处理,反而抖动
         const isStreamingMsg = streaming && isLast && !isUser
-        const displayContent = stripThinkTags(msg.content)
+        const textContent = typeof msg.content === 'string'
+          ? msg.content
+          : msg.content.filter(part => part.type === 'text').map(part => part.text).join('\n')
+        const displayContent = stripThinkTags(textContent)
         return (
           <div
             key={msg.message_id || index}
@@ -110,6 +113,11 @@ const MessageList: React.FC<MessageListProps> = ({
                 // 不再设置 whiteSpace: pre-wrap —— XMarkdown 自己处理空白与换行
               }}
             >
+              {Array.isArray(msg.content) && msg.content.map((part, i) =>
+                part.type === 'image_url' ? (
+                  <Image key={i} src={part.image_url.url} style={{ maxWidth: 280, maxHeight: 280, objectFit: 'contain' }} />
+                ) : null
+              )}
               <XMarkdown
                 content={displayContent}
                 className="chat-md"
@@ -138,7 +146,7 @@ const MessageList: React.FC<MessageListProps> = ({
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <CopyOutlined
                       style={{ cursor: 'pointer', opacity: 0.6 }}
-                      onClick={() => handleCopy(msg.content)}
+                      onClick={() => handleCopy(textContent)}
                       title="复制"
                     />
                     {onRegenerate && (
