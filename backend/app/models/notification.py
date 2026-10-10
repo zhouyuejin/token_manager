@@ -4,7 +4,7 @@
 import enum
 import json
 import math
-from sqlalchemy import Column, BigInteger, String, Enum, DateTime, Text, Index
+from sqlalchemy import Column, BigInteger, Integer, String, Enum, DateTime, Text, Index
 from datetime import timezone
 from sqlalchemy.sql import func
 
@@ -48,8 +48,11 @@ class Notification(Base):
     extra_data = Column(Text, nullable=True)   # JSON 格式存储附加数据
     created_at = Column(DateTime, server_default=func.now())
     read_at = Column(DateTime, nullable=True)
+    email_status = Column(String(16), nullable=False, default="pending", server_default="pending")
+    email_attempts = Column(Integer, nullable=False, default=0, server_default="0")
     
     __table_args__ = (
+        Index('idx_notification_email', 'email_status', 'id'),
         Index('idx_user_unread', 'user_id', 'is_read'),
         Index('idx_user_created', 'user_id', 'created_at'),
     )

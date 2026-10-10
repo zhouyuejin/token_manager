@@ -29,13 +29,13 @@ async def send_email(
         是否发送成功
     """
     # 如果没有配置邮件服务器，则跳过发送
-    if not settings.SMTP_HOST or not settings.SMTP_USER:
+    if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         logger.warning(f"邮件服务未配置，跳过发送邮件到 {to_email}: {subject}")
         return False
     
     try:
         msg = MIMEMultipart('alternative')
-        msg['From'] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+        msg['From'] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL or settings.SMTP_USER}>"
         msg['To'] = to_email
         msg['Subject'] = subject
         
@@ -50,7 +50,9 @@ async def send_email(
             port=settings.SMTP_PORT,
             username=settings.SMTP_USER,
             password=settings.SMTP_PASSWORD,
-            use_tls=True
+            use_tls=settings.SMTP_PORT == 465,
+            start_tls=settings.SMTP_PORT != 465,
+            timeout=10
         )
         
         logger.info(f"邮件发送成功: {to_email} - {subject}")
@@ -289,3 +291,56 @@ async def send_daily_report(
     """
     
     return await send_email(to_email, subject, body, html=True)
+
+
+async def send_notification_email(user, notification):
+    """Return None for disabled recipients; False for a failed delivery."""
+    from app.models.notification import NotificationType
+    from app.models.user import UserStatus
+    if not user or user.status != UserStatus.active or not user.email:
+        return None
+    preference = {
+        NotificationType.quota_low: "quota_low_alert",
+        NotificationType.quota_increase: "quota_change_alert",
+        NotificationType.quota_decrease: "quota_change_alert",
+        NotificationType.daily_report: "daily_report",
+    }.get(notification.type)
+    if preference and not getattr(user, preference):
+        return None
+    return await send_email(user.email, notification.title, notification.content or "")
+
+
+async def deliver_notification_emails():
+    """Deliver committed notifications, retrying at most three times."""
+    if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        return
+    from app.core.database import SessionLocal
+    from app.models.notification import Notification
+    from app.models.user import User
+    # Lock one notification at a time, skipping rows another worker is sending.
+    with SessionLocal() as db:
+        ids = [nid for nid, in db.query(Notification.id).filter(
+            Notification.email_status == "pending"
+        ).order_by(Notification.email_attempts, Notification.id).limit(20).all()]
+        db.rollback()
+        for nid in ids:
+            try:
+                notification = db.query(Notification).filter(
+                    Notification.id == nid, Notification.email_status == "pending"
+                ).with_for_update(skip_locked=True).first()
+                if not notification:
+                    db.rollback()
+                    continue
+                user = db.query(User).filter(User.user_id == notification.user_id).first()
+                result = await send_notification_email(user, notification)
+                notification.email_attempts += 1
+                if result is None:
+                    notification.email_status = "skipped"
+                elif result:
+                    notification.email_status = "sent"
+                elif notification.email_attempts >= 3:
+                    notification.email_status = "failed"
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("通知邮件投递异常 notification_id={}", nid)

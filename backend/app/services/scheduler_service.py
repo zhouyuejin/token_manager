@@ -2,7 +2,7 @@
 定时任务服务
 """
 import asyncio
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -11,8 +11,6 @@ from loguru import logger
 from app.core.database import SessionLocal
 from app.services.sync_service import create_sync_service
 from app.services.email_service import (
-    send_quota_low_alert,
-    send_daily_report,
     send_quota_change_notification
 )
 from app.services.metrics import active_channel_cooldowns
@@ -23,9 +21,6 @@ scheduler = AsyncIOScheduler()
 
 # 存储每个渠道的同步任务ID
 _channel_jobs = {}
-
-# 记录上次发送额度不足通知的用户（避免重复发送）
-_quota_low_notified_users = set()
 
 
 async def sync_single_channel(channel_id: str):
@@ -165,98 +160,25 @@ def remove_channel_sync_job(channel_id: str):
         pass
 
 
-def check_quota_low_alert():
-    """检查额度不足并发送通知"""
-    logger.info("开始检查额度不足用户...")
-    
-    global _quota_low_notified_users
-    
-    db = SessionLocal()
-    try:
-        from app.models.user import User, UserStatus
-        
-        users = db.query(User).filter(
-            User.quota_low_alert == True,
-            User.status == UserStatus.active
-        ).all()
-        
-        notified_count = 0
+async def check_quota_low_alert():
+    """Create one low-quota notification per user per day, including idle users."""
+    from app.models.user import User, UserStatus
+    from app.models.notification import Notification, NotificationType
+    from app.services.notification_service import create_notification
+    with SessionLocal() as db:
+        users = db.query(User).filter(User.quota_low_alert.is_(True),
+                                     User.status == UserStatus.active, User.quota > 0).all()
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         for user in users:
-            if user.quota <= 0:
+            remaining = user.quota - user.quota_used
+            if remaining / user.quota >= 0.2:
                 continue
-                
-            percent_remaining = ((user.quota - user.quota_used) / user.quota) * 100
-            
-            if percent_remaining < 20:
-                user_key = f"{user.user_id}_{date.today()}"
-                
-                if user_key not in _quota_low_notified_users:
-                    asyncio.create_task(
-                        send_quota_low_alert(
-                            to_email=user.email,
-                            username=user.username,
-                            quota=user.quota,
-                            quota_used=user.quota_used,
-                            threshold_percent=20
-                        )
-                    )
-                    _quota_low_notified_users.add(user_key)
-                    notified_count += 1
-        
-        logger.info(f"额度不足检查完成，共通知 {notified_count} 位用户")
-    except Exception as e:
-        logger.error(f"检查额度不足失败: {e}")
-    finally:
-        db.close()
-
-
-def send_daily_reports():
-    """发送每日用量报表"""
-    logger.info("开始发送每日用量报表...")
-    
-    db = SessionLocal()
-    try:
-        from app.models.user import User, UserStatus
-        from app.models.quota_record import QuotaRecord
-        
-        users = db.query(User).filter(
-            User.daily_report == True,
-            User.status == UserStatus.active
-        ).all()
-        
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        sent_count = 0
-        for user in users:
-            daily_usage = db.query(QuotaRecord).filter(
-                QuotaRecord.user_id == user.user_id,
-                QuotaRecord.created_at >= today_start
-            ).all()
-            
-            daily_used = sum(record.amount for record in daily_usage)
-            
-            model_usage = {}
-            for record in daily_usage:
-                model_name = record.model_name or "Unknown"
-                model_usage[model_name] = model_usage.get(model_name, 0) + record.amount
-            
-            asyncio.create_task(
-                send_daily_report(
-                    to_email=user.email,
-                    username=user.username,
-                    quota=user.quota,
-                    quota_used=user.quota_used,
-                    daily_used=daily_used,
-                    model_usage=model_usage
-                )
-            )
-            sent_count += 1
-        
-        logger.info(f"每日报表发送完成，共发送 {sent_count} 份")
-    except Exception as e:
-        logger.error(f"发送每日报表失败: {e}")
-    finally:
-        db.close()
+            if db.query(Notification.id).filter(Notification.user_id == user.user_id,
+                    Notification.type == NotificationType.quota_low,
+                    Notification.created_at >= today).first():
+                continue
+            await create_notification(db, user.user_id, NotificationType.quota_low,
+                "额度不足提醒", f"您的剩余额度已低于20%，当前剩余 {remaining} tokens，请及时充值。")
 
 
 def setup_scheduler():
@@ -293,22 +215,17 @@ def setup_scheduler():
         replace_existing=True
     )
     
+    scheduler.add_job(check_quota_low_alert, trigger=CronTrigger(minute=0),
+                      id="check_quota_low_alert", name="检查额度不足", replace_existing=True)
+    from app.services.email_service import deliver_notification_emails
     scheduler.add_job(
-        check_quota_low_alert,
-        trigger=CronTrigger(minute=0),
-        id="check_quota_low_alert",
-        name="检查额度不足",
-        replace_existing=True
+        deliver_notification_emails,
+        trigger=IntervalTrigger(seconds=30),
+        id="deliver_notification_emails",
+        name="发送通知邮件",
+        replace_existing=True,
+        max_instances=1,
     )
-    
-    scheduler.add_job(
-        send_daily_reports,
-        trigger=CronTrigger(hour=8, minute=0),
-        id="send_daily_reports",
-        name="发送每日用量报表",
-        replace_existing=True
-    )
-    
     logger.info("定时任务已设置")
 
 

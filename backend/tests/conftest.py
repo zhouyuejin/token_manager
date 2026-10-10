@@ -1,7 +1,7 @@
 """测试全局 fixtures（MySQL）。"""
 import os
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 
 import app.models  # noqa: F401, E402
@@ -20,6 +20,7 @@ def engine():
     Base.metadata.create_all(bind=eng)
     with eng.begin() as connection:
         upgrade_cny_schema(connection)
+        upgrade_notification_email_schema(connection)
     return eng
 
 
@@ -53,6 +54,21 @@ def upgrade_cny_schema(connection):
     from alembic.operations import Operations
     path = Path(__file__).parents[1] / 'alembic/versions/20261009_1100_cny_billing.py'
     spec = importlib.util.spec_from_file_location('cny_schema', path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+
+def upgrade_notification_email_schema(connection):
+    if 'email_status' in {column['name'] for column in inspect(connection).get_columns('notifications')}:
+        return
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    path = Path(__file__).parents[1] / 'alembic/versions/20261010_1100_notification_email.py'
+    spec = importlib.util.spec_from_file_location('notification_email_schema', path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     migration.op = Operations(MigrationContext.configure(connection))

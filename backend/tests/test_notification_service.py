@@ -32,7 +32,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def setup_db(engine):
     Base.metadata.create_all(bind=engine)
     yield
     db = TestingSessionLocal()

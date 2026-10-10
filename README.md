@@ -177,3 +177,25 @@ curl -X POST http://localhost:8000/api/v1/proxy/chat/completions \
 ## 许可证
 
 MIT License
+
+### 邮件通知
+
+在 Docker Compose 使用的项目根目录 `.env`（直接运行后端时为后端 `.env`）中配置：
+
+```dotenv
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=sender@example.com
+SMTP_PASSWORD=your-smtp-authorization-code
+SMTP_FROM_EMAIL=sender@example.com
+SMTP_FROM_NAME=Token Manager
+```
+
+465 端口使用 TLS，其他端口使用 STARTTLS；发件地址未填写时使用 SMTP_USER。
+Docker 部署修改配置后执行 `docker compose up -d --force-recreate backend`。
+后端启动时执行数据库迁移；独立部署请先运行 `alembic upgrade head`。
+
+新增站内通知落库后，由后台每 30 秒扫描发送邮件（每批最多 20 条）。覆盖预算、渠道异常及恢复、注册、审批、密钥冻结、额度和每日报表。
+额度和日报邮件遵循用户已有通知开关，停用用户不发送。日报统一使用现有 23:59 站内报表，避免原 08:00 邮件报表重复。
+未配置 SMTP 时保留待发送通知；升级前历史通知不补发。发送失败最多尝试 3 次，状态记录在 notifications.email_status / email_attempts（pending、sent、skipped、failed）。
+SMTP 已接受但进程在记录成功前中断时，重试可能产生重复邮件。
