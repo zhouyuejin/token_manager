@@ -24,7 +24,9 @@ API代理/网关服务，为公司内部提供统一访问大模型API的能力�
 
 ## 用户使用手册
 
-普通用户操作、API 接入与管理员配置见[用户使用手册](用户使用手册.md)。
+普通用户操作、API 接入与管理员配置见[用户使用手册](docs/用户使用手册.md)。
+
+当前功能实现状态、支持边界和待验收项统一见[当前能力表](docs/当前能力表.md)。旧实施计划保留需求和历史记录。
 
 ## 快速开始
 
@@ -85,7 +87,7 @@ token-manager/
 │   ├── requirements.txt   # Python依赖
 │   └── Dockerfile
 │
-├── frontend/               # 前端（待开发）
+├── frontend/               # React 管理后台与网页对话
 │
 ├── nginx/                  # Nginx配置
 │   ├── nginx.conf
