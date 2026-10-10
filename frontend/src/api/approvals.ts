@@ -16,7 +16,10 @@ export interface ApprovalRequest {
   supplement?: string | null
   created_at: string
   decided_at?: string | null
-  result?: { key_id: string; api_key: string }
+  requester_name?: string
+  project_name?: string | null
+  model_group_name?: string | null
+  secret_available?: boolean
 }
 
 export interface ApprovalFilters {
@@ -71,6 +74,9 @@ export const createProjectAccessApplication = (data: { project_id: string; reaso
 
 export const cancelApproval = (requestId: string) =>
   post<ApprovalRequest>(`/approvals/${requestId}/cancel`)
+
+export const claimApprovalKey = (requestId: string) =>
+  post<{ key_id: string; api_key: string }>(`/approvals/${requestId}/claim-key`)
 
 export const supplementApproval = (requestId: string, content: string) =>
   post<ApprovalRequest>(`/approvals/${requestId}/supplement`, { content })

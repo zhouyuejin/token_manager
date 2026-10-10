@@ -283,12 +283,17 @@ def test_api_key_application_creates_key_only_after_approval_and_reveals_secret_
     assert key.ip_whitelist == '["203.0.113.10"]'
     assert key.expires_at == datetime(2030, 1, 1)
 
+    from app.api.v1.approvals import claim_api_key
     first = list_my_applications(db, requester)[0]
-    assert first['result']['key_id'] == key.key_id
-    assert first['result']['api_key'] == key.api_key
-    second = list_my_applications(db, requester)[0]
-    assert 'result' not in second
-    assert 'api_key' not in second['payload'].get('result', {})
+    assert first['secret_available'] is True
+    assert key.api_key not in str(first)
+    assert list_my_applications(db, requester)[0]['secret_available'] is True
+    claimed = claim_api_key(request.request_id, db, requester)
+    assert claimed == {'key_id': key.key_id, 'api_key': key.api_key}
+    assert list_my_applications(db, requester)[0]['secret_available'] is False
+    with pytest.raises(HTTPException) as error:
+        claim_api_key(request.request_id, db, requester)
+    assert error.value.status_code == 409
 
 
 def test_api_key_application_requires_project_membership(db):

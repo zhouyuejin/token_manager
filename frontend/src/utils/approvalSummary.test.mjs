@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import ts from 'typescript'
 
-const source = await readFile(new URL('../pages/Approvals.tsx', import.meta.url), 'utf8')
+const source = await readFile(new URL('./approvalPresentation.ts', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('Approvals.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 const declaration = ast.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(item => item.name.getText(ast) === 'summary'))
-const code = ts.transpileModule(`${declaration.getText(ast)}\nexport { summary }`, { compilerOptions: { module: ts.ModuleKind.ES2020 } }).outputText
+const code = ts.transpileModule(declaration.getText(ast), { compilerOptions: { module: ts.ModuleKind.ES2020 } }).outputText
 const { summary } = await import(`data:text/javascript,${encodeURIComponent(code)}`)
 
 test('approval summary shows project names for Key and project-access requests with ID fallback', () => {

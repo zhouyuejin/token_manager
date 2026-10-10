@@ -1,3 +1,4 @@
+import LegacyApprovalsRedirect from './components/LegacyApprovalsRedirect'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom'
 import { App as AntApp, Spin } from 'antd'
@@ -20,7 +21,8 @@ const DepartmentDashboard = lazy(() => import('./pages/admin/DepartmentDashboard
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Chat = lazy(() => import('./pages/Chat'))
-const Approvals = lazy(() => import('./pages/Approvals'))
+const Applications = lazy(() => import('./pages/Approvals'))
+const ApprovalWorkbench = lazy(() => import('./pages/ApprovalWorkbench'))
 const AdminUsers = lazy(() => import('./pages/admin/Users'))
 const ProjectsPage = lazy(() => import('./pages/admin/Projects'))
 const Budgets = lazy(() => import('./pages/admin/Budgets'))
@@ -103,7 +105,9 @@ function App() {
             
             <Route path="stats" element={user && (hasPermission(user.permissions, 'admin:read') || hasPermission(user.permissions, 'department:read')) ? <Navigate to={homePath} /> : <Stats />} />
             <Route path="notifications" element={<Notifications />} />
-            <Route path="approvals" element={<Approvals />} />
+            <Route path="approvals" element={<LegacyApprovalsRedirect />} />
+            <Route path="applications" element={<Applications />} />
+            <Route path="approval-workbench" element={<ApprovalWorkbench />} />
             <Route path="api-keys" element={<ApiKeys />} />
             <Route path="chat" element={<Chat />} />
             <Route path="settings" element={<Settings />} />

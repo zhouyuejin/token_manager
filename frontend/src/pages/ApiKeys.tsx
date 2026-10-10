@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+import ApplicationModal from '../components/ApplicationModal'
 import { useState, useEffect } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { useMessage } from '../utils/message'
@@ -6,7 +8,7 @@ import {
   Popconfirm, Segmented, Select, Drawer, Descriptions, Alert, Dropdown
 } from 'antd'
 import { PlusOutlined, DeleteOutlined, CopyOutlined, SyncOutlined, StopOutlined, MoreOutlined } from '@ant-design/icons'
-import { createApiKey, deleteApiKey, updateApiKey, updateAdminApiKey, revokeApiKey, rotateApiKey, unfreezeApiKey, updateApiKeyStatus, ApiKey } from '../api/apiKeys'
+import { deleteApiKey, updateApiKey, updateAdminApiKey, revokeApiKey, rotateApiKey, unfreezeApiKey, updateApiKeyStatus, ApiKey } from '../api/apiKeys'
 import { useAuthStore } from '../store/auth'
 import { useSwrData } from '../hooks/useSwr'
 import { formatApiKeyWhitelist, parseApiKeyWhitelist } from '../utils/apiKeyWhitelist'
@@ -35,7 +37,8 @@ const ApiKeysPage = () => {
   const statusLabels: Record<string, string> = { active: '启用', disabled: '禁用', frozen: '自动冻结', revoked: '已吊销', expired: '已过期' }
   const formatTime = (value?: string | null) => value ? dayjs.utc(value).local().format('YYYY-MM-DD HH:mm:ss') : '—'
 
-  const [modalVisible, setModalVisible] = useState(false)
+  const [applicationOpen, setApplicationOpen] = useState(false)
+  const navigate = useNavigate()
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null)
   const { data: projectsData, error: projectsError, isLoading: projectsLoading } = useSwrData<{ items: Project[] }>('/projects', { revalidateOnFocus: true })
@@ -48,8 +51,6 @@ const ApiKeysPage = () => {
     : projectOptions
 
   const [newKey, setNewKey] = useState<string | null>(null)
-  const [newKeyTitle, setNewKeyTitle] = useState('创建 API Key')
-  const [form] = Form.useForm()
   const [editForm] = Form.useForm()
   const message = useMessage()
   const [modal, modalContextHolder] = Modal.useModal()
@@ -57,26 +58,6 @@ const ApiKeysPage = () => {
 
   const fetchKeys = async () => {
     mutateKeys()
-  }
-
-  const handleCreate = async (values: any) => {
-    try {
-      const result = await createApiKey({
-        name: values.name,
-        project_id: values.project_id,
-        ip_whitelist: parseApiKeyWhitelist(values.ip_whitelist),
-        expires_at: values.expires_at?.toISOString?.() || null,
-        qps_limit: values.qps_limit ?? 0,
-        rpm_limit: values.rpm_limit ?? 0,
-        tpm_limit: values.tpm_limit ?? 0,
-        concurrency_limit: values.concurrency_limit ?? 0,
-      })
-      message.success(result.message || '申请已提交，审批通过后创建 API Key')
-      setModalVisible(false)
-      form.resetFields()
-    } catch (error) {
-      console.error(error)
-    }
   }
 
   const handleEdit = (record: ApiKey) => {
@@ -140,9 +121,7 @@ const ApiKeysPage = () => {
   const handleRotate = async (keyId: string) => {
     try {
       const result = await rotateApiKey(keyId)
-      setNewKeyTitle('轮换 API Key')
       setNewKey(result.api_key)
-      setModalVisible(true)
       message.success('轮换成功')
       fetchKeys()
     } catch (error) {
@@ -400,7 +379,7 @@ const ApiKeysPage = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => { setNewKey(null); setNewKeyTitle('创建 API Key'); form.resetFields(); setModalVisible(true) }}
+            onClick={() => setApplicationOpen(true)}
             style={{
               background: token.colorPrimary,
               border: 'none',
@@ -459,189 +438,16 @@ const ApiKeysPage = () => {
           </Descriptions>
         </>}
       </Drawer>
-      {/* 创建Key弹窗 */}
-      <Modal
-        title={
-          <span style={{ 
-            fontFamily: "'Space Grotesk', sans-serif",
-            color: token.colorText,
-          }}>
-            {newKeyTitle}
-          </span>
-        }
-        open={modalVisible}
-        onCancel={() => {
-          setModalVisible(false)
-          setNewKey(null)
-          form.resetFields()
-        }}
-        footer={newKey ? null : [
-          <Button key="cancel" onClick={() => setModalVisible(false)}>
-            取消
-          </Button>,
-          <Button 
-            key="submit" 
-            type="primary"
-            onClick={() => form.submit()}
-            style={{
-              background: token.colorPrimary,
-              border: 'none',
-              borderRadius: 10,
-            }}
-          >
-            创建
-          </Button>,
-        ]}
-        centered
-        styles={{ body: { maxHeight: 'min(600px, calc(100vh - 200px))', overflowY: 'auto' } }}
-      >
-        {newKey ? (
-          <div>
-            <div style={{
-              padding: '12px 16px',
-              background: 'rgba(234, 88, 12, 0.15)',
-              borderRadius: 10,
-              marginBottom: 20,
-              border: '1px solid rgba(234, 88, 12, 0.3)',
-            }}>
-              <p style={{ 
-                color: '#F59E0B', 
-                margin: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}>
-                请复制并妥善保存此 Key。
-              </p>
-            </div>
-            <Space.Compact block>
-              <Input 
-                value={newKey} 
-                readOnly 
-                style={{
-                  fontFamily: "'Space Grotesk', monospace",
-                  background: token.colorBgContainer,
-                  border: `1px solid ${token.colorBorder}`,
-                  borderRight: 'none',
-                  borderTopRightRadius: 0,
-                  borderBottomRightRadius: 0,
-                }}
-              />
-              <Button
-                type="text"
-                icon={<CopyOutlined style={{ color: '#3B82F6' }} />}
-                onClick={() => copyKey(newKey)}
-                style={{
-                  border: `1px solid ${token.colorBorder}`,
-                  borderLeft: 'none',
-                  borderTopLeftRadius: 0,
-                  borderBottomLeftRadius: 0,
-                }}
-              />
-            </Space.Compact>
-            <Button 
-              type="primary" 
-              block 
-              style={{ 
-                marginTop: 20,
-                borderRadius: 10,
-                background: token.colorPrimary,
-                border: 'none',
-                fontFamily: "'Space Grotesk', sans-serif",
-              }}
-              onClick={() => {
-                setNewKey(null)
-                setModalVisible(false)
-                form.resetFields()
-              }}
-            >
-              我已保存
-            </Button>
-          </div>
-        ) : (
-          <Form form={form} onFinish={handleCreate} layout="vertical">
-            {projectsError && <Alert type="error" message="项目加载失败，请重新打开页面重试" />}
-            {!projectsLoading && !projectsError && !projectOptions.length && <Alert type="warning" message="暂无可用项目，请联系管理员分配项目后创建 Key" />}
-            <Form.Item name="project_id" label="所属项目" rules={[{ required: true, message: '请选择已授权项目' }]}>
-              <Select showSearch optionFilterProp="label" loading={projectsLoading} options={projectOptions} placeholder="请选择项目" />
-            </Form.Item>
-            <Form.Item
-              name="name"
-              label={<span style={{ color: token.colorText }}>Key名称</span>}
-              rules={[{ required: true, message: '请输入Key名称' }]}
-            >
-              <Input
-                placeholder="请输入Key名称"
-                style={{
-                  height: 40,
-                  background: token.colorBgContainer,
-                  border: `1px solid ${token.colorBorder}`,
-                  borderRadius: 10,
-                }}
-              />
-            </Form.Item>
-            <Form.Item
-              name="ip_whitelist"
-              label={<span style={{ color: token.colorText }}>IP白名单</span>}
-              extra="每行或逗号分隔一个 IP/CIDR，留空表示不限制。"
-            >
-              <Input.TextArea
-                placeholder={'例如：\n10.0.0.1\n10.0.0.0/8'}
-                autoSize={{ minRows: 3, maxRows: 6 }}
-                style={{
-                  background: token.colorBgContainer,
-                  border: `1px solid ${token.colorBorder}`,
-                  borderRadius: 10,
-                }}
-              />
-            </Form.Item>
-            <Form.Item
-              name="expires_at"
-              label={<span style={{ color: token.colorText }}>过期时间</span>}
-              extra="留空表示永不过期。"
-            >
-              <DatePicker
-                showTime
-                style={{ width: '100%', height: 40, borderRadius: 10 }}
-                placeholder="请选择过期时间"
-              />
-            </Form.Item>
-            <Space size={12} style={{ width: '100%' }} wrap>
-              <Form.Item
-                name="qps_limit"
-                label={<span style={{ color: token.colorText }}>QPS</span>}
-                extra="0 表示不限制。"
-                initialValue={0}
-              >
-                <InputNumber min={0} precision={0} style={{ width: 120 }} />
-              </Form.Item>
-              <Form.Item
-                name="rpm_limit"
-                label={<span style={{ color: token.colorText }}>RPM</span>}
-                extra="0 表示不限制。"
-                initialValue={0}
-              >
-                <InputNumber min={0} precision={0} style={{ width: 120 }} />
-              </Form.Item>
-              <Form.Item
-                name="tpm_limit"
-                label={<span style={{ color: token.colorText }}>TPM</span>}
-                extra="0 表示不限制。"
-                initialValue={0}
-              >
-                <InputNumber min={0} precision={0} style={{ width: 120 }} />
-              </Form.Item>
-              <Form.Item
-                name="concurrency_limit"
-                label={<span style={{ color: token.colorText }}>并发</span>}
-                extra="0 表示不限制。"
-                initialValue={0}
-              >
-                <InputNumber min={0} precision={0} style={{ width: 120 }} />
-              </Form.Item>
-            </Space>
-          </Form>
-        )}
+      <ApplicationModal open={applicationOpen} fixedType onCancel={() => setApplicationOpen(false)} onSubmitted={request => {
+        setApplicationOpen(false)
+        navigate(`/applications?request_id=${encodeURIComponent(request.request_id)}`)
+      }} />
+      <Modal title="轮换 API Key" open={!!newKey} onCancel={() => setNewKey(null)} footer={[
+        <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={() => newKey && copyKey(newKey)}>复制 Key</Button>,
+        <Button key="save" onClick={() => setNewKey(null)}>我已保存</Button>,
+      ]}>
+        <Alert type="warning" showIcon message="请复制并妥善保存此 Key。" style={{ marginBottom: 16 }} />
+        <Input.TextArea value={newKey || ''} readOnly autoSize />
       </Modal>
 
       {/* 编辑Key弹窗 */}

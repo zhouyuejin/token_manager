@@ -143,27 +143,59 @@ def create_api_key_application(
         raise
 
 
+def _list_items(requests, db):
+    users = {user.user_id: user.nickname or user.username for user in db.query(User).filter(
+        User.user_id.in_({request.requester_user_id for request in requests}),
+    ).all()}
+    project_ids = {request.target_id for request in requests if request.request_type in {'api_key', 'project_access'}}
+    projects = {project.project_id: project.name for project in db.query(Project).filter(Project.project_id.in_(project_ids)).all()}
+    group_ids = {request.target_id for request in requests if request.request_type == 'model_group'}
+    groups = {group.group_id: group.name for group in db.query(ModelGroup).filter(ModelGroup.group_id.in_(group_ids)).all()}
+    items = []
+    for request in requests:
+        item = _review_item(request)
+        item['requester_name'] = users.get(request.requester_user_id, request.requester_user_id)
+        item['project_name'] = projects.get(request.target_id)
+        item['model_group_name'] = groups.get(request.target_id)
+        items.append(item)
+    return items
+
+
 @router.get('/mine')
 def list_my_applications(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     requests = _service(db).list_my_requests(user)
-    result = []
-    consumed_secret = False
-    for request in requests:
-        item = {column.name: getattr(request, column.name) for column in request.__table__.columns}
-        payload = dict(item['payload'])
+    items = _list_items(requests, db)
+    for request, item in zip(requests, items):
         if request.request_type == 'api_key':
-            secret_result = payload.pop('result', None)
-            if secret_result and not payload.get('secret_consumed'):
-                item['result'] = secret_result
-                payload['secret_consumed'] = True
-                consumed_secret = True
-            item['payload'] = payload
-            if secret_result and not request.payload.get('secret_consumed'):
-                request.payload = payload
-        result.append(item)
-    if consumed_secret:
+            item['secret_available'] = bool(request.status == 'approved' and
+                                            request.payload.get('result', {}).get('api_key') and
+                                            not request.payload.get('secret_consumed'))
+    return items
+
+
+@router.post('/{request_id}/claim-key')
+def claim_api_key(request_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    try:
+        request = db.query(ApprovalRequest).filter_by(request_id=request_id).populate_existing().with_for_update().first()
+        if request is None:
+            raise HTTPException(404, '审批申请不存在')
+        if request.requester_user_id != user.user_id:
+            raise HTTPException(403, '只能领取自己的 API Key')
+        if request.request_type != 'api_key' or request.status != 'approved':
+            raise HTTPException(409, '只有已通过的 API Key 申请可以领取')
+        payload = dict(request.payload)
+        result = payload.get('result')
+        if payload.get('secret_consumed') or not result or not result.get('api_key'):
+            raise HTTPException(409, '该 API Key 已领取或无法领取')
+        payload['secret_consumed'] = True
+        payload['result'] = {'key_id': result['key_id']}
+        request.payload = payload
+        _service(db)._log(user, request, 'approval_key_claimed')
         db.commit()
-    return result
+        return result
+    except BaseException:
+        db.rollback()
+        raise
 
 
 @router.get('/pending')
@@ -187,7 +219,7 @@ def list_review_applications(
     if status and status not in {'pending', 'needs_info', 'approved', 'rejected', 'cancelled'}:
         raise HTTPException(422, '不支持的审批状态')
     requests = _service(db).list_review(reviewer, request_type, status, requester_user_id, project_id)
-    return [_review_item(request) for request in requests]
+    return _list_items(requests, db)
 
 
 @router.get('/review/requesters')

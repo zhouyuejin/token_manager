@@ -249,6 +249,72 @@ def test_reviewer_history_never_returns_api_key_plaintext(db):
     assert 'result' not in result[0]
 
 
+def test_claim_key_is_owner_only_and_isolates_multiple_applications(db):
+    requester = add_user(db, 'requester')
+    other = add_user(db, 'other')
+    admin = add_user(db, 'admin', UserRole.admin)
+    for request_id in ['key_one', 'key_two']:
+        db.add(ApprovalRequest(
+            request_id=request_id, request_type='api_key', requester_user_id=requester.user_id,
+            payload={'result': {'key_id': request_id, 'api_key': f'secret-{request_id}'}},
+            status='approved', reason='调用',
+        ))
+    db.commit()
+
+    assert all(item['secret_available'] for item in approvals.list_my_applications(db, requester))
+    assert approvals.list_my_applications(db, other) == []
+    for user in [other, admin]:
+        with pytest.raises(HTTPException) as error:
+            approvals.claim_api_key('key_one', db, user)
+        assert error.value.status_code == 403
+    assert approvals.claim_api_key('key_one', db, requester)['api_key'] == 'secret-key_one'
+    available = {item['request_id']: item['secret_available'] for item in approvals.list_my_applications(db, requester)}
+    assert available == {'key_one': False, 'key_two': True}
+    assert approvals.claim_api_key('key_two', db, requester)['api_key'] == 'secret-key_two'
+
+
+@pytest.mark.parametrize('request_type,status', [('quota', 'approved'), ('api_key', 'pending'), ('api_key', 'rejected')])
+def test_claim_key_requires_approved_key_application(db, request_type, status):
+    requester = add_user(db, 'requester')
+    db.add(ApprovalRequest(request_id='invalid', request_type=request_type,
+                           requester_user_id=requester.user_id, status=status, reason='理由', payload={}))
+    db.commit()
+    with pytest.raises(HTTPException) as error:
+        approvals.claim_api_key('invalid', db, requester)
+    assert error.value.status_code == 409
+    with pytest.raises(HTTPException) as missing:
+        approvals.claim_api_key('missing', db, requester)
+    assert missing.value.status_code == 404
+
+
+def test_concurrent_key_claims_only_return_plaintext_once(db, SessionLocal):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    requester = add_user(db, 'requester')
+    db.add(ApprovalRequest(
+        request_id='concurrent_key', request_type='api_key', requester_user_id=requester.user_id,
+        payload={'result': {'key_id': 'key_one', 'api_key': 'secret-once'}}, status='approved', reason='调用',
+    ))
+    db.commit()
+    barrier = Barrier(2)
+
+    def claim():
+        with SessionLocal() as session:
+            user = session.query(User).filter_by(user_id='requester').one()
+            barrier.wait(timeout=10)
+            try:
+                return approvals.claim_api_key('concurrent_key', session, user)
+            except HTTPException as error:
+                return error.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: claim(), range(2)))
+    assert results.count(409) == 1
+    assert {'key_id': 'key_one', 'api_key': 'secret-once'} in results
+    assert db.query(OperationLog).filter_by(target_id='concurrent_key', action='approval_key_claimed').count() == 1
+
+
 def test_approval_http_flow_applies_all_request_types_and_limits_key_reveal(db):
     requester = add_user(db, 'requester')
     owner = add_user(db, 'owner')
@@ -284,9 +350,14 @@ def test_approval_http_flow_applies_all_request_types_and_limits_key_reveal(db):
     key = db.query(ApiKey).one()
     assert key.api_key not in json.dumps(key_decision)
     first = client.get('/approvals/mine', headers={'x-user-id': requester.user_id}).json()
-    assert first[0]['result']['api_key'] == key.api_key
+    assert first[0]['secret_available'] is True
+    assert key.api_key not in json.dumps(first)
+    claimed = post(f"/approvals/{key_request['request_id']}/claim-key", requester, {})
+    assert claimed['api_key'] == key.api_key
     second = client.get('/approvals/mine', headers={'x-user-id': requester.user_id}).json()
-    assert 'result' not in second[0]
+    assert second[0]['secret_available'] is False
+    assert key.api_key not in json.dumps(second)
+
 
     quota = post('/approvals/quota', requester, {'amount': 7, 'reason': '需要额度'})
     post(f"/approvals/{quota['request_id']}/decision", admin,

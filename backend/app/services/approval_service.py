@@ -151,7 +151,8 @@ class ApprovalService:
             notif_id=f'notif_{secrets.token_hex(8)}', user_id=user_id,
             type=notice_type, title=title,
             content=f'{content} 申请单：{request.request_id}',
-            extra_data=json.dumps({'request_id': request.request_id, 'status': request.status}),
+            extra_data=json.dumps({'request_id': request.request_id, 'status': request.status,
+                                   'audience': 'requester' if user_id == request.requester_user_id else 'reviewer'}),
             is_read=0,
         ))
 

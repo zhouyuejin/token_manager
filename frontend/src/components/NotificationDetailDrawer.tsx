@@ -1,3 +1,4 @@
+import { approvalNotificationLink } from '../utils/approvalNavigation.mjs'
 import { useState, useEffect, useRef } from 'react'
 import { useThemeToken } from '@/theme/useThemeToken'
 import { Drawer, Collapse, Button, Tag, Alert } from 'antd'
@@ -118,6 +119,7 @@ export default function NotificationDetailDrawer({
   if (typeof freezeMetadata === 'string') {
     try { freezeMetadata = JSON.parse(freezeMetadata) } catch { freezeMetadata = null }
   }
+  const approvalLink = notification ? approvalNotificationLink(notification) : null
   const isFreezeNotification = !!(freezeMetadata?.key_id && freezeMetadata?.frozen_at)
   const typeConf = notification ? getTypeConfig(notification.type) : null
   const metadataJson = notification ? formatMetadata(notification.metadata) : null
@@ -233,7 +235,7 @@ export default function NotificationDetailDrawer({
           {isFreezeNotification && <Alert type="warning" showIcon message={freezeMetadata.reason || 'API Key 已自动冻结'}
             description={<><div>{isAdmin ? '请核查调用来源、凭证和 IP 白名单，修正异常后在全部 Key 视图解除冻结。' : '请检查客户端凭证和 IP 白名单，联系管理员核查并解除冻结。'}</div><Link to="/api-keys" onClick={onClose}>前往 API Key 管理</Link></>}
             style={{ marginBottom: 16 }} />}
-          {notification.type.startsWith('approval_') && <p><Link to="/approvals" onClick={onClose}>查看申请与审批</Link></p>}
+          {approvalLink && <p><Link to={approvalLink.href} onClick={onClose}>{approvalLink.label}</Link></p>}
           {/* 内容 */}
           <div
             style={{
