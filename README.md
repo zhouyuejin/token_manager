@@ -192,7 +192,7 @@ SMTP_FROM_NAME=Token Manager
 ```
 
 465 端口使用 TLS，其他端口使用 STARTTLS；发件地址未填写时使用 SMTP_USER。
-Docker 部署修改配置后执行 `docker compose up -d --force-recreate backend`。
+Docker 部署修改配置后执行 `docker compose up -d --force-recreate backend`。若同时更新了代码或 `backend/requirements.txt`，请使用 `docker compose up -d --build backend`，确保容器使用包含最新依赖的镜像。
 后端启动时执行数据库迁移；独立部署请先运行 `alembic upgrade head`。
 
 新增站内通知落库后，由后台每 30 秒扫描发送邮件（每批最多 20 条）。覆盖预算、渠道异常及恢复、注册、审批、密钥冻结、额度和每日报表。
