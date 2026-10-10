@@ -3,7 +3,7 @@ const departmentPaths = ['/admin/projects', '/admin/departments', '/admin/depart
 export const hasPermission = (permissions = [], permission) => permissions.includes(permission)
 
 export const canReadAdminPath = (path, permissions = []) => {
-  if (path === '/admin/approvals' || path === '/admin/billing') {
+  if (path === '/admin/approvals' || path === '/admin/billing' || path.startsWith('/admin/billing/')) {
     return hasPermission(permissions, 'admin:read') && hasPermission(permissions, 'department:read')
   }
   return hasPermission(permissions, departmentPaths.includes(path) ? 'department:read' : 'admin:read')

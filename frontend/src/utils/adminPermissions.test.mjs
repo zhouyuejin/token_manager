@@ -34,3 +34,15 @@ test('read access never grants management writes', () => {
   assert.equal(canWriteAdminPath('/admin/departments', roles.department_admin), true)
   assert.equal(canWriteAdminPath('/admin/projects', roles.auditor), false)
 })
+
+test('billing pages preserve combined read permissions and separate write access', () => {
+  for (const path of ['/admin/billing', '/admin/billing/budgets', '/admin/billing/reservations', '/admin/billing/reconciliation']) {
+    assert.equal(canAccessAdminPath(path, roles.admin), true)
+    assert.equal(canAccessAdminPath(path, roles.auditor), false)
+    assert.equal(canAccessAdminPath(path, roles.department_admin), false)
+    assert.equal(canAccessAdminPath(path, roles.user), false)
+    assert.equal(canAccessAdminPath(path, ['admin:read', 'department:read']), true)
+    assert.equal(canWriteAdminPath(path, ['admin:read', 'department:read']), false)
+    assert.equal(canWriteAdminPath(path, roles.admin), true)
+  }
+})

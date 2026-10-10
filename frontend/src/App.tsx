@@ -23,7 +23,9 @@ const Chat = lazy(() => import('./pages/Chat'))
 const Approvals = lazy(() => import('./pages/Approvals'))
 const AdminUsers = lazy(() => import('./pages/admin/Users'))
 const ProjectsPage = lazy(() => import('./pages/admin/Projects'))
-const Billing = lazy(() => import('./pages/admin/Billing'))
+const Budgets = lazy(() => import('./pages/admin/Budgets'))
+const Reservations = lazy(() => import('./pages/admin/Reservations'))
+const Reconciliation = lazy(() => import('./pages/admin/Reconciliation'))
 const AdminChannels = lazy(() => import('./pages/admin/Channels'))
 const ChannelForm = lazy(() => import('./pages/admin/ChannelForm'))
 const ChannelBindings = lazy(() => import('./pages/admin/ChannelBindings'))
@@ -112,7 +114,10 @@ function App() {
               <Route path="approvals" element={<AdminApprovals />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="projects" element={<ProjectsPage />} />
-              <Route path="billing" element={<Billing />} />
+              <Route path="billing" element={<Navigate to="/admin/billing/budgets" replace />} />
+              <Route path="billing/budgets" element={<Budgets />} />
+              <Route path="billing/reservations" element={<Reservations />} />
+              <Route path="billing/reconciliation" element={<Reconciliation />} />
               <Route path="departments" element={<ProjectsPage departmentsOnly />} />
               <Route path="channels" element={<AdminChannels />} />
               <Route path="health" element={<HealthDashboard />} />
